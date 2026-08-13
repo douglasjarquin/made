@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/douglasjarquin/made/internal/api"
 	"github.com/douglasjarquin/made/internal/exec"
 	"github.com/douglasjarquin/made/internal/gitgate"
 )
@@ -24,10 +25,46 @@ func runGateCommand(args []string, stdout, stderr *os.File) int {
 	switch args[0] {
 	case "init":
 		return runGateInitCommand(args[1:], stdout, stderr)
+	case "admit-push":
+		return runGateAdmitPushCommand(args[1:], stdout, stderr)
 	default:
 		_, _ = fmt.Fprintf(stderr, "made gate: unknown subcommand %q\n", args[0])
 		return 2
 	}
+}
+
+func runGateAdmitPushCommand(args []string, stdout, stderr *os.File) int {
+	fs := flag.NewFlagSet("made gate admit-push", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	gatePath := fs.String("gate", "", "path to the bare gate repository")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *gatePath == "" {
+		_, _ = fmt.Fprintln(stderr, "usage: made gate admit-push --gate <path>")
+		return 2
+	}
+
+	home, err := madeHome()
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "made gate admit-push:", err)
+		return 1
+	}
+
+	client, err := api.Dial(api.SocketPath(home))
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "made gate admit-push:", err)
+		return 1
+	}
+	defer func() { _ = client.Close() }()
+
+	if _, err := client.Call("gate.admitPush", gateAdmitPushParams{GatePath: *gatePath}); err != nil {
+		_, _ = fmt.Fprintln(stderr, "made gate admit-push:", err)
+		return 1
+	}
+
+	_, _ = fmt.Fprintln(stdout, "gate admit-push: ok")
+	return 0
 }
 
 func runGateInitCommand(args []string, stdout, stderr *os.File) int {

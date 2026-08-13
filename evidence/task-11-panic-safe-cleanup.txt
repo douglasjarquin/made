@@ -1,0 +1,12 @@
+=== go test ./internal/orchestrator/... -v (panic-safe cleanup scenarios) ===
+=== RUN   TestSetupRecoversFromMidSetupPanicAndCleansUp
+2026/08/13 11:37:54 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-5 state=unavailable
+--- PASS: TestSetupRecoversFromMidSetupPanicAndCleansUp (0.37s)
+=== RUN   TestRunWrapsSetupWorkAndCleanupWithPanicRecovery
+2026/08/13 11:37:54 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-6 state=unavailable
+--- PASS: TestRunWrapsSetupWorkAndCleanupWithPanicRecovery (0.28s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/orchestrator	1.261s
+
+=== go vet ./internal/orchestrator/... ===
+vet exit: 0

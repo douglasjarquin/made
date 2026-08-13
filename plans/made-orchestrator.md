@@ -381,7 +381,7 @@ Wire made's 9 already-tested pipeline stages into one real, socket-authenticated
 
   **Commit**: YES | Message: `feat(gitgate): ref-acceptance policy for gate pushes` | Files: `internal/gitgate/refpolicy.go`
 
-- [ ] 9. `gate.admitPush` RPC + `made gate admit-push` CLI
+- [x] 9. `gate.admitPush` RPC + `made gate admit-push` CLI
 
   **What to do**: Register a new `gate.admitPush` handler in `registerDaemonHandlers` (`cmd/made/daemon.go`) alongside the existing `status`/`review.*` handlers, following the same `internal/api.HandlerFunc` pattern. Params: `{GatePath string}`. The handler's fail-closed check (per Context's ambiguity resolution - there's no identity to authenticate under socket-only trust, so the check is "is this a gate the daemon recognizes"): verify the given `GatePath` resolves to a real bare repo on disk (e.g. `gitgate.ValidateBareRepository`-equivalent check, or simply `os.Stat` + `git rev-parse --is-bare-repository` - read what `internal/gitgate` already exposes for this before writing new validation code) - if it's not a real, valid bare gate repo, return an error. Add a hidden `made gate admit-push --gate <path>` CLI command (`cmd/made/gate.go`, extending Task 6's file) that dials the daemon socket, calls `gate.admitPush`, and exits 0 on success / non-zero with the error message on failure - this is what Task 3's pre-receive script shells.
   **Must NOT do**: Do not create a run or touch `RunManager` in this handler - admission is a fast pre-check only, per the async model's separation of admission from pipeline execution (Context section).
@@ -446,7 +446,7 @@ Wire made's 9 already-tested pipeline stages into one real, socket-authenticated
 
   **Commit**: YES | Message: `feat(api): gate.notifyPush RPC with SHA capture and superseded-push handling` | Files: `cmd/made/daemon.go`, `cmd/made/gate.go`, `internal/daemon/runmanager.go`
 
-- [ ] 11. internal/orchestrator scaffold (config/worktree/visibility/evidence/cleanup)
+- [x] 11. internal/orchestrator scaffold (config/worktree/visibility/evidence/cleanup)
 
   **What to do**: Create `internal/orchestrator` with the run-setup/teardown scaffold a WorkFunc needs, independent of the actual 9-stage chaining (Task 12 builds that on top). Implement: trusted-config resolution per Context's ambiguity resolution - run `git show refs/heads/<default>:.made.yml` inside the bare gate repo into a temp file for the trusted path (empty/missing is the normal "no trusted copy yet" case, not an error, per the corrected rule-(d) understanding), and resolve the pushed config from the worktree's own `.made.yml` if present, then call `internal/config.LoadEffectiveConfig(trustedPath, pushedPath)`; cut a worktree for the exact pushed SHA via `gitgate.AddWorktree` (checking out the SHA directly, not just the branch tip, per Task 10's stale-SHA fix); open herdr pane visibility via `internal/pipeline.Open(ctx, runID)`; construct the evidence store via `internal/evidence.NewStore` using Task 2's new `Evidence` config fields; construct `internal/github.Client{Dir: worktreePath}`. Guarantee cleanup (worktree `Remove()`, visibility `Close()`) on every exit path including panic (use `defer` with `recover()` at the top of the WorkFunc, converting a panic into a failed-run result rather than crashing the daemon).
   **Must NOT do**: Do not implement the actual stage-calling sequence here - this task is setup/teardown only, Task 12 is the sequence.
@@ -522,7 +522,7 @@ Wire made's 9 already-tested pipeline stages into one real, socket-authenticated
 
   **Commit**: YES | Message: `feat(orchestrator): chain all 9 pipeline stages with real park/resume semantics` | Files: `internal/orchestrator/workfunc.go`
 
-- [ ] 13. Restructure reviewDecisions ownership (orchestrator-reachable)
+- [x] 13. Restructure reviewDecisions ownership (orchestrator-reachable)
 
   **What to do**: Move the `reviewDecisions` store (currently constructed inline inside `registerDaemonHandlers`, `cmd/made/daemon.go:120`, and captured only by the closures for `review.decide`/`review.decision`) to a location both the RPC handlers AND Task 12's orchestrator WorkFunc can reach - e.g. construct it once in `startDaemon` (`cmd/made/daemon.go`) and pass it into both `registerDaemonHandlers` and the orchestrator's `WorkFunc` builder (Task 12 needs a reference to call into it when checking for/waiting on a decision). Add a wait/notify mechanism the orchestrator can block on when parked (e.g. a per-`(runID, stage)` channel or a condition-variable-based wait, or reuse `RunManager`'s existing `Subscribe`/event-channel pattern if that's cleaner - your call, but it must let the orchestrator block efficiently rather than busy-polling). `cmd/made/review.go:22-25` already self-documents this exact restructuring as a known stopgap - read that comment for the acknowledged intent before implementing.
   **Must NOT do**: Do not change `review.decide`/`review.decision`'s RPC params/response shape - only where the underlying store lives and how the orchestrator gets notified.

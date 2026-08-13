@@ -9,45 +9,24 @@ import (
 	"io"
 	"os"
 	"strings"
-	"sync"
 
 	"github.com/douglasjarquin/made/internal/api"
+	"github.com/douglasjarquin/made/internal/daemon"
 )
 
 const (
-	ReviewApproved = "approved"
-	ReviewRejected = "rejected"
+	ReviewApproved = daemon.ReviewApproved
+	ReviewRejected = daemon.ReviewRejected
 )
 
-// reviewDecisions is a stopgap: it records operator approve/reject answers
-// in memory because no orchestrator yet resumes or halts a real pipeline run
-// on them (Review/Document aren't wired into the daemon's run manager). Once
-// that lands, decisions belong in the evidence store instead of here.
-type reviewDecisions struct {
-	mu      sync.Mutex
-	entries map[reviewKey]string
-}
-
-type reviewKey struct {
-	RunID string
-	Stage string
-}
+// reviewDecisions now lives in internal/daemon (co-located with RunManager,
+// since a decision is per-run state) so Task 12's orchestrator can reach the
+// same store these RPC handlers use; this alias keeps the RPC-facing code
+// below unchanged.
+type reviewDecisions = daemon.ReviewDecisions
 
 func newReviewDecisions() *reviewDecisions {
-	return &reviewDecisions{entries: make(map[reviewKey]string)}
-}
-
-func (d *reviewDecisions) set(runID, stage, decision string) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.entries[reviewKey{RunID: runID, Stage: stage}] = decision
-}
-
-func (d *reviewDecisions) get(runID, stage string) (string, bool) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	decision, ok := d.entries[reviewKey{RunID: runID, Stage: stage}]
-	return decision, ok
+	return daemon.NewReviewDecisions()
 }
 
 type reviewDecideParams struct {
@@ -82,7 +61,7 @@ func reviewDecideHandler(store *reviewDecisions) api.HandlerFunc {
 		if p.Decision != ReviewApproved && p.Decision != ReviewRejected {
 			return nil, fmt.Errorf("review.decide: decision must be %q or %q", ReviewApproved, ReviewRejected)
 		}
-		store.set(p.RunID, p.Stage, p.Decision)
+		store.Set(p.RunID, p.Stage, p.Decision)
 		return reviewDecideResult{OK: true}, nil
 	}
 }
@@ -93,7 +72,7 @@ func reviewDecisionHandler(store *reviewDecisions) api.HandlerFunc {
 		if err := json.Unmarshal(params, &p); err != nil {
 			return nil, fmt.Errorf("review.decision: invalid params: %w", err)
 		}
-		decision, found := store.get(p.RunID, p.Stage)
+		decision, found := store.Get(p.RunID, p.Stage)
 		return reviewDecisionResult{Decision: decision, Found: found}, nil
 	}
 }

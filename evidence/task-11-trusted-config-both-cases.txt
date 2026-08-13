@@ -1,0 +1,15 @@
+=== go test ./internal/orchestrator/... -v ===
+=== RUN   TestSetupResolvesTrustedConfigWhenPresentOnDefaultBranch
+2026/08/13 11:37:45 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-1 state=unavailable
+--- PASS: TestSetupResolvesTrustedConfigWhenPresentOnDefaultBranch (0.51s)
+=== RUN   TestSetupResolvesEmptyTrustedConfigWhenMadeYmlMissingFromDefaultBranch
+2026/08/13 11:37:46 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-2 state=unavailable
+--- PASS: TestSetupResolvesEmptyTrustedConfigWhenMadeYmlMissingFromDefaultBranch (0.28s)
+=== RUN   TestSetupResolvesEmptyTrustedConfigWhenDefaultBranchNeverFetched
+2026/08/13 11:37:46 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-3 state=unavailable
+--- PASS: TestSetupResolvesEmptyTrustedConfigWhenDefaultBranchNeverFetched (0.28s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/orchestrator	1.356s
+
+=== go vet ./internal/orchestrator/... ===
+vet exit: 0

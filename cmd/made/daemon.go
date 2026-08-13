@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/douglasjarquin/made/internal/api"
 	"github.com/douglasjarquin/made/internal/daemon"
+	"github.com/douglasjarquin/made/internal/exec"
 )
 
 const defaultIdleTimeout = 30 * time.Minute
@@ -89,8 +91,9 @@ func daemonStart(args []string, home, lockPath string, stdout, stderr *os.File) 
 // the socket server has also been shut down.
 func startDaemon(ctx context.Context, home, lockPath string, idle time.Duration, onReady func(pid int)) (*daemon.RunManager, <-chan error) {
 	rm := daemon.NewRunManager()
+	reviewStore := daemon.NewReviewDecisions()
 	srv := api.NewServer(api.SocketPath(home))
-	registerDaemonHandlers(srv, rm)
+	registerDaemonHandlers(srv, rm, reviewStore)
 
 	done := make(chan error, 1)
 
@@ -155,14 +158,74 @@ func isTerminalRunStatus(s daemon.RunStatus) bool {
 
 const debugHandlersEnv = "MADE_DEBUG_HANDLERS"
 
-func registerDaemonHandlers(srv *api.Server, rm *daemon.RunManager) {
+func registerDaemonHandlers(srv *api.Server, rm *daemon.RunManager, store *daemon.ReviewDecisions) {
 	srv.Handle("status", statusHandler(rm))
-	store := newReviewDecisions()
 	srv.Handle("review.decide", reviewDecideHandler(store))
 	srv.Handle("review.decision", reviewDecisionHandler(store))
+	srv.Handle("gate.admitPush", gateAdmitPushHandler())
 	if os.Getenv(debugHandlersEnv) == "1" {
 		srv.Handle("debug.submitCancellableRun", debugSubmitCancellableRunHandler(rm))
 	}
+}
+
+const gateAdmitPushCheckTimeout = 5 * time.Second
+
+type gateAdmitPushParams struct {
+	GatePath string `json:"gate_path"`
+}
+
+type gateAdmitPushResult struct {
+	OK bool `json:"ok"`
+}
+
+// gateAdmitPushHandler is the fast pre-check a pre-receive hook shells out to
+// before accepting a push: under the socket's owner-only trust model there is
+// no caller identity to check, so admission degrades to "is this a gate the
+// daemon recognizes" - a real, valid bare repo on disk. It deliberately does
+// not touch RunManager; creating a run is the orchestrator's job, not
+// admission's.
+func gateAdmitPushHandler() api.HandlerFunc {
+	return func(_ context.Context, params json.RawMessage) (any, error) {
+		var p gateAdmitPushParams
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, fmt.Errorf("gate.admitPush: invalid params: %w", err)
+		}
+		if p.GatePath == "" {
+			return nil, fmt.Errorf("gate.admitPush: gate_path is required")
+		}
+		if err := validateBareGateRepo(p.GatePath); err != nil {
+			return nil, fmt.Errorf("gate.admitPush: %w", err)
+		}
+		return gateAdmitPushResult{OK: true}, nil
+	}
+}
+
+func validateBareGateRepo(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("gate path %s: %w", path, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("gate path %s is not a directory", path)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), gateAdmitPushCheckTimeout)
+	defer cancel()
+
+	res, err := exec.Run(ctx, exec.Command{
+		Name: "git",
+		Args: []string{"-C", path, "rev-parse", "--is-bare-repository"},
+	})
+	if err != nil {
+		return fmt.Errorf("check bare repository at %s: %w", path, err)
+	}
+	if res.ExitCode != 0 {
+		return fmt.Errorf("%s is not a git repository: %s", path, strings.TrimSpace(string(res.Stderr)))
+	}
+	if got := strings.TrimSpace(string(res.Stdout)); got != "true" {
+		return fmt.Errorf("%s is not a bare repository (git rev-parse --is-bare-repository reported %q)", path, got)
+	}
+	return nil
 }
 
 type debugSubmitCancellableRunParams struct {

@@ -1,0 +1,132 @@
+=== go vet ./cmd/made/... ./internal/daemon/... ===
+(vet clean, no output = no issues)
+
+=== go test ./cmd/made/... ./internal/daemon/... -v ===
+=== RUN   TestDaemonStop_CancelsInFlightRunBeforeProcessExits
+--- PASS: TestDaemonStop_CancelsInFlightRunBeforeProcessExits (0.51s)
+=== RUN   TestDoctor_DaemonDownReportsAccurately
+--- PASS: TestDoctor_DaemonDownReportsAccurately (0.89s)
+=== RUN   TestDoctor_GateNotInitializedIsInformationalOnly
+--- PASS: TestDoctor_GateNotInitializedIsInformationalOnly (0.64s)
+=== RUN   TestDoctor_GateInitializedIsReported
+--- PASS: TestDoctor_GateInitializedIsReported (1.06s)
+=== RUN   TestGateAdmitPushRPC_ValidBareRepoAdmitted
+--- PASS: TestGateAdmitPushRPC_ValidBareRepoAdmitted (0.02s)
+=== RUN   TestGateAdmitPushRPC_InvalidPathRejected
+--- PASS: TestGateAdmitPushRPC_InvalidPathRejected (0.00s)
+=== RUN   TestGateAdmitPushRPC_NonBareDirRejected
+--- PASS: TestGateAdmitPushRPC_NonBareDirRejected (0.01s)
+=== RUN   TestGateAdmitPushCLI_ValidGateExitsZero
+--- PASS: TestGateAdmitPushCLI_ValidGateExitsZero (0.02s)
+=== RUN   TestGateAdmitPushCLI_InvalidGateExitsNonZero
+--- PASS: TestGateAdmitPushCLI_InvalidGateExitsNonZero (0.00s)
+=== RUN   TestGateAdmitPushCLI_DaemonUnreachableFailsCleanly
+--- PASS: TestGateAdmitPushCLI_DaemonUnreachableFailsCleanly (0.01s)
+=== RUN   TestGateInit_EndToEnd
+--- PASS: TestGateInit_EndToEnd (0.39s)
+=== RUN   TestGateInit_ReInitIsIdempotent
+--- PASS: TestGateInit_ReInitIsIdempotent (0.70s)
+=== RUN   TestReview_ApproveResumes
+--- PASS: TestReview_ApproveResumes (0.00s)
+=== RUN   TestReview_RejectHalts
+--- PASS: TestReview_RejectHalts (0.00s)
+=== RUN   TestReview_NoPendingFindings
+--- PASS: TestReview_NoPendingFindings (0.00s)
+=== RUN   TestStatusJSON_SchemaValidity
+--- PASS: TestStatusJSON_SchemaValidity (0.01s)
+=== RUN   TestStatusJSON_ReflectsRealStageUpdate
+--- PASS: TestStatusJSON_ReflectsRealStageUpdate (0.00s)
+=== RUN   TestStatus_NoRunsReportsError
+--- PASS: TestStatus_NoRunsReportsError (0.00s)
+PASS
+ok  	github.com/douglasjarquin/made/cmd/made	(cached)
+=== RUN   TestRun_GracefulStop
+--- PASS: TestRun_GracefulStop (0.02s)
+=== RUN   TestRun_IdleTimeoutAutoStop
+--- PASS: TestRun_IdleTimeoutAutoStop (0.10s)
+=== RUN   TestRun_ActiveRunSurvivesIdleTimeout
+--- PASS: TestRun_ActiveRunSurvivesIdleTimeout (0.72s)
+=== RUN   TestRun_IdleTimeoutStillFiresWithNoActivity
+--- PASS: TestRun_IdleTimeoutStillFiresWithNoActivity (0.10s)
+=== RUN   TestAcquireLock_DoubleStartRejected
+--- PASS: TestAcquireLock_DoubleStartRejected (0.00s)
+=== RUN   TestAcquireLock_ReacquireAfterRelease
+--- PASS: TestAcquireLock_ReacquireAfterRelease (0.00s)
+=== RUN   TestMailbox_SubscriberReceivesInOrder
+--- PASS: TestMailbox_SubscriberReceivesInOrder (0.00s)
+=== RUN   TestMailbox_IgnoresOtherRunIDs
+--- PASS: TestMailbox_IgnoresOtherRunIDs (0.05s)
+=== RUN   TestMailbox_MultipleSubscribersEachGetAllEvents
+--- PASS: TestMailbox_MultipleSubscribersEachGetAllEvents (0.00s)
+=== RUN   TestMailbox_UnsubscribeStopsFutureDelivery
+--- PASS: TestMailbox_UnsubscribeStopsFutureDelivery (0.05s)
+=== RUN   TestMailbox_OverflowDropsRatherThanBlocks
+--- PASS: TestMailbox_OverflowDropsRatherThanBlocks (0.00s)
+=== RUN   TestReviewDecisions_WaitUnblocksOnSet
+--- PASS: TestReviewDecisions_WaitUnblocksOnSet (0.00s)
+=== RUN   TestReviewDecisions_WaitReturnsImmediatelyIfAlreadyRecorded
+--- PASS: TestReviewDecisions_WaitReturnsImmediatelyIfAlreadyRecorded (0.00s)
+=== RUN   TestReviewDecisions_WaitRespectsContextCancellation
+--- PASS: TestReviewDecisions_WaitRespectsContextCancellation (0.00s)
+=== RUN   TestRunManager_SequentialQueuing
+--- PASS: TestRunManager_SequentialQueuing (0.11s)
+=== RUN   TestRunManager_DifferentRepposRunConcurrently
+--- PASS: TestRunManager_DifferentRepposRunConcurrently (0.00s)
+=== RUN   TestRunManager_StatusStreamCompleteness
+--- PASS: TestRunManager_StatusStreamCompleteness (0.05s)
+=== RUN   TestRunManager_FailedWorkEmitsRunFailed
+--- PASS: TestRunManager_FailedWorkEmitsRunFailed (0.00s)
+=== RUN   TestRunManager_DuplicateRunIDRejected
+--- PASS: TestRunManager_DuplicateRunIDRejected (0.00s)
+=== RUN   TestRunManager_CancelStopsRunningWorkFunc
+--- PASS: TestRunManager_CancelStopsRunningWorkFunc (0.01s)
+=== RUN   TestRunManager_CancelUnknownRunErrors
+--- PASS: TestRunManager_CancelUnknownRunErrors (0.00s)
+=== RUN   TestRunManager_CancelTerminalRunErrors
+--- PASS: TestRunManager_CancelTerminalRunErrors (0.01s)
+=== RUN   TestRunManager_UpdateStagesVisibleViaSnapshot
+--- PASS: TestRunManager_UpdateStagesVisibleViaSnapshot (0.00s)
+=== RUN   TestRunManager_UpdatePendingFindingsVisibleViaSnapshot
+--- PASS: TestRunManager_UpdatePendingFindingsVisibleViaSnapshot (0.00s)
+=== RUN   TestRunManager_UpdateStagesUnknownRunFails
+--- PASS: TestRunManager_UpdateStagesUnknownRunFails (0.00s)
+=== RUN   TestRunManager_UpdatePendingFindingsUnknownRunFails
+--- PASS: TestRunManager_UpdatePendingFindingsUnknownRunFails (0.00s)
+=== RUN   TestRunManager_UpdateStagesReflectsListToo
+--- PASS: TestRunManager_UpdateStagesReflectsListToo (0.01s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/daemon	(cached)
+
+=== go test ./cmd/made/... ./internal/daemon/... -race ===
+ok  	github.com/douglasjarquin/made/cmd/made	(cached)
+ok  	github.com/douglasjarquin/made/internal/daemon	(cached)
+
+=== go build ./... ===
+(build clean, no output = success)
+
+=== go test ./... ===
+?   	github.com/douglasjarquin/made/cmd/genskill	[no test files]
+ok  	github.com/douglasjarquin/made/cmd/made	(cached)
+ok  	github.com/douglasjarquin/made/internal/agent	(cached)
+?   	github.com/douglasjarquin/made/internal/agent/agenttest	[no test files]
+ok  	github.com/douglasjarquin/made/internal/api	(cached)
+ok  	github.com/douglasjarquin/made/internal/config	(cached)
+ok  	github.com/douglasjarquin/made/internal/daemon	(cached)
+ok  	github.com/douglasjarquin/made/internal/evidence	(cached)
+ok  	github.com/douglasjarquin/made/internal/exec	(cached)
+ok  	github.com/douglasjarquin/made/internal/gitgate	(cached)
+ok  	github.com/douglasjarquin/made/internal/github	(cached)
+?   	github.com/douglasjarquin/made/internal/github/githubtest	[no test files]
+ok  	github.com/douglasjarquin/made/internal/herdrclient	(cached)
+ok  	github.com/douglasjarquin/made/internal/orchestrator	(cached)
+ok  	github.com/douglasjarquin/made/internal/pipeline	(cached)
+ok  	github.com/douglasjarquin/made/internal/pipeline/ci	(cached)
+ok  	github.com/douglasjarquin/made/internal/pipeline/document	(cached)
+ok  	github.com/douglasjarquin/made/internal/pipeline/intent	(cached)
+ok  	github.com/douglasjarquin/made/internal/pipeline/lint	(cached)
+ok  	github.com/douglasjarquin/made/internal/pipeline/pr	(cached)
+ok  	github.com/douglasjarquin/made/internal/pipeline/push	(cached)
+ok  	github.com/douglasjarquin/made/internal/pipeline/rebase	(cached)
+ok  	github.com/douglasjarquin/made/internal/pipeline/review	(cached)
+ok  	github.com/douglasjarquin/made/internal/pipeline/test	(cached)
+ok  	github.com/douglasjarquin/made/internal/skill	(cached)
