@@ -600,7 +600,7 @@ Wire made's 9 already-tested pipeline stages into one real, socket-authenticated
 
   **Commit**: YES | Message: `docs(skill): correct async push model description, regenerate SKILL.md` | Files: `internal/skill/skill.go`, `skills/made/SKILL.md`
 
-- [ ] 16. Rollback/partial-failure policy (push succeeded, PR/CI failed)
+- [x] 16. Rollback/partial-failure policy (push succeeded, PR/CI failed)
 
   **What to do**: Define and implement what happens when `push.Run` (stage 7) succeeds - the validated branch is now on the real remote - but `pr.Run` (stage 8) or `ci.Run` (stage 9) then fails. Made has no authority to force-revert a real remote (per the prior plan's Must-NOT-Have constraints and the trimmed-scope philosophy), so the policy is: the run reports `state: failed` with a message that explicitly states the branch WAS already pushed to the real remote and names which later stage failed (e.g. "push succeeded (branch now on origin), but PR creation failed: <reason> - the branch is live on the real remote, no automatic action taken"). Surface this distinction in `skill.go`'s outcomes section too (Task 15's file) so an agent reading the skill understands a "failed" run doesn't always mean nothing happened.
   **Must NOT do**: Do not attempt to auto-revert, force-push, or delete the already-pushed branch - that is exactly the kind of destructive, authority-exceeding action this whole system is designed to avoid.

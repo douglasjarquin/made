@@ -34,6 +34,8 @@ const (
 
 	ciStageTimeout = 30 * time.Minute
 	ciPollInterval = 10 * time.Second
+
+	pushRemoteName = "origin"
 )
 
 // Options carries the per-run parameters that come from outside the pushed
@@ -82,6 +84,14 @@ type chain struct {
 	opts          Options
 
 	stages []daemon.StageResult
+
+	// pushed flips true the moment pushStage lands the branch on the real
+	// remote. made has no authority to revert, force-push, or delete a
+	// branch already on a real remote - that destructive action is outside
+	// its gate/worktree - so any stage failure after this point needs a
+	// failure message that says so explicitly rather than the generic
+	// per-stage wording, since a human now has to notice and clean up.
+	pushed bool
 }
 
 func (c *chain) run() error {
@@ -136,8 +146,18 @@ func (c *chain) finish(stage, result, message string) {
 	}
 }
 
-func stageFailure(stage, message string) error {
-	return fmt.Errorf("orchestrator: stage %q failed: %s", stage, message)
+func (c *chain) stageFailure(stage, message string) error {
+	if !c.pushed {
+		return fmt.Errorf("orchestrator: stage %q failed: %s", stage, message)
+	}
+	label := stage
+	switch stage {
+	case stageNamePR:
+		label = "PR creation"
+	case stageNameCI:
+		label = "CI"
+	}
+	return fmt.Errorf("orchestrator: push succeeded (branch %s now on %s), but %s failed: %s - the branch is live on the real remote, no automatic action taken", c.branch, pushRemoteName, label, message)
 }
 
 func (c *chain) intentStage() error {
@@ -148,7 +168,7 @@ func (c *chain) intentStage() error {
 	}
 	if !result.OK {
 		c.finish(stageNameIntent, stageResultFail, result.Message)
-		return stageFailure(stageNameIntent, result.Message)
+		return c.stageFailure(stageNameIntent, result.Message)
 	}
 	c.finish(stageNameIntent, stageResultPass, result.Message)
 	return nil
@@ -162,7 +182,7 @@ func (c *chain) rebaseStage() error {
 	}
 	if !result.OK {
 		c.finish(stageNameRebase, stageResultFail, result.Message)
-		return stageFailure(stageNameRebase, result.Message)
+		return c.stageFailure(stageNameRebase, result.Message)
 	}
 	c.finish(stageNameRebase, stageResultPass, result.Message)
 	return nil
@@ -182,7 +202,7 @@ func (c *chain) reviewStage() error {
 	}
 	if !result.OK {
 		c.finish(stageNameReview, stageResultFail, result.Message)
-		return stageFailure(stageNameReview, result.Message)
+		return c.stageFailure(stageNameReview, result.Message)
 	}
 
 	if len(result.PendingFindings) > 0 {
@@ -203,7 +223,7 @@ func (c *chain) testStage() error {
 	}
 	if !result.OK {
 		c.finish(stageNameTest, stageResultFail, result.Message)
-		return stageFailure(stageNameTest, result.Message)
+		return c.stageFailure(stageNameTest, result.Message)
 	}
 	c.finish(stageNameTest, stageResultPass, result.Message)
 	return nil
@@ -217,7 +237,7 @@ func (c *chain) documentStage() error {
 	}
 	if !result.OK {
 		c.finish(stageNameDocument, stageResultFail, result.Message)
-		return stageFailure(stageNameDocument, result.Message)
+		return c.stageFailure(stageNameDocument, result.Message)
 	}
 
 	if len(result.Findings) > 0 {
@@ -238,7 +258,7 @@ func (c *chain) lintStage() error {
 	}
 	if !result.OK {
 		c.finish(stageNameLint, stageResultFail, result.Message)
-		return stageFailure(stageNameLint, result.Message)
+		return c.stageFailure(stageNameLint, result.Message)
 	}
 	c.finish(stageNameLint, stageResultPass, result.Message)
 	return nil
@@ -246,14 +266,15 @@ func (c *chain) lintStage() error {
 
 func (c *chain) pushStage() error {
 	c.start(stageNamePush)
-	result, err := push.Run(c.ctx, c.rc.Worktree.Path, "origin", c.branch)
+	result, err := push.Run(c.ctx, c.rc.Worktree.Path, pushRemoteName, c.branch)
 	if err != nil {
 		return err
 	}
 	if !result.OK {
 		c.finish(stageNamePush, stageResultFail, result.Message)
-		return stageFailure(stageNamePush, result.Message)
+		return c.stageFailure(stageNamePush, result.Message)
 	}
+	c.pushed = true
 	c.finish(stageNamePush, stageResultPass, result.Message)
 	return nil
 }
@@ -277,7 +298,7 @@ func (c *chain) prStage() (pr.Result, error) {
 	}
 	if !result.OK {
 		c.finish(stageNamePR, stageResultFail, result.Message)
-		return pr.Result{}, stageFailure(stageNamePR, result.Message)
+		return pr.Result{}, c.stageFailure(stageNamePR, result.Message)
 	}
 	c.finish(stageNamePR, stageResultPass, result.Message)
 	return result, nil
@@ -294,7 +315,7 @@ func (c *chain) ciStage(prURL string) error {
 	}
 	if !result.OK {
 		c.finish(stageNameCI, stageResultFail, result.Message)
-		return stageFailure(stageNameCI, result.Message)
+		return c.stageFailure(stageNameCI, result.Message)
 	}
 	c.finish(stageNameCI, stageResultPass, result.Message)
 	return nil
@@ -315,7 +336,7 @@ func (c *chain) parkForApproval(stage string, findings []daemon.AskUserFinding) 
 	}
 	if decision == daemon.ReviewRejected {
 		c.finish(stage, stageResultFail, "rejected by reviewer")
-		return stageFailure(stage, "rejected by reviewer")
+		return c.stageFailure(stage, "rejected by reviewer")
 	}
 	return nil
 }

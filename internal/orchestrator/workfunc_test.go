@@ -321,6 +321,16 @@ func TestNewWorkFunc_TestFailureHaltsBeforeLaterStages(t *testing.T) {
 		t.Fatalf("expected RunFailed, got %v (message=%q)", snap.Status, snap.Message)
 	}
 
+	if snap.Err == nil {
+		t.Fatalf("expected a non-nil error for a pre-push stage failure")
+	}
+	if got, want := snap.Err.Error(), `orchestrator: stage "test" failed:`; !strings.Contains(got, want) {
+		t.Fatalf("expected the original generic failure message %q, got %q", want, got)
+	}
+	if strings.Contains(snap.Err.Error(), "push succeeded") {
+		t.Fatalf("did not expect push-succeeded wording for a failure that happened before push ran, got %q", snap.Err.Error())
+	}
+
 	wantStages := []string{stageNameIntent, stageNameRebase, stageNameReview, stageNameTest}
 	if len(snap.Stages) != len(wantStages) {
 		t.Fatalf("expected exactly %d recorded stages (halted at test), got %+v", len(wantStages), snap.Stages)
@@ -430,5 +440,79 @@ func TestNewWorkFunc_DocumentFindingParksThenApprovedResumesToCompletion(t *test
 	}
 	if !f.branchOnRealRemote(t, branch) {
 		t.Fatalf("expected %s to have been pushed to the real remote", branch)
+	}
+}
+
+func newRunContextWithFailingPR(wt *gitgate.Worktree, cfg config.Config, ghBin, stderrMsg string) *RunContext {
+	store := evidence.NewStore(wt.Path, evidence.Config{StoreInRepo: true, Dir: ".made/evidence"})
+	env := append(os.Environ(), "FAKE_GH_EXIT_CODE=1", "FAKE_GH_STDERR="+stderrMsg)
+	return &RunContext{
+		Config:   cfg,
+		Worktree: wt,
+		Evidence: store,
+		GitHub:   &github.Client{Binary: ghBin, Dir: wt.Path, ExtraEnv: env},
+	}
+}
+
+func TestNewWorkFunc_PushSucceedsThenPRFailsMessageNamesPushedBranch(t *testing.T) {
+	f := newWFFixture(t)
+	branch := "feature-push-then-pr-fail"
+	sha := f.pushFeature(t, branch, "add file", "file.txt", "content\n")
+	wt := f.worktree(t, sha)
+	defer func() { _ = wt.Remove() }()
+
+	ghBin := githubtest.Build(t)
+	cfg := config.Config{
+		Agent:    string(agent.KindClaude),
+		Commands: config.Commands{Test: "true", Lint: "true"},
+		CI:       config.CI{RerunBudget: 1},
+	}
+	rc := newRunContextWithFailingPR(wt, cfg, ghBin, "insufficient permissions to open pull request")
+
+	rm := daemon.NewRunManager()
+	reviewDecisions := daemon.NewReviewDecisions()
+	runID := rm.NewRunID()
+
+	wf := NewWorkFunc(rm, reviewDecisions, nil, runID, f.defaultBranch, branch, Options{
+		ReviewOptions: cleanReviewOptions(t),
+	})
+	submitWorkFunc(t, rm, runID, "repo-push-then-pr-fail", branch, wf, rc)
+
+	snap := waitForRunEnded(t, rm, runID, 30*time.Second)
+	if snap.Status != daemon.RunFailed {
+		t.Fatalf("expected RunFailed, got %v (err=%v)", snap.Status, snap.Err)
+	}
+
+	if !f.branchOnRealRemote(t, branch) {
+		t.Fatalf("expected %s to have already been pushed to the real remote before PR creation failed", branch)
+	}
+
+	if snap.Err == nil {
+		t.Fatalf("expected a non-nil error")
+	}
+	errMsg := snap.Err.Error()
+	for _, want := range []string{
+		"push succeeded",
+		branch,
+		"origin",
+		"PR creation failed",
+		"insufficient permissions to open pull request",
+		"the branch is live on the real remote, no automatic action taken",
+	} {
+		if !strings.Contains(errMsg, want) {
+			t.Fatalf("expected failure message to contain %q, got %q", want, errMsg)
+		}
+	}
+
+	wantStages := []string{
+		stageNameIntent, stageNameRebase, stageNameReview, stageNameTest,
+		stageNameDocument, stageNameLint, stageNamePush, stageNamePR,
+	}
+	if len(snap.Stages) != len(wantStages) {
+		t.Fatalf("expected exactly %d recorded stages (halted at pr), got %+v", len(wantStages), snap.Stages)
+	}
+	last := snap.Stages[len(snap.Stages)-1]
+	if last.Name != stageNamePR || last.Result != stageResultFail {
+		t.Fatalf("expected final recorded stage to be pr/fail, got %+v", last)
 	}
 }

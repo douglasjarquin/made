@@ -103,7 +103,13 @@ and the run resumes.
   and do not wait for the merge yourself.
 - `failed` - a stage blocked the run. Read `made status --json` for
   the failing stage's result and message, fix it, commit the fix on the
-  same branch, and push to `made` again.
+  same branch, and push to `made` again. If PR or CI fails after
+  Push already succeeded, the message says so explicitly - e.g. "push
+  succeeded (branch ... now on origin), but PR creation failed: ...".
+  made cannot revert, force-push, or delete a branch once it is on the
+  real remote, so that message is your signal the branch is already live
+  there even though the run itself failed - check whether it needs manual
+  cleanup before you push a fix.
 - An ask-user finding parks the run rather than failing it: state stays
   `running` and `pending_findings` is populated until
   `made review` resolves it (see above).
