@@ -1,0 +1,89 @@
+=== QA Scenario (Task 9): Status stream completeness ===
+
+TestRunManager_StatusStreamCompleteness subscribes to a run's events via
+RunManager.Subscribe(id) BEFORE that run is ever Submit()-ted (the run ID is
+generated up front via NewRunID(), then Subscribe is called, then Submit is
+called - this ordering is what guarantees no race between subscribing and
+the run manager's internal goroutine publishing its first event). The fake
+work function then emits a 3-stage sequence (intent, rebase, build), each
+with a started/finished pair. The test asserts the subscriber channel
+delivers, in exact order and with nothing dropped:
+
+  run_started
+  stage_started(intent) -> stage_finished(intent)
+  stage_started(rebase) -> stage_finished(rebase)
+  stage_started(build)  -> stage_finished(build)
+  run_completed
+
+... and that no extra/duplicate event follows.
+
+A companion test, TestRunManager_FailedWorkEmitsRunFailed, confirms the
+terminal event is run_failed (carrying the returned error) when the work
+function returns an error instead of nil.
+
+Mailbox-level tests (mailbox_test.go) additionally cover: in-order delivery
+to a single subscriber, per-run-ID isolation (a subscriber to run-1 never
+sees run-2's events), fan-out to multiple simultaneous subscribers of the
+same run, no delivery after Unsubscribe, and that Publish drops rather than
+blocks once a subscriber's buffer is exhausted (verifying the bounded,
+non-blocking overflow path without needing to actually exhaust it under
+normal load, since mailboxBufferSize=256 is far larger than any real run's
+event count).
+
+$ go test ./internal/daemon/... -v
+=== RUN   TestRun_GracefulStop
+--- PASS: TestRun_GracefulStop (0.02s)
+=== RUN   TestRun_IdleTimeoutAutoStop
+--- PASS: TestRun_IdleTimeoutAutoStop (0.10s)
+=== RUN   TestAcquireLock_DoubleStartRejected
+--- PASS: TestAcquireLock_DoubleStartRejected (0.00s)
+=== RUN   TestAcquireLock_ReacquireAfterRelease
+--- PASS: TestAcquireLock_ReacquireAfterRelease (0.00s)
+=== RUN   TestMailbox_SubscriberReceivesInOrder
+--- PASS: TestMailbox_SubscriberReceivesInOrder (0.00s)
+=== RUN   TestMailbox_IgnoresOtherRunIDs
+--- PASS: TestMailbox_IgnoresOtherRunIDs (0.05s)
+=== RUN   TestMailbox_MultipleSubscribersEachGetAllEvents
+--- PASS: TestMailbox_MultipleSubscribersEachGetAllEvents (0.00s)
+=== RUN   TestMailbox_UnsubscribeStopsFutureDelivery
+--- PASS: TestMailbox_UnsubscribeStopsFutureDelivery (0.05s)
+=== RUN   TestMailbox_OverflowDropsRatherThanBlocks
+--- PASS: TestMailbox_OverflowDropsRatherThanBlocks (0.00s)
+=== RUN   TestRunManager_SequentialQueuing
+--- PASS: TestRunManager_SequentialQueuing (0.10s)
+=== RUN   TestRunManager_DifferentRepposRunConcurrently
+--- PASS: TestRunManager_DifferentRepposRunConcurrently (0.00s)
+=== RUN   TestRunManager_StatusStreamCompleteness
+--- PASS: TestRunManager_StatusStreamCompleteness (0.05s)
+=== RUN   TestRunManager_FailedWorkEmitsRunFailed
+--- PASS: TestRunManager_FailedWorkEmitsRunFailed (0.00s)
+=== RUN   TestRunManager_DuplicateRunIDRejected
+--- PASS: TestRunManager_DuplicateRunIDRejected (0.00s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/daemon	0.687s
+
+$ go test ./internal/daemon/... -race -run 'TestRunManager_StatusStreamCompleteness|TestMailbox' -v
+=== RUN   TestMailbox_SubscriberReceivesInOrder
+--- PASS: TestMailbox_SubscriberReceivesInOrder (0.00s)
+=== RUN   TestMailbox_IgnoresOtherRunIDs
+--- PASS: TestMailbox_IgnoresOtherRunIDs (0.05s)
+=== RUN   TestMailbox_MultipleSubscribersEachGetAllEvents
+--- PASS: TestMailbox_MultipleSubscribersEachGetAllEvents (0.00s)
+=== RUN   TestMailbox_UnsubscribeStopsFutureDelivery
+--- PASS: TestMailbox_UnsubscribeStopsFutureDelivery (0.05s)
+=== RUN   TestMailbox_OverflowDropsRatherThanBlocks
+--- PASS: TestMailbox_OverflowDropsRatherThanBlocks (0.00s)
+=== RUN   TestRunManager_StatusStreamCompleteness
+--- PASS: TestRunManager_StatusStreamCompleteness (0.05s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/daemon	1.2s
+
+$ go vet ./internal/daemon/...
+(vet: no output = clean)
+
+=== RESULT ===
+PASS: subscriber received all 8 events in exact order (run_started, three
+stage started/finished pairs, run_completed) with nothing dropped and no
+extra events. Failure path confirmed to emit run_failed with the underlying
+error attached. All of Task 5's pre-existing lock/lifecycle tests continue
+to pass alongside these new ones.

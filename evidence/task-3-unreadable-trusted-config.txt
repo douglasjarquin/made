@@ -1,0 +1,16 @@
+QA Scenario: Unreadable trusted config aborts
+Steps: chmod 000 the trusted config file, attempt to load effective config via
+LoadEffectiveConfig.
+Expected: loader returns a non-nil error; caller treats it as an abort, not a
+soft-fail default (fail-closed, rule d).
+
+Command: go test ./internal/config/... -v -run TestLoadEffectiveConfig_RuleD_UnreadableTrustedConfigFailsClosed
+
+=== RUN   TestLoadEffectiveConfig_RuleD_UnreadableTrustedConfigFailsClosed
+=== RUN   TestLoadEffectiveConfig_RuleD_UnreadableTrustedConfigFailsClosed/permission_denied
+=== RUN   TestLoadEffectiveConfig_RuleD_UnreadableTrustedConfigFailsClosed/parse_error
+--- PASS: TestLoadEffectiveConfig_RuleD_UnreadableTrustedConfigFailsClosed (0.00s)
+    --- PASS: TestLoadEffectiveConfig_RuleD_UnreadableTrustedConfigFailsClosed/permission_denied (0.00s)
+    --- PASS: TestLoadEffectiveConfig_RuleD_UnreadableTrustedConfigFailsClosed/parse_error (0.00s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/config	0.227s

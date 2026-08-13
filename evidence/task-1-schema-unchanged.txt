@@ -1,0 +1,100 @@
+Scenario: JSON shape unchanged
+Tool: bash
+Steps: Diff the JSON schema (field names/types) before and after this task
+against a fixed sample StatusReport.
+Expected: Identical field names and types - only the underlying data source
+moved.
+
+BEFORE this task, cmd/made/status.go (package main) defined these types
+locally, at lines 52-60:
+
+  type StageResult struct {
+      Name   string `json:"name"`
+      Result string `json:"result"`
+  }
+
+  type AskUserFinding struct {
+      Stage   string `json:"stage"`
+      Message string `json:"message"`
+  }
+
+Encoding a fixed sample StatusReport with those exact local definitions
+produces:
+
+  {
+    "schema_version": 1,
+    "run_id": "run-1",
+    "repo": "example/repo",
+    "branch": "feature-x",
+    "state": "running",
+    "stages": [
+      {
+        "name": "intent",
+        "result": "pass"
+      }
+    ],
+    "pending_findings": [
+      {
+        "stage": "review",
+        "message": "msg"
+      }
+    ]
+  }
+
+AFTER this task, cmd/made/status.go defines StageResult/AskUserFinding as
+type aliases of the relocated internal/daemon types:
+
+  type StageResult = daemon.StageResult
+  type AskUserFinding = daemon.AskUserFinding
+
+with the relocated definitions in internal/daemon/runstate.go carrying the
+EXACT SAME field names and json tags:
+
+  type StageResult struct {
+      Name   string `json:"name"`
+      Result string `json:"result"`
+  }
+
+  type AskUserFinding struct {
+      Stage   string `json:"stage"`
+      Message string `json:"message"`
+  }
+
+Encoding the same fixed sample using the relocated daemon.StageResult /
+daemon.AskUserFinding types (verified via a temporary test in
+internal/daemon, run and then removed - not part of the final diff) produces:
+
+  {
+    "schema_version": 1,
+    "run_id": "run-1",
+    "repo": "example/repo",
+    "branch": "feature-x",
+    "state": "running",
+    "stages": [
+      {
+        "name": "intent",
+        "result": "pass"
+      }
+    ],
+    "pending_findings": [
+      {
+        "stage": "review",
+        "message": "msg"
+      }
+    ]
+  }
+
+Byte-for-byte identical output. Since StageResult/AskUserFinding in package
+main are now Go type aliases (`type X = daemon.X`, not new type
+definitions), `go vet ./cmd/made/...` also confirms there is no duplicate
+type definition - StageResult/AskUserFinding refer to the exact same
+underlying type as internal/daemon.StageResult/AskUserFinding, so any code
+in package main using the bare names (e.g. cmd/made/review_test.go, which
+this task was scoped not to touch) keeps compiling unchanged, and any
+consumer parsing the daemon-produced JSON (e.g. consigliere's
+`jq '.stages[].result'`) sees no change in field names or types.
+
+go vet confirmation (run from repo root):
+  $ go vet ./internal/daemon/... ./cmd/made/...
+  (exit 0, no output - no duplicate definitions, no unused-import/type
+  errors)

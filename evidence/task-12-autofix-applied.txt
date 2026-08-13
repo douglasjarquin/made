@@ -1,0 +1,19 @@
+=== go test ./internal/pipeline/review/... -v -run TestRun_AutoFixApplied ===
+=== RUN   TestRun_AutoFixApplied
+--- PASS: TestRun_AutoFixApplied (0.84s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/review	1.080s
+
+=== go test ./internal/agent/... -v ===
+=== RUN   TestSpawn_ParsesFindingsFromFakeAgent
+--- PASS: TestSpawn_ParsesFindingsFromFakeAgent (0.44s)
+=== RUN   TestSpawn_NonZeroExitReturnsError
+--- PASS: TestSpawn_NonZeroExitReturnsError (0.01s)
+=== RUN   TestSpawn_LogsInvocation
+--- PASS: TestSpawn_LogsInvocation (0.01s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/agent	(cached)
+?   	github.com/douglasjarquin/made/internal/agent/agenttest	[no test files]
+
+=== go vet ./internal/pipeline/review/... ./internal/agent/... ===
+(vet: no output = clean)

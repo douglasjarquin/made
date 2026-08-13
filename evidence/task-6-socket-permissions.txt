@@ -1,0 +1,38 @@
+=== QA Scenario (Task 6): Socket permissions ===
+Steps: start the daemon socket server, stat the socket file.
+
+=== RUN   TestScenarioDemo_SocketPermissions
+$ (start daemon listening on) /var/folders/5j/n805d0vn43g2bjt7ykqmyxmm0000gn/T/made-api839985346/daemon.sock
+$ stat -f "%Sp %Su" /var/folders/5j/n805d0vn43g2bjt7ykqmyxmm0000gn/T/made-api839985346/daemon.sock
+srw------- douglasjarquin
+=== RESULT ===
+PASS: socket created with mode 0600 (srw-------), owner-only
+--- PASS: TestScenarioDemo_SocketPermissions (0.00s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/api	0.358s
+
+=== go test ./internal/api/... -v (full suite) ===
+=== RUN   TestClient_PingPong
+--- PASS: TestClient_PingPong (0.00s)
+=== RUN   TestScenarioDemo_SocketPermissions
+$ (start daemon listening on) /var/folders/5j/n805d0vn43g2bjt7ykqmyxmm0000gn/T/made-api3346729710/daemon.sock
+$ stat -f "%Sp %Su" /var/folders/5j/n805d0vn43g2bjt7ykqmyxmm0000gn/T/made-api3346729710/daemon.sock
+srw------- douglasjarquin
+=== RESULT ===
+PASS: socket created with mode 0600 (srw-------), owner-only
+--- PASS: TestScenarioDemo_SocketPermissions (0.01s)
+=== RUN   TestScenarioDemo_VersionMismatchRejected
+$ send raw JSON over socket: {"made.protocol":999,"id":"raw-1","method":"ping"}
+response: {"made.protocol":1,"id":"raw-1","error":{"code":"protocol_mismatch","message":"client protocol 999 does not match server protocol 1"}}
+=== RESULT ===
+PASS: mismatched made.protocol (999 vs server 1) rejected with structured error "protocol_mismatch", connection stayed open, no hang/crash
+--- PASS: TestScenarioDemo_VersionMismatchRejected (0.00s)
+=== RUN   TestServer_SocketHasOwnerOnlyPermissions
+--- PASS: TestServer_SocketHasOwnerOnlyPermissions (0.00s)
+=== RUN   TestServer_RejectsProtocolVersionMismatch
+--- PASS: TestServer_RejectsProtocolVersionMismatch (0.00s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/api	0.318s
+
+=== go vet ./internal/api/... ===
+(vet: no output = clean)

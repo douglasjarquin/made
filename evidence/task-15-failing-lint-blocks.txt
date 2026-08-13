@@ -1,0 +1,4 @@
+=== RUN   TestRun_FailingLintCommandBlocksAndCapturesEvidence
+--- PASS: TestRun_FailingLintCommandBlocksAndCapturesEvidence (0.26s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/lint	0.504s

@@ -1,0 +1,18 @@
+=== go test ./internal/pipeline/pr/... -v ===
+=== RUN   TestGitHubClientExposesNoMergeCapableMethod
+--- PASS: TestGitHubClientExposesNoMergeCapableMethod (0.00s)
+=== RUN   TestPackageSourceContainsNoMergeInvocation
+--- PASS: TestPackageSourceContainsNoMergeInvocation (0.00s)
+=== RUN   TestRun_OpensPRWithEvidenceLink
+--- PASS: TestRun_OpensPRWithEvidenceLink (0.39s)
+=== RUN   TestRun_NeverInvokesMergeCommand
+--- PASS: TestRun_NeverInvokesMergeCommand (0.01s)
+=== RUN   TestRun_RejectsEmptyEvidenceRef
+--- PASS: TestRun_RejectsEmptyEvidenceRef (0.00s)
+=== RUN   TestRun_ReportsGHFailureAsResultNotError
+--- PASS: TestRun_ReportsGHFailureAsResultNotError (0.01s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/pr	(cached)
+
+=== go vet ./internal/pipeline/pr/... ===
+(no output = clean)

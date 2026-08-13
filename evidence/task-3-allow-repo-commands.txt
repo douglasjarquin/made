@@ -1,0 +1,12 @@
+QA Scenario: allow_repo_commands opt-in honored
+Steps: create a trusted config with allow_repo_commands: true and a pushed-branch
+config overriding commands.test; load effective config via LoadEffectiveConfig.
+Expected: effective Commands.Test matches the pushed branch's override, while
+rule (a) fields (e.g. Review.Required) still come from the trusted copy.
+
+Command: go test ./internal/config/... -v -run TestLoadEffectiveConfig_RuleB_PushedHonoredWhenAllowRepoCommands
+
+=== RUN   TestLoadEffectiveConfig_RuleB_PushedHonoredWhenAllowRepoCommands
+--- PASS: TestLoadEffectiveConfig_RuleB_PushedHonoredWhenAllowRepoCommands (0.00s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/config	0.283s

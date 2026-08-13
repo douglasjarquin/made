@@ -1,0 +1,8 @@
+$ go test ./internal/pipeline/rebase/... -v
+=== RUN   TestRun_ConflictingRebaseHalts
+--- PASS: TestRun_ConflictingRebaseHalts (0.60s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/rebase	0.838s
+
+$ go vet ./internal/pipeline/rebase/...
+(clean, no output)

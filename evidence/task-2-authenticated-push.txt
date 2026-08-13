@@ -1,0 +1,13 @@
+=== QA Scenario: Bare gate repo accepts an authenticated push ===
+$ go test ./internal/gitgate/... -run 'TestInitBareCreatesBareRepository|TestAdmissionHookAcceptsPushWithValidToken|TestAddWorktreeChecksOutRef' -v
+=== RUN   TestInitBareCreatesBareRepository
+--- PASS: TestInitBareCreatesBareRepository (0.02s)
+=== RUN   TestAdmissionHookAcceptsPushWithValidToken
+--- PASS: TestAdmissionHookAcceptsPushWithValidToken (0.43s)
+=== RUN   TestAddWorktreeChecksOutRef
+--- PASS: TestAddWorktreeChecksOutRef (0.45s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/gitgate	1.135s
+
+=== go vet ./internal/gitgate/... ===
+vet exit: 0

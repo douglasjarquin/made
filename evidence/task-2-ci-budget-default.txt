@@ -1,0 +1,43 @@
+=== Scenario: CI rerun budget defaults ===
+$ go test ./internal/config/... -v
+=== RUN   TestLoadEffectiveConfig_EvidenceStoreInRepoAndDirAlwaysFromTrusted
+--- PASS: TestLoadEffectiveConfig_EvidenceStoreInRepoAndDirAlwaysFromTrusted (0.00s)
+=== RUN   TestCI_RerunBudgetDefaultsToTwoWhenUnset
+--- PASS: TestCI_RerunBudgetDefaultsToTwoWhenUnset (0.00s)
+=== RUN   TestCI_RerunBudgetHonorsExplicitValue
+--- PASS: TestCI_RerunBudgetHonorsExplicitValue (0.00s)
+=== RUN   TestConfig_TestCommandTokenizesNonEmptyString
+--- PASS: TestConfig_TestCommandTokenizesNonEmptyString (0.00s)
+=== RUN   TestConfig_TestCommandReturnsNilWhenEmpty
+--- PASS: TestConfig_TestCommandReturnsNilWhenEmpty (0.00s)
+=== RUN   TestConfig_LintCommandTokenizesNonEmptyString
+--- PASS: TestConfig_LintCommandTokenizesNonEmptyString (0.00s)
+=== RUN   TestConfig_LintCommandReturnsNilWhenEmpty
+--- PASS: TestConfig_LintCommandReturnsNilWhenEmpty (0.00s)
+=== RUN   TestConfig_AgentKindMapsClaude
+--- PASS: TestConfig_AgentKindMapsClaude (0.00s)
+=== RUN   TestConfig_AgentKindMapsCodex
+--- PASS: TestConfig_AgentKindMapsCodex (0.00s)
+=== RUN   TestConfig_AgentKindFailsClosedOnEmpty
+--- PASS: TestConfig_AgentKindFailsClosedOnEmpty (0.00s)
+=== RUN   TestConfig_AgentKindFailsClosedOnUnrecognizedValue
+--- PASS: TestConfig_AgentKindFailsClosedOnUnrecognizedValue (0.00s)
+=== RUN   TestLoadEffectiveConfig_RuleA_AlwaysReadFromTrusted
+--- PASS: TestLoadEffectiveConfig_RuleA_AlwaysReadFromTrusted (0.00s)
+=== RUN   TestLoadEffectiveConfig_RuleB_CommandsTrustedByDefault
+--- PASS: TestLoadEffectiveConfig_RuleB_CommandsTrustedByDefault (0.00s)
+=== RUN   TestLoadEffectiveConfig_RuleB_PushedHonoredWhenAllowRepoCommands
+--- PASS: TestLoadEffectiveConfig_RuleB_PushedHonoredWhenAllowRepoCommands (0.00s)
+=== RUN   TestLoadEffectiveConfig_RuleC_NoTrustedCopyZeroesExecutableFields
+--- PASS: TestLoadEffectiveConfig_RuleC_NoTrustedCopyZeroesExecutableFields (0.00s)
+=== RUN   TestLoadEffectiveConfig_RuleD_UnreadableTrustedConfigFailsClosed
+=== RUN   TestLoadEffectiveConfig_RuleD_UnreadableTrustedConfigFailsClosed/permission_denied
+=== RUN   TestLoadEffectiveConfig_RuleD_UnreadableTrustedConfigFailsClosed/parse_error
+--- PASS: TestLoadEffectiveConfig_RuleD_UnreadableTrustedConfigFailsClosed (0.00s)
+    --- PASS: TestLoadEffectiveConfig_RuleD_UnreadableTrustedConfigFailsClosed/permission_denied (0.00s)
+    --- PASS: TestLoadEffectiveConfig_RuleD_UnreadableTrustedConfigFailsClosed/parse_error (0.00s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/config	(cached)
+
+$ go vet ./internal/config/...
+(vet: no output = clean)

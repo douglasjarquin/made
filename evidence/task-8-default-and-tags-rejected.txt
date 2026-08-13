@@ -1,0 +1,12 @@
+=== go test ./internal/gitgate/... -run 'TestClassifyRefRejects' -v ===
+=== RUN   TestClassifyRefRejectsDefaultBranch
+--- PASS: TestClassifyRefRejectsDefaultBranch (0.00s)
+=== RUN   TestClassifyRefRejectsTags
+--- PASS: TestClassifyRefRejectsTags (0.00s)
+=== RUN   TestClassifyRefRejectsOtherNamespaces
+--- PASS: TestClassifyRefRejectsOtherNamespaces (0.00s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/gitgate	0.293s
+
+=== go vet ./internal/gitgate/... ===
+(vet: no output = clean)

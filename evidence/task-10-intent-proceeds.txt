@@ -1,0 +1,6 @@
+=== RUN   TestCheck_PresentIntentProceeds
+--- PASS: TestCheck_PresentIntentProceeds (0.15s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/intent	0.380s
+--- go vet ---
+exit: 0

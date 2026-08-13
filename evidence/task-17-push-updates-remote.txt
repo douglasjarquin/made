@@ -1,0 +1,12 @@
+== go test ./internal/pipeline/push/... -v ==
+=== RUN   TestRun_SuccessfulPushUpdatesRemote
+--- PASS: TestRun_SuccessfulPushUpdatesRemote (0.40s)
+=== RUN   TestRun_UnreachableRemoteFailsClean
+--- PASS: TestRun_UnreachableRemoteFailsClean (0.36s)
+=== RUN   TestRun_DoesNotLeakCredentialsOnFailure
+--- PASS: TestRun_DoesNotLeakCredentialsOnFailure (0.35s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/push	(cached)
+
+== go vet ./internal/pipeline/push/... ==
+vet exit: 0

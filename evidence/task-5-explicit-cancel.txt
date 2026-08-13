@@ -1,0 +1,54 @@
+=== go test ./internal/daemon/... -v -race ===
+=== RUN   TestRun_GracefulStop
+--- PASS: TestRun_GracefulStop (0.02s)
+=== RUN   TestRun_IdleTimeoutAutoStop
+--- PASS: TestRun_IdleTimeoutAutoStop (0.10s)
+=== RUN   TestRun_ActiveRunSurvivesIdleTimeout
+--- PASS: TestRun_ActiveRunSurvivesIdleTimeout (0.73s)
+=== RUN   TestRun_IdleTimeoutStillFiresWithNoActivity
+--- PASS: TestRun_IdleTimeoutStillFiresWithNoActivity (0.10s)
+=== RUN   TestAcquireLock_DoubleStartRejected
+--- PASS: TestAcquireLock_DoubleStartRejected (0.00s)
+=== RUN   TestAcquireLock_ReacquireAfterRelease
+--- PASS: TestAcquireLock_ReacquireAfterRelease (0.00s)
+=== RUN   TestMailbox_SubscriberReceivesInOrder
+--- PASS: TestMailbox_SubscriberReceivesInOrder (0.00s)
+=== RUN   TestMailbox_IgnoresOtherRunIDs
+--- PASS: TestMailbox_IgnoresOtherRunIDs (0.05s)
+=== RUN   TestMailbox_MultipleSubscribersEachGetAllEvents
+--- PASS: TestMailbox_MultipleSubscribersEachGetAllEvents (0.00s)
+=== RUN   TestMailbox_UnsubscribeStopsFutureDelivery
+--- PASS: TestMailbox_UnsubscribeStopsFutureDelivery (0.05s)
+=== RUN   TestMailbox_OverflowDropsRatherThanBlocks
+--- PASS: TestMailbox_OverflowDropsRatherThanBlocks (0.00s)
+=== RUN   TestRunManager_SequentialQueuing
+--- PASS: TestRunManager_SequentialQueuing (0.10s)
+=== RUN   TestRunManager_DifferentRepposRunConcurrently
+--- PASS: TestRunManager_DifferentRepposRunConcurrently (0.00s)
+=== RUN   TestRunManager_StatusStreamCompleteness
+--- PASS: TestRunManager_StatusStreamCompleteness (0.05s)
+=== RUN   TestRunManager_FailedWorkEmitsRunFailed
+--- PASS: TestRunManager_FailedWorkEmitsRunFailed (0.00s)
+=== RUN   TestRunManager_DuplicateRunIDRejected
+--- PASS: TestRunManager_DuplicateRunIDRejected (0.00s)
+=== RUN   TestRunManager_CancelStopsRunningWorkFunc
+--- PASS: TestRunManager_CancelStopsRunningWorkFunc (0.00s)
+=== RUN   TestRunManager_CancelUnknownRunErrors
+--- PASS: TestRunManager_CancelUnknownRunErrors (0.00s)
+=== RUN   TestRunManager_CancelTerminalRunErrors
+--- PASS: TestRunManager_CancelTerminalRunErrors (0.01s)
+=== RUN   TestRunManager_UpdateStagesVisibleViaSnapshot
+--- PASS: TestRunManager_UpdateStagesVisibleViaSnapshot (0.00s)
+=== RUN   TestRunManager_UpdatePendingFindingsVisibleViaSnapshot
+--- PASS: TestRunManager_UpdatePendingFindingsVisibleViaSnapshot (0.00s)
+=== RUN   TestRunManager_UpdateStagesUnknownRunFails
+--- PASS: TestRunManager_UpdateStagesUnknownRunFails (0.00s)
+=== RUN   TestRunManager_UpdatePendingFindingsUnknownRunFails
+--- PASS: TestRunManager_UpdatePendingFindingsUnknownRunFails (0.00s)
+=== RUN   TestRunManager_UpdateStagesReflectsListToo
+--- PASS: TestRunManager_UpdateStagesReflectsListToo (0.01s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/daemon	2.502s
+
+=== go vet ./internal/daemon/... ./cmd/made/... ===
+(clean, no output)

@@ -1,0 +1,5 @@
+=== RUN   TestGateInit_EndToEnd
+--- PASS: TestGateInit_EndToEnd (0.37s)
+PASS
+ok  	github.com/douglasjarquin/made/cmd/made	0.584s
+--- go vet exit: 0 ---

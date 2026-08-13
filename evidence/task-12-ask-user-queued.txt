@@ -1,0 +1,18 @@
+=== go test ./internal/pipeline/review/... -v -run TestRun_AskUserFindingQueued ===
+=== RUN   TestRun_AskUserFindingQueued
+--- PASS: TestRun_AskUserFindingQueued (0.68s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/review	0.920s
+
+=== go test ./internal/pipeline/review/... -v (full package, includes blocking-finding bonus scenario) ===
+=== RUN   TestRun_AutoFixApplied
+--- PASS: TestRun_AutoFixApplied (0.84s)
+=== RUN   TestRun_AskUserFindingQueued
+--- PASS: TestRun_AskUserFindingQueued (0.21s)
+=== RUN   TestRun_BlockingFindingHaltsStage
+--- PASS: TestRun_BlockingFindingHaltsStage (0.20s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/review	(cached)
+
+=== go vet ./internal/pipeline/review/... ./internal/agent/... ===
+(vet: no output = clean)

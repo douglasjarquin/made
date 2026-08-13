@@ -1,0 +1,34 @@
+=== go test ./internal/herdrclient/... -v ===
+=== RUN   TestEveryOutgoingCallIncludesExplicitNonEmptySession
+--- PASS: TestEveryOutgoingCallIncludesExplicitNonEmptySession (0.80s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/herdrclient	1.072s
+
+=== go test ./internal/herdrclient/... -v (full suite) ===
+=== RUN   TestConnectReadyOnProtocolMatch
+--- PASS: TestConnectReadyOnProtocolMatch (0.00s)
+=== RUN   TestConnectDegradesOnProtocolMismatch
+--- PASS: TestConnectDegradesOnProtocolMismatch (0.00s)
+=== RUN   TestConnectUnavailableWhenNothingListening
+--- PASS: TestConnectUnavailableWhenNothingListening (0.00s)
+=== RUN   TestConnectUnavailableAndIncompatibleAreDistinguishable
+--- PASS: TestConnectUnavailableAndIncompatibleAreDistinguishable (0.00s)
+=== RUN   TestOpenPaneReturnsIdentifiersFromServer
+--- PASS: TestOpenPaneReturnsIdentifiersFromServer (0.00s)
+=== RUN   TestPaneCloseSucceeds
+--- PASS: TestPaneCloseSucceeds (0.00s)
+=== RUN   TestEveryOutgoingCallIncludesExplicitNonEmptySession
+--- PASS: TestEveryOutgoingCallIncludesExplicitNonEmptySession (0.80s)
+=== RUN   TestConnectItselfNeverReadsAmbientHerdrSessionEnv
+--- PASS: TestConnectItselfNeverReadsAmbientHerdrSessionEnv (0.00s)
+=== RUN   TestDefaultSocketPath
+--- PASS: TestDefaultSocketPath (0.00s)
+=== RUN   TestSocketPathEnvOverride
+--- PASS: TestSocketPathEnvOverride (0.00s)
+=== RUN   TestSocketPathDefaultsWhenEnvUnset
+--- PASS: TestSocketPathDefaultsWhenEnvUnset (0.00s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/herdrclient	1.053s
+
+=== go vet ./internal/herdrclient/... ===
+vet exit code: 0

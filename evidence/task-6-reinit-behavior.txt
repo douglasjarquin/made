@@ -1,0 +1,6 @@
+=== RUN   TestGateInit_ReInitIsIdempotent
+--- PASS: TestGateInit_ReInitIsIdempotent (0.65s)
+PASS
+ok  	github.com/douglasjarquin/made/cmd/made	0.879s
+--- go vet ---
+--- exit: 0 ---

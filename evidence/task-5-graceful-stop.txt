@@ -1,0 +1,20 @@
+=== QA Scenario (Task 5): Graceful stop ===
+MADE_HOME=/private/tmp/claude-501/-Users-douglasjarquin-github-douglasjarquin-made/328d892a-f6d9-4303-8c9a-24324ae4857f/scratchpad/madehome-graceful-stop4
+
+$ made daemon start &
+made daemon: started (pid 14165)
+daemon ready: made daemon: running (pid 14165)
+
+$ made daemon stop
+made daemon: stopped
+
+$ made daemon status
+made daemon: not running
+
+verifying a third-party process can now acquire the exclusive lock at the same path
+(a brand new OS process, independent of the stopped daemon, backgrounded briefly):
+made daemon: started (pid 14218)
+third-party 'made daemon start' exit code: 0 (0 = lock acquired and idle-timed-out cleanly)
+
+=== RESULT ===
+PASS: status reports not running after stop; a third party independently reacquired the released lock

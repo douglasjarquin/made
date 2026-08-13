@@ -1,0 +1,8 @@
+=== RUN   TestCheck_MissingIntentBlocks
+--- PASS: TestCheck_MissingIntentBlocks (0.17s)
+=== RUN   TestCheck_EmptyIntentBlocks
+--- PASS: TestCheck_EmptyIntentBlocks (0.14s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/intent	0.556s
+--- go vet ---
+exit: 0

@@ -1,0 +1,4 @@
+=== RUN   TestRun_ActiveRunSurvivesIdleTimeout
+--- PASS: TestRun_ActiveRunSurvivesIdleTimeout (0.73s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/daemon	2.155s

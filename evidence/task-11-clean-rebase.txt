@@ -1,0 +1,8 @@
+$ go test ./internal/pipeline/rebase/... -v
+=== RUN   TestRun_CleanRebaseProceeds
+--- PASS: TestRun_CleanRebaseProceeds (0.65s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/rebase	0.887s
+
+$ go vet ./internal/pipeline/rebase/...
+(clean, no output)

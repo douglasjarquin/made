@@ -1,0 +1,50 @@
+=== go test ./internal/github/... -v -run TestCreatePR (fake gh CLI double, default suite, no network) ===
+=== RUN   TestCreatePR_AuthFailurePreventsPRCall
+--- PASS: TestCreatePR_AuthFailurePreventsPRCall (0.35s)
+=== RUN   TestCreatePR_SuccessReturnsURL
+--- PASS: TestCreatePR_SuccessReturnsURL (0.01s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/github	0.576s
+?   	github.com/douglasjarquin/made/internal/github/githubtest	[no test files]
+
+=== LIVE: internal/github.Client.CreatePR against a real, disposable scratch GitHub repo (first run, captured verbatim) ===
+Scratch repo: https://github.com/douglasjarquin/made-task16-scratch-test-1786607476
+Local clone used as Client.Dir: <scratchpad>/task16-live-repo (main branch pushed, task16-feature branch pushed)
+Command: MADE_GITHUB_LIVE_TEST_REPO=<clone dir> MADE_GITHUB_LIVE_TEST_HEAD=task16-feature go test ./internal/github/... -run TestLive_AuthStatusAndPRCreation -v
+
+=== RUN   TestLive_AuthStatusAndPRCreation
+    live_test.go:45: created PR: https://github.com/douglasjarquin/made-task16-scratch-test-1786607476/pull/1
+    live_test.go:51: mergeStateStatus: UNKNOWN
+--- PASS: TestLive_AuthStatusAndPRCreation (4.49s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/github	4.722s
+?   	github.com/douglasjarquin/made/internal/github/githubtest	[no test files]
+
+=== Verification: gh pr view --json state on the created PR ===
+{"state":"OPEN","title":"made internal/github Task 16 live verification","url":"https://github.com/douglasjarquin/made-task16-scratch-test-1786607476/pull/1"}
+
+=== Idempotency corroboration: a second live run against the same branch pair correctly fails, proving this is really hitting the GitHub API (not a mock) ===
+    live_test.go:62: CreatePR: github: gh pr create failed: a pull request for branch "task16-feature" into branch "main" already exists:
+        https://github.com/douglasjarquin/made-task16-scratch-test-1786607476/pull/1
+--- FAIL: TestLive_AuthStatusAndPRCreation (1.86s)
+(expected: gh pr create refuses a duplicate PR for the same base/head pair once one is already open - this is real GitHub API behavior, and is exactly how a live Push/PR stage retry would need to be handled in Task 18, not a Task 16 defect)
+
+=== LIMITATION NOTE ===
+The gh token available in this environment has scopes 'gist, project, read:org,
+repo, workflow' but NOT 'delete_repo'. gh repo delete on the scratch repo created
+for this test fails with:
+  HTTP 403: Must have admin rights to Repository.
+  This API operation needs the "delete_repo" scope.
+The scratch repo (douglasjarquin/made-task16-scratch-test-1786607476, private)
+and the open PR above are therefore left in place - not automated test fixtures,
+a one-time manual scratch repo created for this task's live verification. Doug
+should delete the repo manually, or run:
+  gh auth refresh -h github.com -s delete_repo
+and then:
+  gh repo delete douglasjarquin/made-task16-scratch-test-1786607476 --yes
+No further scratch repos were created in order to avoid compounding this cleanup
+debt. All other tests in this package use a compiled fake `gh` CLI double
+(internal/github/testdata/fakegh) with zero network/account side effects, and
+the live test (internal/github/live_test.go) is skipped by default in `go test
+./...` unless MADE_GITHUB_LIVE_TEST_REPO is explicitly set, so it never runs
+unattended in CI or on a fresh clone.

@@ -1,0 +1,38 @@
+=== go test ./internal/pipeline/... -v (herdrview: pane visibility & lifecycle) ===
+=== RUN   TestOpen_PaneLifecycle
+--- PASS: TestOpen_PaneLifecycle (0.00s)
+=== RUN   TestOpen_UnavailableHerdrReturnsUsableNoOpVisibility
+2026/08/13 04:19:43 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-no-herdr state=unavailable
+--- PASS: TestOpen_UnavailableHerdrReturnsUsableNoOpVisibility (0.00s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline	0.392s
+testing: warning: no tests to run
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/ci	0.569s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/document	1.477s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/intent	2.030s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/lint	1.657s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/pr	0.754s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/push	1.119s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/rebase	0.936s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/review	1.849s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/test	1.299s [no tests to run]
+
+=== go vet ./internal/pipeline/... ===
+vet exit code: 0

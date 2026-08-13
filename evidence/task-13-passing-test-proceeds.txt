@@ -1,0 +1,18 @@
+=== go vet ./internal/pipeline/test/... ===
+(vet clean, no output above means no issues)
+
+=== go test ./internal/pipeline/test/... -v -run TestRun_PassingCommandProceedsAndCapturesEvidence ===
+=== RUN   TestRun_PassingCommandProceedsAndCapturesEvidence
+--- PASS: TestRun_PassingCommandProceedsAndCapturesEvidence (0.22s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/test	0.439s
+
+=== full package suite: go test ./internal/pipeline/test/... -v ===
+=== RUN   TestRun_FailingCommandBlocksAndCapturesEvidence
+--- PASS: TestRun_FailingCommandBlocksAndCapturesEvidence (0.22s)
+=== RUN   TestRun_PassingCommandProceedsAndCapturesEvidence
+--- PASS: TestRun_PassingCommandProceedsAndCapturesEvidence (0.21s)
+=== RUN   TestRun_RespectsConfiguredCommandExactly
+--- PASS: TestRun_RespectsConfiguredCommandExactly (0.21s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/test	0.850s

@@ -1,0 +1,71 @@
+Scenario: Real stage update visible in status
+Tool: bash
+Steps: Submit a run, call UpdateStages/UpdatePendingFindings with real stage
+data, query made status --json for that run (via the socket-based CLI test
+pattern in cmd/made/status_test.go).
+Expected: The JSON output reflects the updated stage/findings, not a
+placeholder.
+
+Command:
+  cd /Users/douglasjarquin/github/douglasjarquin/made
+  go vet ./internal/daemon/... ./cmd/made/...
+  go test ./internal/daemon/... ./cmd/made/... \
+    -run 'TestRunManager_UpdateStagesVisibleViaSnapshot|TestRunManager_UpdatePendingFindingsVisibleViaSnapshot|TestRunManager_UpdateStagesUnknownRunFails|TestRunManager_UpdatePendingFindingsUnknownRunFails|TestRunManager_UpdateStagesReflectsListToo|TestStatusJSON_ReflectsRealStageUpdate|TestStatusJSON_SchemaValidity|TestStatus_NoRunsReportsError' \
+    -v -count=1
+
+go vet output (exit 0, no output):
+(none)
+
+go test output:
+=== RUN   TestRunManager_UpdateStagesVisibleViaSnapshot
+--- PASS: TestRunManager_UpdateStagesVisibleViaSnapshot (0.00s)
+=== RUN   TestRunManager_UpdatePendingFindingsVisibleViaSnapshot
+--- PASS: TestRunManager_UpdatePendingFindingsVisibleViaSnapshot (0.00s)
+=== RUN   TestRunManager_UpdateStagesUnknownRunFails
+--- PASS: TestRunManager_UpdateStagesUnknownRunFails (0.00s)
+=== RUN   TestRunManager_UpdatePendingFindingsUnknownRunFails
+--- PASS: TestRunManager_UpdatePendingFindingsUnknownRunFails (0.00s)
+=== RUN   TestRunManager_UpdateStagesReflectsListToo
+--- PASS: TestRunManager_UpdateStagesReflectsListToo (0.01s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/daemon	0.439s
+=== RUN   TestStatusJSON_SchemaValidity
+--- PASS: TestStatusJSON_SchemaValidity (0.01s)
+=== RUN   TestStatusJSON_ReflectsRealStageUpdate
+--- PASS: TestStatusJSON_ReflectsRealStageUpdate (0.00s)
+=== RUN   TestStatus_NoRunsReportsError
+--- PASS: TestStatus_NoRunsReportsError (0.00s)
+PASS
+ok  	github.com/douglasjarquin/made/cmd/made	0.637s
+
+Description:
+TestRunManager_UpdateStagesVisibleViaSnapshot and
+TestRunManager_UpdatePendingFindingsVisibleViaSnapshot
+(internal/daemon/runstate_test.go) submit a run, call
+RunManager.UpdateStages/UpdatePendingFindings with real data, and assert the
+SAME data is visible via a subsequent RunManager.Snapshot call (and via
+RunManager.List, per TestRunManager_UpdateStagesReflectsListToo).
+
+TestStatusJSON_ReflectsRealStageUpdate (cmd/made/status_test.go) is the full
+end-to-end scenario required by this task: it starts a real daemon
+(in-process, real Unix socket via startDaemon, same harness as the existing
+TestStatusJSON_SchemaValidity), submits a run via RunManager.Submit, calls
+RunManager.UpdateStages with
+
+  []daemon.StageResult{
+    {Name: "intent", Result: "pass"},
+    {Name: "rebase", Result: "pass"},
+    {Name: "review", Result: "pending"},
+  }
+
+and RunManager.UpdatePendingFindings with
+
+  []daemon.AskUserFinding{
+    {Stage: "review", Message: "Should this helper be exported?"},
+  }
+
+then invokes the real `made status --json run-real-stage-1` CLI path over the
+socket (runCapture -> run(["status","--json","run-real-stage-1"], ...)),
+exactly the code path a user's shell invocation exercises, and asserts the
+decoded StatusReport.Stages/PendingFindings match those real values exactly -
+not the old hardcoded placeholder (all-9-stages-"pending", empty findings).

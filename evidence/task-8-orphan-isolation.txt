@@ -1,0 +1,55 @@
+Task 8 QA Scenario: Orphan mode isolation
+==========================================
+
+Live demonstration (evidence.NewStore with default Config, i.e. OrphanBranchStore):
+-------------------------------------------------------------------------------
+== step 1: write evidence via OrphanBranchStore (default config, no store_in_repo) ==
+== step 2: git ls-tree -r main (default branch) ==
+README.md
+
+== step 3: git ls-tree -r made-evidence (orphan evidence branch) ==
+run-demo-1/findings.md
+run-demo-1/logs/ci.log
+
+== step 4: git log --oneline --all --graph (proves no shared history) ==
+* 4079891 evidence: run-demo-1
+* 1433c95 initial commit
+
+== step 5: git status --porcelain (target repo untouched by evidence write) ==
+(clean - no output)
+
+== step 6: git symbolic-ref HEAD (still on main, not switched to orphan branch) ==
+refs/heads/main
+
+== step 7: git merge-base main made-evidence (no common ancestor expected) ==
+no common ancestor (exit error as expected): exit status 1 
+
+Result: evidence files (run-demo-1/findings.md, run-demo-1/logs/ci.log) appear
+ONLY on the made-evidence branch's tree. They are absent from main's tree, HEAD
+stays on main, the working tree/index are untouched, and main/made-evidence
+share no common ancestor (parentless commit-tree = orphan history).
+
+
+go test ./internal/evidence/... -v
+-----------------------------------
+=== RUN   TestInRepoStoreWritesAddableWorkingTreeFiles
+--- PASS: TestInRepoStoreWritesAddableWorkingTreeFiles (0.16s)
+=== RUN   TestInRepoStoreDefaultDir
+--- PASS: TestInRepoStoreDefaultDir (0.12s)
+=== RUN   TestOrphanBranchStoreIsolatedFromDefaultBranch
+--- PASS: TestOrphanBranchStoreIsolatedFromDefaultBranch (0.19s)
+=== RUN   TestOrphanBranchStoreAccumulatesAcrossRuns
+--- PASS: TestOrphanBranchStoreAccumulatesAcrossRuns (0.19s)
+=== RUN   TestOrphanBranchStoreDefaultBranchName
+--- PASS: TestOrphanBranchStoreDefaultBranchName (0.16s)
+=== RUN   TestNewStoreSelectsOrphanBranchByDefault
+--- PASS: TestNewStoreSelectsOrphanBranchByDefault (0.00s)
+=== RUN   TestNewStoreSelectsInRepoWhenConfigured
+--- PASS: TestNewStoreSelectsInRepoWhenConfigured (0.00s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/evidence	(cached)
+
+go vet ./internal/evidence/...
+-------------------------------
+(no output - clean)
+vet exit code: 0

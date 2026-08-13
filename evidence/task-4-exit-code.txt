@@ -1,0 +1,10 @@
+QA Scenario: Exit code propagation (Task 4)
+Command: go test ./internal/exec/... -run TestRunExitCodePropagation -v
+Also demonstrates via internal/exec.Run against `sh -c "exit 3"`
+-----
+=== RUN   TestRunExitCodePropagation
+--- PASS: TestRunExitCodePropagation (0.01s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/exec	0.217s
+-----
+go vet:

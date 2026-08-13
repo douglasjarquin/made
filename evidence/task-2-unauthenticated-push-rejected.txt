@@ -1,0 +1,13 @@
+=== QA Scenario: Unauthenticated push rejected ===
+$ go test ./internal/gitgate/... -run 'TestAdmissionHookRejectsPushWithoutToken|TestAdmissionHookRejectsPushWithWrongToken|TestWorktreeRemovedAfterSimulatedStageFailure' -v
+=== RUN   TestAdmissionHookRejectsPushWithoutToken
+--- PASS: TestAdmissionHookRejectsPushWithoutToken (0.49s)
+=== RUN   TestAdmissionHookRejectsPushWithWrongToken
+--- PASS: TestAdmissionHookRejectsPushWithWrongToken (0.43s)
+=== RUN   TestWorktreeRemovedAfterSimulatedStageFailure
+--- PASS: TestWorktreeRemovedAfterSimulatedStageFailure (0.46s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/gitgate	1.642s
+
+=== go vet ./internal/gitgate/... ===
+vet exit: 0

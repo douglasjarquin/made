@@ -1,0 +1,4 @@
+=== RUN   TestRun_UnsetLintCommandFallsBackGracefully
+--- PASS: TestRun_UnsetLintCommandFallsBackGracefully (0.23s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/lint	0.476s

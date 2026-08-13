@@ -1,0 +1,59 @@
+=== go test ./internal/github/... -v (default suite, fake gh CLI double, no network) ===
+=== RUN   TestAuthStatus_FailureReturnsAuthError
+--- PASS: TestAuthStatus_FailureReturnsAuthError (0.39s)
+=== RUN   TestAuthStatus_SuccessReturnsNil
+--- PASS: TestAuthStatus_SuccessReturnsNil (0.01s)
+=== RUN   TestCreatePR_AuthFailurePreventsPRCall
+--- PASS: TestCreatePR_AuthFailurePreventsPRCall (0.00s)
+=== RUN   TestCreatePR_SuccessReturnsURL
+--- PASS: TestCreatePR_SuccessReturnsURL (0.01s)
+=== RUN   TestMergeableState_ParsesJSON
+--- PASS: TestMergeableState_ParsesJSON (0.01s)
+=== RUN   TestMergeableState_AuthFailurePreventsCall
+--- PASS: TestMergeableState_AuthFailurePreventsCall (0.00s)
+=== RUN   TestCheckLogs_ReturnsRunOutput
+--- PASS: TestCheckLogs_ReturnsRunOutput (0.01s)
+=== RUN   TestCheckLogs_AuthFailurePreventsCall
+--- PASS: TestCheckLogs_AuthFailurePreventsCall (0.00s)
+=== RUN   TestRerunCheck_Success
+--- PASS: TestRerunCheck_Success (0.01s)
+=== RUN   TestRerunCheck_AuthFailurePreventsCall
+--- PASS: TestRerunCheck_AuthFailurePreventsCall (0.00s)
+=== RUN   TestRerunCheck_UnderlyingFailureSurfacesError
+--- PASS: TestRerunCheck_UnderlyingFailureSurfacesError (0.01s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/github	0.695s
+?   	github.com/douglasjarquin/made/internal/github/githubtest	[no test files]
+
+=== go vet ./internal/github/... ===
+vet exit: 0
+
+=== Real-world corroboration: gh auth status against real GitHub with an invalid GH_TOKEN ===
+github.com
+  X Failed to log in to github.com using token (GH_TOKEN)
+  - Active account: true
+  - The token in GH_TOKEN is invalid.
+
+  ✓ Logged in to github.com account douglasjarquin (keyring)
+  - Active account: false
+  - Git operations protocol: https
+  - Token: gho_************************************
+  - Token scopes: 'gist', 'project', 'read:org', 'repo', 'workflow'
+gh exit: 1
+
+=== Real-world corroboration: internal/github.Client.AuthStatus via the real gh binary with an invalid GH_TOKEN ===
+=== RUN   TestLive_AuthStatusFailureWithInvalidToken
+    live_test.go:31: real gh auth failure surfaced: github: not authenticated: github.com
+          X Failed to log in to github.com using token (GH_TOKEN)
+          - Active account: true
+          - The token in GH_TOKEN is invalid.
+        
+          ✓ Logged in to github.com account douglasjarquin (keyring)
+          - Active account: false
+          - Git operations protocol: https
+          - Token: gho_************************************
+          - Token scopes: 'gist', 'project', 'read:org', 'repo', 'workflow'
+--- PASS: TestLive_AuthStatusFailureWithInvalidToken (0.37s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/github	(cached)
+?   	github.com/douglasjarquin/made/internal/github/githubtest	[no test files]

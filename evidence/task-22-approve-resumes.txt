@@ -1,0 +1,73 @@
+Task 22 evidence: made review - approve resumes
+==================================================
+
+LIMITATION (read this first): StatusReport.PendingFindings is always an
+empty slice from a real `made daemon` today, because no orchestrator yet
+drives a submitted run through the Review/Document stages that produce
+ask-user findings (Task 21's honest documentation of this gap still holds;
+see cmd/made/status.go's StatusReport doc comment). This QA run therefore
+uses a tiny throwaway harness (tools/qaharness/main.go, deleted after this
+evidence was captured, not part of the delivered diff) that serves the real
+internal/api.Server and the exact same "status" / "review.decide" /
+"review.decision" wire contract cmd/made/review.go implements, with a fixed
+PendingFindings fixture standing in for a real pipeline run. The `made`
+binary under test below is the real, unmodified, compiled cmd/made binary -
+only the daemon side of the "status" call is faked, for the reason above.
+
+Section 1: go test output (real socket round-trip against a real
+internal/api.Server, using the production review.decide/review.decision
+handlers unmodified - see cmd/made/review_test.go)
+----------------------------------------------------------------------------
+=== RUN   TestReview_ApproveResumes
+--- PASS: TestReview_ApproveResumes (0.00s)
+
+(full suite output in task-22 go test log below)
+
+Section 2: tmux transcript - pane 0 (qaharness fixture server)
+----------------------------------------------------------------------------
+made main*?!
+❯ /tmp/qaharness /tmp/made-qa-home/daemon.sock run-approve-1 review 'Should internal helper foo() be
+ exported as part of the public API?'
+qaharness: listening on /tmp/made-qa-home/daemon.sock
+
+Section 3: tmux transcript - pane 1 (real made review binary, real operator input)
+----------------------------------------------------------------------------
+export MADE_HOME=/tmp/made-qa-home && /tmp/made-bin review --run run-approve-1
+made main*?!
+❯ export MADE_HOME=/tmp/made-qa-home && /tmp/made-bin review --run run-approve-1
+[review] Should internal helper foo() be exported as part of the public API?
+approve/reject? [a/r]: a
+approved: review
+made review: all findings approved; pipeline resumed
+made main*?! 11s
+❯ echo EXITCODE=$?
+EXITCODE=0
+made main*?!
+❯
+
+Result: operator typed "a" (approve) at the plain-text prompt; made review
+printed "approved: review", exited 0 (verified via $? = 0), and the daemon's
+in-memory review store recorded the decision as "approved" for
+run-approve-1/review (confirmed via a review.decision query-back call in
+the Go test).
+
+Section 4: full 'go test ./cmd/made/... -v' output
+----------------------------------------------------------------------------
+=== RUN   TestDoctor_DaemonDownReportsAccurately
+--- PASS: TestDoctor_DaemonDownReportsAccurately (0.78s)
+=== RUN   TestReview_ApproveResumes
+--- PASS: TestReview_ApproveResumes (0.00s)
+=== RUN   TestReview_RejectHalts
+--- PASS: TestReview_RejectHalts (0.00s)
+=== RUN   TestReview_NoPendingFindings
+--- PASS: TestReview_NoPendingFindings (0.00s)
+=== RUN   TestStatusJSON_SchemaValidity
+--- PASS: TestStatusJSON_SchemaValidity (0.01s)
+=== RUN   TestStatus_NoRunsReportsError
+--- PASS: TestStatus_NoRunsReportsError (0.00s)
+PASS
+ok  	github.com/douglasjarquin/made/cmd/made	(cached)
+
+Section 5: full 'go vet ./cmd/made/...' output (no output = clean)
+----------------------------------------------------------------------------
+(no output above means go vet reported zero issues)

@@ -1,0 +1,25 @@
+=== go test ./cmd/made/... -run TestDaemonStop_CancelsInFlightRunBeforeProcessExits -v -race ===
+=== RUN   TestDaemonStop_CancelsInFlightRunBeforeProcessExits
+--- PASS: TestDaemonStop_CancelsInFlightRunBeforeProcessExits (0.48s)
+PASS
+ok  	github.com/douglasjarquin/made/cmd/made	1.774s
+
+=== go test ./cmd/made/... -v -race (full package sanity check) ===
+=== RUN   TestDaemonStop_CancelsInFlightRunBeforeProcessExits
+--- PASS: TestDaemonStop_CancelsInFlightRunBeforeProcessExits (0.48s)
+=== RUN   TestDoctor_DaemonDownReportsAccurately
+--- PASS: TestDoctor_DaemonDownReportsAccurately (1.68s)
+=== RUN   TestReview_ApproveResumes
+--- PASS: TestReview_ApproveResumes (0.00s)
+=== RUN   TestReview_RejectHalts
+--- PASS: TestReview_RejectHalts (0.00s)
+=== RUN   TestReview_NoPendingFindings
+--- PASS: TestReview_NoPendingFindings (0.00s)
+=== RUN   TestStatusJSON_SchemaValidity
+--- PASS: TestStatusJSON_SchemaValidity (0.01s)
+=== RUN   TestStatusJSON_ReflectsRealStageUpdate
+--- PASS: TestStatusJSON_ReflectsRealStageUpdate (0.00s)
+=== RUN   TestStatus_NoRunsReportsError
+--- PASS: TestStatus_NoRunsReportsError (0.00s)
+PASS
+ok  	github.com/douglasjarquin/made/cmd/made	3.433s

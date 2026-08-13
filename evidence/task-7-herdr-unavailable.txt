@@ -1,0 +1,10 @@
+=== go test ./internal/herdrclient/... -v -run 'Unavailable|Incompatible' ===
+=== RUN   TestConnectUnavailableWhenNothingListening
+--- PASS: TestConnectUnavailableWhenNothingListening (0.00s)
+=== RUN   TestConnectUnavailableAndIncompatibleAreDistinguishable
+--- PASS: TestConnectUnavailableAndIncompatibleAreDistinguishable (0.00s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/herdrclient	0.218s
+
+=== go vet ./internal/herdrclient/... ===
+vet exit code: 0

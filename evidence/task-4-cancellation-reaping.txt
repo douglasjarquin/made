@@ -1,0 +1,15 @@
+QA Scenario: Cancellation reaps grandchildren (Task 4)
+Command: go test ./internal/exec/... -run TestRunCancellationReapsGrandchildren -v
+Simulates: sh -c 'sleep <marker> & echo started; wait', cancel context after 1s, pgrep -f <marker>
+-----
+=== RUN   TestRunCancellationReapsGrandchildren
+    exec_test.go:67: pgrep -f 210811187 (before cancel) => err=<nil> out="21082\n21083\n"
+    exec_test.go:84: pgrep -f 210811187 (after cancel) => out=""
+--- PASS: TestRunCancellationReapsGrandchildren (1.05s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/exec	(cached)
+-----
+go vet:
+-----
+Post-test stray process sweep (pgrep -f sleep, filtered to test markers pattern):
+no marker-named sleep processes remain

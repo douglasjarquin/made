@@ -1,0 +1,133 @@
+=== go test ./internal/pipeline/... -v -run TestOpen_FailOpenEquivalence (fail-open equivalence) ===
+=== RUN   TestOpen_FailOpenEquivalence
+=== RUN   TestOpen_FailOpenEquivalence/passing_stage
+2026/08/13 04:19:51 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-TestOpen_FailOpenEquivalence/passing_stage-without-herdr state=unavailable
+=== RUN   TestOpen_FailOpenEquivalence/failing_stage
+2026/08/13 04:19:52 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-TestOpen_FailOpenEquivalence/failing_stage-without-herdr state=unavailable
+--- PASS: TestOpen_FailOpenEquivalence (0.03s)
+    --- PASS: TestOpen_FailOpenEquivalence/passing_stage (0.01s)
+    --- PASS: TestOpen_FailOpenEquivalence/failing_stage (0.01s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline	0.823s
+testing: warning: no tests to run
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/ci	1.013s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/document	0.220s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/intent	0.595s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/lint	0.408s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/pr	1.214s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/push	1.399s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/rebase	1.588s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/review	1.967s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/test	1.774s [no tests to run]
+
+=== full package test run: go test ./internal/pipeline/... -v ===
+=== RUN   TestOpen_FailOpenEquivalence
+=== RUN   TestOpen_FailOpenEquivalence/passing_stage
+2026/08/13 04:19:53 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-TestOpen_FailOpenEquivalence/passing_stage-without-herdr state=unavailable
+=== RUN   TestOpen_FailOpenEquivalence/failing_stage
+2026/08/13 04:19:53 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-TestOpen_FailOpenEquivalence/failing_stage-without-herdr state=unavailable
+--- PASS: TestOpen_FailOpenEquivalence (0.03s)
+    --- PASS: TestOpen_FailOpenEquivalence/passing_stage (0.01s)
+    --- PASS: TestOpen_FailOpenEquivalence/failing_stage (0.01s)
+=== RUN   TestOpen_PaneLifecycle
+--- PASS: TestOpen_PaneLifecycle (0.00s)
+=== RUN   TestOpen_UnavailableHerdrReturnsUsableNoOpVisibility
+2026/08/13 04:19:53 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-no-herdr state=unavailable
+--- PASS: TestOpen_UnavailableHerdrReturnsUsableNoOpVisibility (0.00s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline	0.247s
+=== RUN   TestRun_TransientFailureRecoversWithinBudget
+--- PASS: TestRun_TransientFailureRecoversWithinBudget (0.47s)
+=== RUN   TestRun_BudgetExhaustionSurfacesFinalFailure
+--- PASS: TestRun_BudgetExhaustionSurfacesFinalFailure (0.04s)
+=== RUN   TestRun_RejectsEmptyPRURL
+--- PASS: TestRun_RejectsEmptyPRURL (0.00s)
+=== RUN   TestRun_RejectsNilClient
+--- PASS: TestRun_RejectsNilClient (0.00s)
+=== RUN   TestRun_NeverExceedsBudgetEvenWithAlwaysFailingChecks
+--- PASS: TestRun_NeverExceedsBudgetEvenWithAlwaysFailingChecks (0.05s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/ci	(cached)
+=== RUN   TestRun_PolicyViolationFlagged
+--- PASS: TestRun_PolicyViolationFlagged (0.43s)
+=== RUN   TestRun_CompliantChangeProceeds
+--- PASS: TestRun_CompliantChangeProceeds (0.37s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/document	(cached)
+=== RUN   TestCheck_MissingIntentBlocks
+--- PASS: TestCheck_MissingIntentBlocks (0.21s)
+=== RUN   TestCheck_EmptyIntentBlocks
+--- PASS: TestCheck_EmptyIntentBlocks (0.14s)
+=== RUN   TestCheck_PresentIntentProceeds
+--- PASS: TestCheck_PresentIntentProceeds (0.13s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/intent	(cached)
+=== RUN   TestRun_FailingLintCommandBlocksAndCapturesEvidence
+--- PASS: TestRun_FailingLintCommandBlocksAndCapturesEvidence (0.30s)
+=== RUN   TestRun_PassingLintCommandProceedsAndCapturesEvidence
+--- PASS: TestRun_PassingLintCommandProceedsAndCapturesEvidence (0.20s)
+=== RUN   TestRun_UnsetLintCommandFallsBackGracefully
+--- PASS: TestRun_UnsetLintCommandFallsBackGracefully (0.19s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/lint	(cached)
+=== RUN   TestGitHubClientExposesNoMergeCapableMethod
+--- PASS: TestGitHubClientExposesNoMergeCapableMethod (0.00s)
+=== RUN   TestPackageSourceContainsNoMergeInvocation
+--- PASS: TestPackageSourceContainsNoMergeInvocation (0.00s)
+=== RUN   TestRun_OpensPRWithEvidenceLink
+--- PASS: TestRun_OpensPRWithEvidenceLink (0.39s)
+=== RUN   TestRun_NeverInvokesMergeCommand
+--- PASS: TestRun_NeverInvokesMergeCommand (0.01s)
+=== RUN   TestRun_RejectsEmptyEvidenceRef
+--- PASS: TestRun_RejectsEmptyEvidenceRef (0.00s)
+=== RUN   TestRun_ReportsGHFailureAsResultNotError
+--- PASS: TestRun_ReportsGHFailureAsResultNotError (0.01s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/pr	(cached)
+=== RUN   TestRun_SuccessfulPushUpdatesRemote
+--- PASS: TestRun_SuccessfulPushUpdatesRemote (0.40s)
+=== RUN   TestRun_UnreachableRemoteFailsClean
+--- PASS: TestRun_UnreachableRemoteFailsClean (0.36s)
+=== RUN   TestRun_DoesNotLeakCredentialsOnFailure
+--- PASS: TestRun_DoesNotLeakCredentialsOnFailure (0.35s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/push	(cached)
+=== RUN   TestRun_CleanRebaseProceeds
+--- PASS: TestRun_CleanRebaseProceeds (0.66s)
+=== RUN   TestRun_ConflictingRebaseHalts
+--- PASS: TestRun_ConflictingRebaseHalts (0.63s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/rebase	(cached)
+=== RUN   TestRun_AutoFixApplied
+--- PASS: TestRun_AutoFixApplied (0.84s)
+=== RUN   TestRun_AskUserFindingQueued
+--- PASS: TestRun_AskUserFindingQueued (0.21s)
+=== RUN   TestRun_BlockingFindingHaltsStage
+--- PASS: TestRun_BlockingFindingHaltsStage (0.20s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/review	(cached)
+=== RUN   TestRun_FailingCommandBlocksAndCapturesEvidence
+--- PASS: TestRun_FailingCommandBlocksAndCapturesEvidence (0.26s)
+=== RUN   TestRun_PassingCommandProceedsAndCapturesEvidence
+--- PASS: TestRun_PassingCommandProceedsAndCapturesEvidence (0.21s)
+=== RUN   TestRun_RespectsConfiguredCommandExactly
+--- PASS: TestRun_RespectsConfiguredCommandExactly (0.20s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/test	(cached)

@@ -1,0 +1,20 @@
+Task 7 QA Scenario: Uninitialized gate reported informationally
+Steps: Run `made doctor` in a fresh directory with no gate ever initialized there.
+Expected: Reports "gate: not initialized", exit code unaffected by this alone.
+
+--- manual CLI run ---
+$ made doctor /private/tmp/claude-501/-Users-douglasjarquin-github-douglasjarquin-made/328d892a-f6d9-4303-8c9a-24324ae4857f/scratchpad/qa-uninit-repo
+daemon: unreachable (dial /private/tmp/claude-501/-Users-douglasjarquin-github-douglasjarquin-made/328d892a-f6d9-4303-8c9a-24324ae4857f/scratchpad/qa-home-uninit/daemon.sock: dial unix /private/tmp/claude-501/-Users-douglasjarquin-github-douglasjarquin-made/328d892a-f6d9-4303-8c9a-24324ae4857f/scratchpad/qa-home-uninit/daemon.sock: connect: invalid argument)
+gh: authenticated
+herdr: unavailable (informational only)
+gate: not initialized (run made gate init)
+exit code: 1
+
+--- go test ./cmd/made/... -v (relevant tests) ---
+=== RUN   TestDoctor_DaemonDownReportsAccurately
+--- PASS: TestDoctor_DaemonDownReportsAccurately (0.58s)
+=== RUN   TestDoctor_GateNotInitializedIsInformationalOnly
+--- PASS: TestDoctor_GateNotInitializedIsInformationalOnly (0.69s)
+
+--- go vet ./cmd/made/... ---
+(no output = clean)

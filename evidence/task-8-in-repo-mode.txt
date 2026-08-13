@@ -1,0 +1,49 @@
+Task 8 QA Scenario: In-repo mode compatibility
+===============================================
+
+Live demonstration (evidence.NewStore with Config{StoreInRepo: true, Dir: ".made/evidence"}):
+-------------------------------------------------------------------------------------------
+== step 1: write evidence via InRepoStore (store_in_repo: true, dir: .made/evidence) ==
+== step 2: find .made/evidence (files present at configured working-tree path) ==
+.made/evidence/run-demo-1/logs/ci.log
+.made/evidence/run-demo-1/findings.md
+
+== step 3: cat .made/evidence/run-demo-1/findings.md ==
+agent found no violations
+
+== step 4: git status --porcelain (evidence files are untracked/addable, not auto-committed) ==
+?? .made/
+
+== step 5: git add -A -n .made (dry-run proves files are addable via normal git add) ==
+add '.made/evidence/run-demo-1/findings.md'
+add '.made/evidence/run-demo-1/logs/ci.log'
+
+
+Result: evidence files are real working-tree files under .made/evidence/<runID>/,
+readable directly from disk, and reported by git status as untracked (??) - i.e.
+addable via a normal 'git add', never auto-committed by the store.
+
+
+go test ./internal/evidence/... -v
+-----------------------------------
+=== RUN   TestInRepoStoreWritesAddableWorkingTreeFiles
+--- PASS: TestInRepoStoreWritesAddableWorkingTreeFiles (0.16s)
+=== RUN   TestInRepoStoreDefaultDir
+--- PASS: TestInRepoStoreDefaultDir (0.12s)
+=== RUN   TestOrphanBranchStoreIsolatedFromDefaultBranch
+--- PASS: TestOrphanBranchStoreIsolatedFromDefaultBranch (0.19s)
+=== RUN   TestOrphanBranchStoreAccumulatesAcrossRuns
+--- PASS: TestOrphanBranchStoreAccumulatesAcrossRuns (0.19s)
+=== RUN   TestOrphanBranchStoreDefaultBranchName
+--- PASS: TestOrphanBranchStoreDefaultBranchName (0.16s)
+=== RUN   TestNewStoreSelectsOrphanBranchByDefault
+--- PASS: TestNewStoreSelectsOrphanBranchByDefault (0.00s)
+=== RUN   TestNewStoreSelectsInRepoWhenConfigured
+--- PASS: TestNewStoreSelectsInRepoWhenConfigured (0.00s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/evidence	(cached)
+
+go vet ./internal/evidence/...
+-------------------------------
+(no output - clean)
+vet exit code: 0

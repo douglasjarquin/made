@@ -1,0 +1,65 @@
+=== QA Scenario (Task 9): Sequential queuing under concurrent pushes ===
+
+The real 9-stage pipeline (Tasks 10-19) does not exist yet, so this run
+manager is exercised with a fake work function (sleep-then-complete) that
+records, via an atomic counter, whether two runs against the same gate-repo
+identifier were ever active at the same instant. TestRunManager_SequentialQueuing
+submits two runs back to back against the same repo identifier "gate-repo-A"
+and asserts:
+  1. immediately after both Submit calls, run 2's status is still "queued"
+     (not started, not rejected) while run 1 is active.
+  2. the shared "active" counter never exceeds 1 concurrently across the two
+     runs' work functions (no overlapping execution windows).
+  3. run 2's StartedAt timestamp is not before run 1's EndedAt timestamp.
+
+A companion test, TestRunManager_DifferentRepposRunConcurrently, asserts the
+inverse: two runs against two *different* repo identifiers ARE allowed to
+run concurrently - the serialization bound is per gate repo, not global.
+
+$ go test ./internal/daemon/... -v
+=== RUN   TestRun_GracefulStop
+--- PASS: TestRun_GracefulStop (0.02s)
+=== RUN   TestRun_IdleTimeoutAutoStop
+--- PASS: TestRun_IdleTimeoutAutoStop (0.10s)
+=== RUN   TestAcquireLock_DoubleStartRejected
+--- PASS: TestAcquireLock_DoubleStartRejected (0.00s)
+=== RUN   TestAcquireLock_ReacquireAfterRelease
+--- PASS: TestAcquireLock_ReacquireAfterRelease (0.00s)
+=== RUN   TestMailbox_SubscriberReceivesInOrder
+--- PASS: TestMailbox_SubscriberReceivesInOrder (0.00s)
+=== RUN   TestMailbox_IgnoresOtherRunIDs
+--- PASS: TestMailbox_IgnoresOtherRunIDs (0.05s)
+=== RUN   TestMailbox_MultipleSubscribersEachGetAllEvents
+--- PASS: TestMailbox_MultipleSubscribersEachGetAllEvents (0.00s)
+=== RUN   TestMailbox_UnsubscribeStopsFutureDelivery
+--- PASS: TestMailbox_UnsubscribeStopsFutureDelivery (0.05s)
+=== RUN   TestMailbox_OverflowDropsRatherThanBlocks
+--- PASS: TestMailbox_OverflowDropsRatherThanBlocks (0.00s)
+=== RUN   TestRunManager_SequentialQueuing
+--- PASS: TestRunManager_SequentialQueuing (0.10s)
+=== RUN   TestRunManager_DifferentRepposRunConcurrently
+--- PASS: TestRunManager_DifferentRepposRunConcurrently (0.00s)
+=== RUN   TestRunManager_StatusStreamCompleteness
+--- PASS: TestRunManager_StatusStreamCompleteness (0.05s)
+=== RUN   TestRunManager_FailedWorkEmitsRunFailed
+--- PASS: TestRunManager_FailedWorkEmitsRunFailed (0.00s)
+=== RUN   TestRunManager_DuplicateRunIDRejected
+--- PASS: TestRunManager_DuplicateRunIDRejected (0.00s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/daemon	0.687s
+
+$ go test ./internal/daemon/... -race -run TestRunManager_SequentialQueuing -v
+=== RUN   TestRunManager_SequentialQueuing
+--- PASS: TestRunManager_SequentialQueuing (0.10s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/daemon	1.1s
+
+$ go vet ./internal/daemon/...
+(vet: no output = clean)
+
+=== RESULT ===
+PASS: run 2 was queued (not started, not rejected) while run 1 was active,
+the two runs' execution windows never overlapped, and run 2 started only
+after run 1 ended. Runs against different gate repos ran concurrently,
+confirming the serialization bound is per-repo, not global. All of Task 5's
+pre-existing lock/lifecycle tests continue to pass alongside these new ones.

@@ -1,0 +1,15 @@
+=== Scenario: Drift detected ===
+$ echo 'manually hand-edited drift' >> skills/made/SKILL.md
+$ go test ./internal/skill/... -run TestCommittedSkillFileMatchesGenerator -v
+=== RUN   TestCommittedSkillFileMatchesGenerator
+    skill_test.go:49: skill: ../../skills/made/SKILL.md has drifted from internal/skill's generated output; run `make skill` (go run ./cmd/genskill) and commit the result
+--- FAIL: TestCommittedSkillFileMatchesGenerator (0.00s)
+FAIL
+FAIL	github.com/douglasjarquin/made/internal/skill	0.211s
+FAIL
+
+(go test ./... is what enforces this drift check as part of `make test`;
+ the Makefile's `make lint` target is golangci-lint run ./... only and
+ cannot see file-content drift, so the drift lint lives in go test, not make lint.)
+
+=== restoring committed skills/made/SKILL.md ===

@@ -1,0 +1,6 @@
+=== RUN   TestRun_IdleTimeoutAutoStop
+--- PASS: TestRun_IdleTimeoutAutoStop (0.10s)
+=== RUN   TestRun_IdleTimeoutStillFiresWithNoActivity
+--- PASS: TestRun_IdleTimeoutStillFiresWithNoActivity (0.10s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/daemon	1.468s

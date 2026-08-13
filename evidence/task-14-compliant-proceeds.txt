@@ -1,0 +1,10 @@
+$ go test ./internal/pipeline/document/... -v
+=== RUN   TestRun_PolicyViolationFlagged
+--- PASS: TestRun_PolicyViolationFlagged (0.43s)
+=== RUN   TestRun_CompliantChangeProceeds
+--- PASS: TestRun_CompliantChangeProceeds (0.37s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/document	(cached)
+
+$ go vet ./internal/pipeline/document/...
+(no output = clean)

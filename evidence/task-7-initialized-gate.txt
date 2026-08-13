@@ -1,0 +1,24 @@
+Task 7 QA Scenario: Initialized gate reported
+Steps: Run `made gate init` for real against a scratch directory, then run `made doctor` targeting that same directory.
+Expected: Reports "gate: initialized".
+
+--- manual CLI run ---
+$ made gate init /private/tmp/claude-501/-Users-douglasjarquin-github-douglasjarquin-made/328d892a-f6d9-4303-8c9a-24324ae4857f/scratchpad/qa-init-source file:///private/tmp/claude-501/-Users-douglasjarquin-github-douglasjarquin-made/328d892a-f6d9-4303-8c9a-24324ae4857f/scratchpad/qa-init-remote.git
+gate initialized at /private/tmp/claude-501/-Users-douglasjarquin-github-douglasjarquin-made/328d892a-f6d9-4303-8c9a-24324ae4857f/scratchpad/qa-home-init/gates/e118ae93e4fcba5bf435f02858d60dba428f38e514875356f3d0ce1503785f89/gate.git
+exit code: 0
+
+$ made doctor /private/tmp/claude-501/-Users-douglasjarquin-github-douglasjarquin-made/328d892a-f6d9-4303-8c9a-24324ae4857f/scratchpad/qa-init-source
+daemon: unreachable (dial /private/tmp/claude-501/-Users-douglasjarquin-github-douglasjarquin-made/328d892a-f6d9-4303-8c9a-24324ae4857f/scratchpad/qa-home-init/daemon.sock: dial unix /private/tmp/claude-501/-Users-douglasjarquin-github-douglasjarquin-made/328d892a-f6d9-4303-8c9a-24324ae4857f/scratchpad/qa-home-init/daemon.sock: connect: invalid argument)
+gh: authenticated
+herdr: unavailable (informational only)
+gate: initialized
+exit code: 1
+
+--- go test ./cmd/made/... -v (relevant tests) ---
+=== RUN   TestDoctor_GateInitializedIsReported
+--- PASS: TestDoctor_GateInitializedIsReported (1.02s)
+=== RUN   TestGateInit_EndToEnd
+--- PASS: TestGateInit_EndToEnd (0.35s)
+
+--- go vet ./cmd/made/... ---
+(no output = clean)

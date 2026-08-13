@@ -1,0 +1,17 @@
+=== Task 21 evidence: made doctor accuracy ===
+
+--- go test ./cmd/made/... -run TestDoctor -v ---
+=== RUN   TestDoctor_DaemonDownReportsAccurately
+--- PASS: TestDoctor_DaemonDownReportsAccurately (0.87s)
+PASS
+ok  	github.com/douglasjarquin/made/cmd/made	1.116s
+
+--- go vet ./cmd/made/... ---
+vet exit=0
+
+--- real subprocess: made doctor with daemon deliberately down ---
+$ MADE_HOME=/tmp/made-doctor-evidence-95483 made doctor
+daemon: unreachable (dial /tmp/made-doctor-evidence-95483/daemon.sock: dial unix /tmp/made-doctor-evidence-95483/daemon.sock: connect: no such file or directory)
+gh: authenticated
+herdr: unavailable (informational only)
+exit=1

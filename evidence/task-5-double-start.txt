@@ -1,0 +1,30 @@
+=== QA Scenario (Task 5): Double-start rejected ===
+MADE_HOME=/private/tmp/claude-501/-Users-douglasjarquin-github-douglasjarquin-made/328d892a-f6d9-4303-8c9a-24324ae4857f/scratchpad/madehome-double-start2
+
+$ made daemon start &
+made daemon: started (pid 90583)
+daemon ready: made daemon: running (pid 90583)
+
+$ made daemon start   (second attempt, same MADE_HOME, while first is running)
+made daemon: already running
+exit code: 1
+
+cleanup: made daemon stop
+made daemon: stopped
+
+=== RESULT ===
+PASS: second 'made daemon start' exited non-zero (1) with 'already running' message, no hang
+=== go test ./internal/daemon/... -v ===
+=== RUN   TestRun_GracefulStop
+--- PASS: TestRun_GracefulStop (0.02s)
+=== RUN   TestRun_IdleTimeoutAutoStop
+--- PASS: TestRun_IdleTimeoutAutoStop (0.10s)
+=== RUN   TestAcquireLock_DoubleStartRejected
+--- PASS: TestAcquireLock_DoubleStartRejected (0.00s)
+=== RUN   TestAcquireLock_ReacquireAfterRelease
+--- PASS: TestAcquireLock_ReacquireAfterRelease (0.00s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/daemon	(cached)
+
+=== go vet ./internal/daemon/... ./cmd/made/... ===
+(vet: no output = clean)

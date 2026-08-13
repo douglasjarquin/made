@@ -1,0 +1,15 @@
+=== Scenario: PR never merged ===
+Approach: fake gh CLI test double (internal/github/githubtest), no real GitHub repo created - no cleanup needed.
+
+--- go test ./internal/pipeline/pr/... -run 'TestRun_NeverInvokesMergeCommand|TestGitHubClientExposesNoMergeCapableMethod|TestPackageSourceContainsNoMergeInvocation' -v ---
+=== RUN   TestGitHubClientExposesNoMergeCapableMethod
+--- PASS: TestGitHubClientExposesNoMergeCapableMethod (0.00s)
+=== RUN   TestPackageSourceContainsNoMergeInvocation
+--- PASS: TestPackageSourceContainsNoMergeInvocation (0.00s)
+=== RUN   TestRun_NeverInvokesMergeCommand
+--- PASS: TestRun_NeverInvokesMergeCommand (0.35s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/pipeline/pr	0.577s
+
+--- go vet ./internal/pipeline/pr/... ---
+(no output = clean)
