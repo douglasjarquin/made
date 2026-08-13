@@ -27,8 +27,17 @@ type RunSnapshot struct {
 	StartedAt       time.Time
 	EndedAt         time.Time
 	Err             error
+	Message         string
 	Stages          []StageResult
 	PendingFindings []AskUserFinding
+
+	// finalized is set by Finish and read by execute: it lets a WorkFunc
+	// declare a run's definitive terminal-or-not Status/Message itself,
+	// overriding execute's normal "nil error means RunCompleted" inference -
+	// needed for the orchestrator's CI-passed-but-awaiting-human-merge case,
+	// where the pipeline finished successfully yet the run must stay
+	// RunRunning rather than flip to RunCompleted.
+	finalized bool
 }
 
 type WorkFunc func(ctx context.Context, emit func(Event)) error
@@ -188,6 +197,9 @@ func (rm *RunManager) execute(r *run, work WorkFunc) {
 	ended := time.Now()
 	r.update(func(s *RunSnapshot) {
 		s.EndedAt = ended
+		if s.finalized {
+			return
+		}
 		s.Err = err
 		if err != nil {
 			s.Status = RunFailed
@@ -249,6 +261,24 @@ func (rm *RunManager) Cancel(id string) error {
 
 func isTerminalRunStatus(s RunStatus) bool {
 	return s == RunCompleted || s == RunFailed
+}
+
+// Finish lets a WorkFunc declare a run's definitive Status and a
+// human-readable Message just before it returns, so execute's normal
+// nil-error-means-RunCompleted inference does not overwrite it (see
+// RunSnapshot.finalized). status may be any RunStatus, including RunRunning
+// for a run that must stay open pending action made cannot itself take.
+func (rm *RunManager) Finish(id string, status RunStatus, message string) error {
+	r, ok := rm.lookupRun(id)
+	if !ok {
+		return fmt.Errorf("daemon: no run %q", id)
+	}
+	r.update(func(s *RunSnapshot) {
+		s.Status = status
+		s.Message = message
+		s.finalized = true
+	})
+	return nil
 }
 
 // ErrRunSuperseded marks a run SupersedeQueued dropped before it ever

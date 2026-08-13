@@ -1,0 +1,124 @@
+=== go test ./internal/orchestrator/... ./cmd/made/... -v -run 'Park|Resume|Document|Review|GateNotifyPush' ===
+=== RUN   TestNewWorkFunc_DocumentFindingParksThenRejectedFailsRun
+--- PASS: TestNewWorkFunc_DocumentFindingParksThenRejectedFailsRun (2.25s)
+=== RUN   TestNewWorkFunc_DocumentFindingParksThenApprovedResumesToCompletion
+--- PASS: TestNewWorkFunc_DocumentFindingParksThenApprovedResumesToCompletion (0.93s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/orchestrator	3.746s
+=== RUN   TestGateNotifyPushRPC_NormalFeatureBranchPushCreatesRun
+2026/08/13 12:20:51 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-1 state=unavailable
+--- PASS: TestGateNotifyPushRPC_NormalFeatureBranchPushCreatesRun (0.87s)
+=== RUN   TestGateNotifyPushRPC_RejectedRefCreatesNoRun
+=== RUN   TestGateNotifyPushRPC_RejectedRefCreatesNoRun/default_branch
+=== RUN   TestGateNotifyPushRPC_RejectedRefCreatesNoRun/tag_ref
+--- PASS: TestGateNotifyPushRPC_RejectedRefCreatesNoRun (0.39s)
+    --- PASS: TestGateNotifyPushRPC_RejectedRefCreatesNoRun/default_branch (0.02s)
+    --- PASS: TestGateNotifyPushRPC_RejectedRefCreatesNoRun/tag_ref (0.02s)
+=== RUN   TestGateNotifyPushRPC_RefDeletionCreatesNoRun
+--- PASS: TestGateNotifyPushRPC_RefDeletionCreatesNoRun (0.38s)
+=== RUN   TestGateNotifyPushRPC_SupersededPushValidatesNewestSHA
+2026/08/13 12:20:53 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-3 state=unavailable
+--- PASS: TestGateNotifyPushRPC_SupersededPushValidatesNewestSHA (0.89s)
+=== RUN   TestGateNotifyPushCLI_AlwaysExitsZeroEvenWhenDaemonUnreachable
+--- PASS: TestGateNotifyPushCLI_AlwaysExitsZeroEvenWhenDaemonUnreachable (0.00s)
+=== RUN   TestGateNotifyPushCLI_NormalPushExitsZero
+2026/08/13 12:20:53 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-1 state=unavailable
+--- PASS: TestGateNotifyPushCLI_NormalPushExitsZero (0.70s)
+=== RUN   TestReview_ApproveResumes
+--- PASS: TestReview_ApproveResumes (0.00s)
+=== RUN   TestReview_RejectHalts
+--- PASS: TestReview_RejectHalts (0.00s)
+=== RUN   TestReview_NoPendingFindings
+--- PASS: TestReview_NoPendingFindings (0.00s)
+PASS
+ok  	github.com/douglasjarquin/made/cmd/made	3.564s
+
+=== full go test ./internal/orchestrator/... ./cmd/made/... -v (complete, for cross-reference) ===
+=== RUN   TestSetupResolvesTrustedConfigWhenPresentOnDefaultBranch
+2026/08/13 12:20:29 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-1 state=unavailable
+--- PASS: TestSetupResolvesTrustedConfigWhenPresentOnDefaultBranch (0.52s)
+=== RUN   TestSetupResolvesEmptyTrustedConfigWhenMadeYmlMissingFromDefaultBranch
+2026/08/13 12:20:29 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-2 state=unavailable
+--- PASS: TestSetupResolvesEmptyTrustedConfigWhenMadeYmlMissingFromDefaultBranch (0.28s)
+=== RUN   TestSetupResolvesEmptyTrustedConfigWhenDefaultBranchNeverFetched
+2026/08/13 12:20:29 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-3 state=unavailable
+--- PASS: TestSetupResolvesEmptyTrustedConfigWhenDefaultBranchNeverFetched (0.26s)
+=== RUN   TestSetupCutsWorktreeAtExactPushedSHANotBranchTip
+2026/08/13 12:20:30 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-4 state=unavailable
+--- PASS: TestSetupCutsWorktreeAtExactPushedSHANotBranchTip (0.61s)
+=== RUN   TestSetupRecoversFromMidSetupPanicAndCleansUp
+2026/08/13 12:20:30 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-5 state=unavailable
+--- PASS: TestSetupRecoversFromMidSetupPanicAndCleansUp (0.26s)
+=== RUN   TestRunWrapsSetupWorkAndCleanupWithPanicRecovery
+2026/08/13 12:20:31 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-6 state=unavailable
+--- PASS: TestRunWrapsSetupWorkAndCleanupWithPanicRecovery (0.26s)
+=== RUN   TestNewWorkFunc_FullPassEndsRunningWithAwaitingMergeMessage
+--- PASS: TestNewWorkFunc_FullPassEndsRunningWithAwaitingMergeMessage (2.80s)
+=== RUN   TestNewWorkFunc_TestFailureHaltsBeforeLaterStages
+--- PASS: TestNewWorkFunc_TestFailureHaltsBeforeLaterStages (0.54s)
+=== RUN   TestNewWorkFunc_DocumentFindingParksThenRejectedFailsRun
+--- PASS: TestNewWorkFunc_DocumentFindingParksThenRejectedFailsRun (0.55s)
+=== RUN   TestNewWorkFunc_DocumentFindingParksThenApprovedResumesToCompletion
+--- PASS: TestNewWorkFunc_DocumentFindingParksThenApprovedResumesToCompletion (0.78s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/orchestrator	(cached)
+=== RUN   TestDaemonStop_CancelsInFlightRunBeforeProcessExits
+--- PASS: TestDaemonStop_CancelsInFlightRunBeforeProcessExits (0.55s)
+=== RUN   TestDoctor_DaemonDownReportsAccurately
+--- PASS: TestDoctor_DaemonDownReportsAccurately (4.52s)
+=== RUN   TestDoctor_GateNotInitializedIsInformationalOnly
+--- PASS: TestDoctor_GateNotInitializedIsInformationalOnly (0.92s)
+=== RUN   TestDoctor_GateInitializedIsReported
+--- PASS: TestDoctor_GateInitializedIsReported (1.54s)
+=== RUN   TestGateAdmitPushRPC_ValidBareRepoAdmitted
+--- PASS: TestGateAdmitPushRPC_ValidBareRepoAdmitted (0.02s)
+=== RUN   TestGateAdmitPushRPC_InvalidPathRejected
+--- PASS: TestGateAdmitPushRPC_InvalidPathRejected (0.00s)
+=== RUN   TestGateAdmitPushRPC_NonBareDirRejected
+--- PASS: TestGateAdmitPushRPC_NonBareDirRejected (0.01s)
+=== RUN   TestGateAdmitPushCLI_ValidGateExitsZero
+--- PASS: TestGateAdmitPushCLI_ValidGateExitsZero (0.02s)
+=== RUN   TestGateAdmitPushCLI_InvalidGateExitsNonZero
+--- PASS: TestGateAdmitPushCLI_InvalidGateExitsNonZero (0.00s)
+=== RUN   TestGateAdmitPushCLI_DaemonUnreachableFailsCleanly
+--- PASS: TestGateAdmitPushCLI_DaemonUnreachableFailsCleanly (0.01s)
+=== RUN   TestGateNotifyPushRPC_NormalFeatureBranchPushCreatesRun
+2026/08/13 12:20:37 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-1 state=unavailable
+--- PASS: TestGateNotifyPushRPC_NormalFeatureBranchPushCreatesRun (0.63s)
+=== RUN   TestGateNotifyPushRPC_RejectedRefCreatesNoRun
+=== RUN   TestGateNotifyPushRPC_RejectedRefCreatesNoRun/default_branch
+=== RUN   TestGateNotifyPushRPC_RejectedRefCreatesNoRun/tag_ref
+--- PASS: TestGateNotifyPushRPC_RejectedRefCreatesNoRun (0.36s)
+    --- PASS: TestGateNotifyPushRPC_RejectedRefCreatesNoRun/default_branch (0.02s)
+    --- PASS: TestGateNotifyPushRPC_RejectedRefCreatesNoRun/tag_ref (0.01s)
+=== RUN   TestGateNotifyPushRPC_RefDeletionCreatesNoRun
+--- PASS: TestGateNotifyPushRPC_RefDeletionCreatesNoRun (0.34s)
+=== RUN   TestGateNotifyPushRPC_SupersededPushValidatesNewestSHA
+2026/08/13 12:20:38 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-3 state=unavailable
+--- PASS: TestGateNotifyPushRPC_SupersededPushValidatesNewestSHA (0.94s)
+=== RUN   TestGateNotifyPushCLI_AlwaysExitsZeroEvenWhenDaemonUnreachable
+--- PASS: TestGateNotifyPushCLI_AlwaysExitsZeroEvenWhenDaemonUnreachable (0.00s)
+=== RUN   TestGateNotifyPushCLI_NormalPushExitsZero
+2026/08/13 12:20:39 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-1 state=unavailable
+--- PASS: TestGateNotifyPushCLI_NormalPushExitsZero (0.60s)
+=== RUN   TestGateInit_EndToEnd
+--- PASS: TestGateInit_EndToEnd (0.34s)
+=== RUN   TestGateInit_ReInitIsIdempotent
+--- PASS: TestGateInit_ReInitIsIdempotent (0.71s)
+=== RUN   TestReview_ApproveResumes
+--- PASS: TestReview_ApproveResumes (0.00s)
+=== RUN   TestReview_RejectHalts
+--- PASS: TestReview_RejectHalts (0.00s)
+=== RUN   TestReview_NoPendingFindings
+--- PASS: TestReview_NoPendingFindings (0.00s)
+=== RUN   TestStatusJSON_SchemaValidity
+--- PASS: TestStatusJSON_SchemaValidity (0.01s)
+=== RUN   TestStatusJSON_ReflectsRealStageUpdate
+--- PASS: TestStatusJSON_ReflectsRealStageUpdate (0.00s)
+=== RUN   TestStatus_NoRunsReportsError
+--- PASS: TestStatus_NoRunsReportsError (0.00s)
+PASS
+ok  	github.com/douglasjarquin/made/cmd/made	(cached)
+
+=== go vet ./internal/orchestrator/... ./cmd/made/... ===
+vet exit code: 0

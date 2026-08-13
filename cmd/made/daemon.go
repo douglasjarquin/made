@@ -165,7 +165,7 @@ func registerDaemonHandlers(srv *api.Server, rm *daemon.RunManager, store *daemo
 	srv.Handle("review.decide", reviewDecideHandler(store))
 	srv.Handle("review.decision", reviewDecisionHandler(store))
 	srv.Handle("gate.admitPush", gateAdmitPushHandler())
-	srv.Handle("gate.notifyPush", gateNotifyPushHandler(rm))
+	srv.Handle("gate.notifyPush", gateNotifyPushHandler(rm, store))
 	if os.Getenv(debugHandlersEnv) == "1" {
 		srv.Handle("debug.submitCancellableRun", debugSubmitCancellableRunHandler(rm))
 	}
@@ -251,7 +251,7 @@ type gateNotifyPushResult struct {
 // still-queued run for the same branch before submitting this push's own
 // run, so a rapid second push always wins over a first one that hasn't
 // started yet - never over one already running.
-func gateNotifyPushHandler(rm *daemon.RunManager) api.HandlerFunc {
+func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.ReviewDecisions) api.HandlerFunc {
 	return func(ctx context.Context, params json.RawMessage) (any, error) {
 		var p gateNotifyPushParams
 		if err := json.Unmarshal(params, &p); err != nil {
@@ -286,12 +286,8 @@ func gateNotifyPushHandler(rm *daemon.RunManager) api.HandlerFunc {
 		runID := rm.NewRunID()
 
 		work := func(workCtx context.Context, emit func(daemon.Event)) error {
-			return orchestrator.Run(workCtx, gatePath, defaultBranch, worktreesDir, runID, newSHA, func(_ context.Context, rc *orchestrator.RunContext) error {
-				emit(daemon.Event{Kind: daemon.EventStageStarted, Stage: "setup", Message: fmt.Sprintf("checked out %s", newSHA)})
-				emit(daemon.Event{Kind: daemon.EventStageFinished, Stage: "setup"})
-				_ = rc
-				return nil
-			})
+			return orchestrator.Run(workCtx, gatePath, defaultBranch, worktreesDir, runID, newSHA,
+				orchestrator.NewWorkFunc(rm, reviewDecisions, emit, runID, defaultBranch, branch, orchestrator.Options{}))
 		}
 
 		if _, err := rm.Submit(runID, repo, branch, work); err != nil {

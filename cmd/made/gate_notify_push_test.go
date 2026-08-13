@@ -45,9 +45,13 @@ func setupGateFixture(t *testing.T, home string) (barePath, sourceDir string) {
 	return barePath, sourceDir
 }
 
+// pushFeatureCommit's commit message always carries an "Intent: <message>"
+// trailer so the real orchestrator's intent stage (Task 12) passes and its
+// per-stage event carries the message back out, giving tests a real signal
+// to distinguish which commit a run actually validated.
 func pushFeatureCommit(t *testing.T, sourceDir, branch, fileContent, message string) string {
 	t.Helper()
-	writeAndCommit(t, sourceDir, "feature.txt", fileContent, message)
+	writeAndCommit(t, sourceDir, "feature.txt", fileContent, message+"\n\nIntent: "+message)
 	sha := strings.TrimSpace(testGitOutput(t, sourceDir, "rev-parse", "HEAD"))
 	testGit(t, sourceDir, "push", "made", branch)
 	return sha
@@ -90,12 +94,20 @@ func TestGateNotifyPushRPC_NormalFeatureBranchPushCreatesRun(t *testing.T) {
 		t.Fatal("expected a run ID for a normal feature branch push")
 	}
 
+	// This fixture has no configured agent/test/lint commands, so the real
+	// orchestrator (Task 12) is expected to run for real and fail early
+	// (at the review stage's agent resolution) rather than complete - the
+	// point of this test is that a normal push actually gets orchestrated
+	// at all, not that this bare fixture passes every stage.
 	snap := waitForRunTerminal(t, rm, result.RunID, 10*time.Second)
-	if snap.Status != daemon.RunCompleted {
-		t.Fatalf("expected run to complete, got status=%v err=%v", snap.Status, snap.Err)
-	}
 	if snap.Branch != "feature-x" {
 		t.Fatalf("expected run tracked for branch feature-x, got %+v", snap)
+	}
+	if snap.StartedAt.IsZero() || len(snap.Stages) == 0 {
+		t.Fatalf("expected the real orchestrated pipeline to have actually started and recorded stages, got %+v", snap)
+	}
+	if snap.Stages[0].Name != "intent" || snap.Stages[0].Result != "pass" {
+		t.Fatalf("expected the intent stage to pass for a commit with a real Intent trailer, got %+v", snap.Stages)
 	}
 }
 
@@ -215,28 +227,33 @@ func TestGateNotifyPushRPC_SupersededPushValidatesNewestSHA(t *testing.T) {
 
 	close(blockRelease)
 
-	var sawSetupMessage string
+	// The real orchestrator's intent stage (Task 12) reads the worktree's own
+	// commit trailer and reports it back via its EventStageFinished message,
+	// giving a real signal (in place of the old placeholder's synthetic
+	// "setup" event) for which commit - sha1 or sha2 - a run actually
+	// validated.
+	var sawIntentMessage string
 	deadline := time.After(10 * time.Second)
 waitLoop:
 	for {
 		select {
 		case ev := <-events:
-			if ev.Kind == daemon.EventStageStarted && ev.Stage == "setup" {
-				sawSetupMessage = ev.Message
+			if ev.Kind == daemon.EventStageFinished && ev.Stage == "intent" {
+				sawIntentMessage = ev.Message
 			}
 			if ev.Kind == daemon.EventRunCompleted || ev.Kind == daemon.EventRunFailed {
 				break waitLoop
 			}
 		case <-deadline:
-			t.Fatal("timed out waiting for the second (superseding) run to complete")
+			t.Fatal("timed out waiting for the second (superseding) run to reach a terminal state")
 		}
 	}
 
-	if !strings.Contains(sawSetupMessage, sha2) {
-		t.Fatalf("expected the surviving run's setup stage to reference the newest SHA %s, got message %q", sha2, sawSetupMessage)
+	if !strings.Contains(sawIntentMessage, "feature commit 2") {
+		t.Fatalf("expected the surviving run's intent stage to validate the newest push (%q), got message %q", "feature commit 2", sawIntentMessage)
 	}
-	if strings.Contains(sawSetupMessage, sha1) {
-		t.Fatalf("did not expect the surviving run's setup stage to reference the superseded SHA %s, got message %q", sha1, sawSetupMessage)
+	if strings.Contains(sawIntentMessage, "feature commit 1") {
+		t.Fatalf("did not expect the surviving run's intent stage to reference the superseded push, got message %q", sawIntentMessage)
 	}
 
 	final1, ok := rm.Snapshot(result1.RunID)
@@ -250,9 +267,13 @@ waitLoop:
 		t.Fatal("superseded run must never have started")
 	}
 
+	// As with the normal-push test above, this bare fixture has no
+	// configured agent, so the surviving run is expected to fail past intent
+	// (at review's agent resolution) rather than complete - the point here is
+	// exclusively which SHA it validated, asserted above.
 	final2 := waitForRunTerminal(t, rm, result2.RunID, 2*time.Second)
-	if final2.Status != daemon.RunCompleted {
-		t.Fatalf("expected the second (surviving) run to complete, got status=%v err=%v", final2.Status, final2.Err)
+	if final2.StartedAt.IsZero() {
+		t.Fatalf("expected the second (surviving) run to have actually started, got status=%v err=%v", final2.Status, final2.Err)
 	}
 }
 
