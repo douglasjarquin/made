@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -251,6 +252,105 @@ func TestRunManager_CancelUnknownRunErrors(t *testing.T) {
 	rm := NewRunManager()
 	if err := rm.Cancel("no-such-run"); err == nil {
 		t.Fatal("expected error cancelling an unknown run ID")
+	}
+}
+
+func TestRunManager_SupersedeQueuedDropsOnlyStillQueuedJobForBranch(t *testing.T) {
+	rm := NewRunManager()
+	const repo = "gate-repo-supersede"
+
+	blockStarted := make(chan struct{})
+	blockRelease := make(chan struct{})
+	blockID := rm.NewRunID()
+	if _, err := rm.Submit(blockID, repo, "blocker-branch", func(ctx context.Context, emit func(Event)) error {
+		close(blockStarted)
+		<-blockRelease
+		return nil
+	}); err != nil {
+		t.Fatalf("submit blocker: %v", err)
+	}
+	<-blockStarted
+
+	var mu sync.Mutex
+	var ran []string
+	recordWork := func(label string) WorkFunc {
+		return func(ctx context.Context, emit func(Event)) error {
+			mu.Lock()
+			ran = append(ran, label)
+			mu.Unlock()
+			return nil
+		}
+	}
+
+	id1 := rm.NewRunID()
+	if _, err := rm.Submit(id1, repo, "feature-x", recordWork("first")); err != nil {
+		t.Fatalf("submit first: %v", err)
+	}
+
+	if snap, ok := rm.Snapshot(id1); !ok || snap.Status != RunQueued {
+		t.Fatalf("expected first run still queued behind the blocker before supersession, got %+v (ok=%v)", snap, ok)
+	}
+
+	rm.SupersedeQueued(repo, "feature-x")
+
+	id2 := rm.NewRunID()
+	if _, err := rm.Submit(id2, repo, "feature-x", recordWork("second")); err != nil {
+		t.Fatalf("submit second: %v", err)
+	}
+
+	close(blockRelease)
+
+	waitForStatus(t, rm, id2, RunCompleted, 2*time.Second)
+
+	final1, ok := rm.Snapshot(id1)
+	if !ok {
+		t.Fatal("expected superseded run to remain tracked, not deleted")
+	}
+	if final1.Status != RunFailed {
+		t.Fatalf("expected superseded run status RunFailed, got %v", final1.Status)
+	}
+	if !errors.Is(final1.Err, ErrRunSuperseded) {
+		t.Fatalf("expected superseded run's error to wrap ErrRunSuperseded, got %v", final1.Err)
+	}
+	if !final1.StartedAt.IsZero() {
+		t.Fatal("superseded run must never have started")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(ran) != 1 || ran[0] != "second" {
+		t.Fatalf("expected only the second job's WorkFunc to run, got %v", ran)
+	}
+}
+
+func TestRunManager_SupersedeQueuedLeavesAlreadyStartedRunAlone(t *testing.T) {
+	rm := NewRunManager()
+	const repo = "gate-repo-supersede-started"
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	id := rm.NewRunID()
+	if _, err := rm.Submit(id, repo, "feature-x", func(ctx context.Context, emit func(Event)) error {
+		close(started)
+		<-release
+		return nil
+	}); err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+
+	<-started
+	waitForStatus(t, rm, id, RunRunning, time.Second)
+
+	rm.SupersedeQueued(repo, "feature-x")
+
+	if snap, _ := rm.Snapshot(id); snap.Status != RunRunning {
+		t.Fatalf("expected already-started run to stay RunRunning after SupersedeQueued, got %v", snap.Status)
+	}
+
+	close(release)
+	final := waitForStatus(t, rm, id, RunCompleted, 2*time.Second)
+	if final.Err != nil {
+		t.Fatalf("expected already-started run to complete normally, got err %v", final.Err)
 	}
 }
 

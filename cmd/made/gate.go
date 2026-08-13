@@ -27,10 +27,69 @@ func runGateCommand(args []string, stdout, stderr *os.File) int {
 		return runGateInitCommand(args[1:], stdout, stderr)
 	case "admit-push":
 		return runGateAdmitPushCommand(args[1:], stdout, stderr)
+	case "notify-push":
+		return runGateNotifyPushCommand(args[1:], stdout, stderr)
 	default:
 		_, _ = fmt.Fprintf(stderr, "made gate: unknown subcommand %q\n", args[0])
 		return 2
 	}
+}
+
+// gateRepoIdentifier recovers the repo-hash identifier gitgate.GatePath
+// embeds in a gate's own directory layout (<madeHome>/gates/<hash>/gate.git)
+// directly from a GatePath value, so RunManager's per-repo serialization key
+// matches the exact same target-repo identity Task 6 already established -
+// without needing madeHome or the original target-repo path at
+// notify-push time, when only the bare gate's own path is on hand.
+func gateRepoIdentifier(gatePath string) string {
+	return filepath.Base(filepath.Dir(gatePath))
+}
+
+// runGateNotifyPushCommand backs the post-receive hook, which must never
+// fail the git push it is reacting to: every error path here is logged to
+// stderr for debuggability and still returns exit code 0.
+func runGateNotifyPushCommand(args []string, stdout, stderr *os.File) int {
+	fs := flag.NewFlagSet("made gate notify-push", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	gatePath := fs.String("gate", "", "path to the bare gate repository")
+	oldSHA := fs.String("old", "", "old SHA from the ref update")
+	newSHA := fs.String("new", "", "new SHA from the ref update")
+	ref := fs.String("ref", "", "the ref that was updated")
+	if err := fs.Parse(args); err != nil {
+		_, _ = fmt.Fprintln(stderr, "gate notify-push: parse args:", err)
+		return 0
+	}
+
+	home, err := madeHome()
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "gate notify-push:", err)
+		return 0
+	}
+
+	client, err := api.Dial(api.SocketPath(home))
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "gate notify-push: dial daemon:", err)
+		return 0
+	}
+	defer func() { _ = client.Close() }()
+
+	var result gateNotifyPushResult
+	if err := client.CallInto("gate.notifyPush", gateNotifyPushParams{
+		GatePath: *gatePath,
+		OldSHA:   *oldSHA,
+		NewSHA:   *newSHA,
+		Ref:      *ref,
+	}, &result); err != nil {
+		_, _ = fmt.Fprintln(stderr, "gate notify-push:", err)
+		return 0
+	}
+
+	if result.RunID == "" {
+		_, _ = fmt.Fprintln(stdout, "gate notify-push: ok (no run)")
+		return 0
+	}
+	_, _ = fmt.Fprintf(stdout, "gate notify-push: ok (run %s)\n", result.RunID)
+	return 0
 }
 
 func runGateAdmitPushCommand(args []string, stdout, stderr *os.File) int {

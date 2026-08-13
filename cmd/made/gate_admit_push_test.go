@@ -8,16 +8,17 @@ import (
 	"time"
 
 	"github.com/douglasjarquin/made/internal/api"
+	"github.com/douglasjarquin/made/internal/daemon"
 	"github.com/douglasjarquin/made/internal/gitgate"
 )
 
-func startTestDaemon(t *testing.T, home string) *api.Client {
+func startTestDaemon(t *testing.T, home string) (*daemon.RunManager, *api.Client) {
 	t.Helper()
 	lockPath := filepath.Join(home, "daemon.lock")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ready := make(chan int, 1)
-	_, done := startDaemon(ctx, home, lockPath, time.Minute, func(pid int) { ready <- pid })
+	rm, done := startDaemon(ctx, home, lockPath, time.Minute, func(pid int) { ready <- pid })
 
 	select {
 	case <-ready:
@@ -40,12 +41,12 @@ func startTestDaemon(t *testing.T, home string) *api.Client {
 		t.Fatalf("dial daemon socket: %v", err)
 	}
 	t.Cleanup(func() { _ = client.Close() })
-	return client
+	return rm, client
 }
 
 func TestGateAdmitPushRPC_ValidBareRepoAdmitted(t *testing.T) {
 	home := shortTempDir(t)
-	client := startTestDaemon(t, home)
+	_, client := startTestDaemon(t, home)
 
 	barePath := filepath.Join(shortTempDir(t), "gate.git")
 	if err := gitgate.InitBare(barePath); err != nil {
@@ -59,7 +60,7 @@ func TestGateAdmitPushRPC_ValidBareRepoAdmitted(t *testing.T) {
 
 func TestGateAdmitPushRPC_InvalidPathRejected(t *testing.T) {
 	home := shortTempDir(t)
-	client := startTestDaemon(t, home)
+	_, client := startTestDaemon(t, home)
 
 	_, err := client.Call("gate.admitPush", gateAdmitPushParams{GatePath: filepath.Join(shortTempDir(t), "does-not-exist")})
 	if err == nil {
@@ -69,7 +70,7 @@ func TestGateAdmitPushRPC_InvalidPathRejected(t *testing.T) {
 
 func TestGateAdmitPushRPC_NonBareDirRejected(t *testing.T) {
 	home := shortTempDir(t)
-	client := startTestDaemon(t, home)
+	_, client := startTestDaemon(t, home)
 
 	notBare := shortTempDir(t)
 	_, err := client.Call("gate.admitPush", gateAdmitPushParams{GatePath: notBare})
@@ -81,7 +82,7 @@ func TestGateAdmitPushRPC_NonBareDirRejected(t *testing.T) {
 func TestGateAdmitPushCLI_ValidGateExitsZero(t *testing.T) {
 	home := shortTempDir(t)
 	t.Setenv("MADE_HOME", home)
-	startTestDaemon(t, home)
+	_, _ = startTestDaemon(t, home)
 
 	barePath := filepath.Join(shortTempDir(t), "gate.git")
 	if err := gitgate.InitBare(barePath); err != nil {
@@ -97,7 +98,7 @@ func TestGateAdmitPushCLI_ValidGateExitsZero(t *testing.T) {
 func TestGateAdmitPushCLI_InvalidGateExitsNonZero(t *testing.T) {
 	home := shortTempDir(t)
 	t.Setenv("MADE_HOME", home)
-	startTestDaemon(t, home)
+	_, _ = startTestDaemon(t, home)
 
 	out, errOut, code := runCapture(t, []string{"gate", "admit-push", "--gate", "/nonexistent/gate.git"})
 	if code == 0 {

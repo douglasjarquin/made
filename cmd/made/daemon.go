@@ -14,6 +14,8 @@ import (
 	"github.com/douglasjarquin/made/internal/api"
 	"github.com/douglasjarquin/made/internal/daemon"
 	"github.com/douglasjarquin/made/internal/exec"
+	"github.com/douglasjarquin/made/internal/gitgate"
+	"github.com/douglasjarquin/made/internal/orchestrator"
 )
 
 const defaultIdleTimeout = 30 * time.Minute
@@ -163,6 +165,7 @@ func registerDaemonHandlers(srv *api.Server, rm *daemon.RunManager, store *daemo
 	srv.Handle("review.decide", reviewDecideHandler(store))
 	srv.Handle("review.decision", reviewDecisionHandler(store))
 	srv.Handle("gate.admitPush", gateAdmitPushHandler())
+	srv.Handle("gate.notifyPush", gateNotifyPushHandler(rm))
 	if os.Getenv(debugHandlersEnv) == "1" {
 		srv.Handle("debug.submitCancellableRun", debugSubmitCancellableRunHandler(rm))
 	}
@@ -226,6 +229,77 @@ func validateBareGateRepo(path string) error {
 		return fmt.Errorf("%s is not a bare repository (git rev-parse --is-bare-repository reported %q)", path, got)
 	}
 	return nil
+}
+
+const gateNotifyPushDefaultBranchTimeout = 10 * time.Second
+
+type gateNotifyPushParams struct {
+	GatePath string `json:"gate_path"`
+	OldSHA   string `json:"old_sha"`
+	NewSHA   string `json:"new_sha"`
+	Ref      string `json:"ref"`
+}
+
+type gateNotifyPushResult struct {
+	RunID string `json:"run_id,omitempty"`
+}
+
+// gateNotifyPushHandler is the post-receive-driven counterpart to
+// gate.admitPush: where admission is a fast yes/no pre-check, this is where
+// a run actually gets created. gitgate.ClassifyRef (Task 8) decides whether
+// the ref is run-eligible at all; SupersedeQueued (this task) then drops any
+// still-queued run for the same branch before submitting this push's own
+// run, so a rapid second push always wins over a first one that hasn't
+// started yet - never over one already running.
+func gateNotifyPushHandler(rm *daemon.RunManager) api.HandlerFunc {
+	return func(ctx context.Context, params json.RawMessage) (any, error) {
+		var p gateNotifyPushParams
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, fmt.Errorf("gate.notifyPush: invalid params: %w", err)
+		}
+		if p.GatePath == "" || p.Ref == "" || p.NewSHA == "" {
+			return nil, fmt.Errorf("gate.notifyPush: gate_path, ref, and new_sha are required")
+		}
+
+		branchCtx, cancel := context.WithTimeout(ctx, gateNotifyPushDefaultBranchTimeout)
+		defer cancel()
+		defaultBranch, err := resolveDefaultBranch(branchCtx, p.GatePath)
+		if err != nil {
+			return nil, fmt.Errorf("gate.notifyPush: resolve default branch: %w", err)
+		}
+
+		decision := gitgate.ClassifyRef(p.Ref, defaultBranch, p.OldSHA, p.NewSHA)
+		if !decision.Accept {
+			return nil, fmt.Errorf("gate.notifyPush: %s", decision.Message)
+		}
+		if !decision.CreateRun {
+			return gateNotifyPushResult{}, nil
+		}
+
+		branch := strings.TrimPrefix(p.Ref, "refs/heads/")
+		repo := gateRepoIdentifier(p.GatePath)
+		rm.SupersedeQueued(repo, branch)
+
+		gatePath := p.GatePath
+		worktreesDir := gitgate.WorktreesDir(gatePath)
+		newSHA := p.NewSHA
+		runID := rm.NewRunID()
+
+		work := func(workCtx context.Context, emit func(daemon.Event)) error {
+			return orchestrator.Run(workCtx, gatePath, defaultBranch, worktreesDir, runID, newSHA, func(_ context.Context, rc *orchestrator.RunContext) error {
+				emit(daemon.Event{Kind: daemon.EventStageStarted, Stage: "setup", Message: fmt.Sprintf("checked out %s", newSHA)})
+				emit(daemon.Event{Kind: daemon.EventStageFinished, Stage: "setup"})
+				_ = rc
+				return nil
+			})
+		}
+
+		if _, err := rm.Submit(runID, repo, branch, work); err != nil {
+			return nil, fmt.Errorf("gate.notifyPush: submit run: %w", err)
+		}
+
+		return gateNotifyPushResult{RunID: runID}, nil
+	}
 }
 
 type debugSubmitCancellableRunParams struct {

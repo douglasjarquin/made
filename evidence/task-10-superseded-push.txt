@@ -1,0 +1,17 @@
+Scenario: Superseded push - two quick notifyPush calls for the same branch,
+the still-queued first run is dropped, only the second (newest) SHA runs
+Command: go test ./cmd/made/... -run TestGateNotifyPushRPC_SupersededPushValidatesNewestSHA -v -race
+Command: go test ./internal/daemon/... -run TestRunManager_SupersedeQueued -v -race
+
+=== RUN   TestGateNotifyPushRPC_SupersededPushValidatesNewestSHA
+2026/08/13 11:54:50 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-3 state=unavailable
+--- PASS: TestGateNotifyPushRPC_SupersededPushValidatesNewestSHA (0.99s)
+PASS
+ok  	github.com/douglasjarquin/made/cmd/made	2.331s
+
+=== RUN   TestRunManager_SupersedeQueuedDropsOnlyStillQueuedJobForBranch
+--- PASS: TestRunManager_SupersedeQueuedDropsOnlyStillQueuedJobForBranch (0.01s)
+=== RUN   TestRunManager_SupersedeQueuedLeavesAlreadyStartedRunAlone
+--- PASS: TestRunManager_SupersedeQueuedLeavesAlreadyStartedRunAlone (0.01s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/daemon	1.277s

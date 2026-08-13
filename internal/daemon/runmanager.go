@@ -250,3 +250,46 @@ func (rm *RunManager) Cancel(id string) error {
 func isTerminalRunStatus(s RunStatus) bool {
 	return s == RunCompleted || s == RunFailed
 }
+
+// ErrRunSuperseded marks a run SupersedeQueued dropped before it ever
+// started, because a newer push to the same branch arrived first.
+var ErrRunSuperseded = errors.New("daemon: run superseded by a newer push to the same branch")
+
+// SupersedeQueued drops every still-queued (not yet started) job for the
+// given (repo, branch) pair from that repo's FIFO, marking each as failed
+// with ErrRunSuperseded instead of letting it execute. Only rq.pending is
+// inspected, so a job already popped off the queue - running or terminal -
+// is left completely alone, matching a fresh push's right to replace a
+// stale intent that hasn't started yet, but never a run already underway.
+func (rm *RunManager) SupersedeQueued(repo, branch string) {
+	rm.mu.Lock()
+	rq, ok := rm.repos[repo]
+	rm.mu.Unlock()
+	if !ok {
+		return
+	}
+
+	rq.mu.Lock()
+	kept := make([]*queuedJob, 0, len(rq.pending))
+	var dropped []*queuedJob
+	for _, j := range rq.pending {
+		if j.run.snapshot().Branch == branch {
+			dropped = append(dropped, j)
+			continue
+		}
+		kept = append(kept, j)
+	}
+	rq.pending = kept
+	rq.mu.Unlock()
+
+	now := time.Now()
+	for _, j := range dropped {
+		j.run.update(func(s *RunSnapshot) {
+			s.Status = RunFailed
+			s.Err = ErrRunSuperseded
+			s.EndedAt = now
+		})
+		rm.mailbox.Publish(Event{RunID: j.run.snapshot().ID, Kind: EventRunFailed, Time: now, Err: ErrRunSuperseded})
+		rm.signalActivity()
+	}
+}

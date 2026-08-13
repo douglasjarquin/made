@@ -1,0 +1,8 @@
+Scenario: Normal push creates a run
+Command: go test ./cmd/made/... -run TestGateNotifyPushRPC_NormalFeatureBranchPushCreatesRun -v -race
+
+=== RUN   TestGateNotifyPushRPC_NormalFeatureBranchPushCreatesRun
+2026/08/13 11:54:39 WARN herdrview: herdr unavailable, proceeding without a live pane run_id=run-1 state=unavailable
+--- PASS: TestGateNotifyPushRPC_NormalFeatureBranchPushCreatesRun (0.70s)
+PASS
+ok  	github.com/douglasjarquin/made/cmd/made	2.020s
