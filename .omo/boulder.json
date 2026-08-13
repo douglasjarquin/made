@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "active_work_id": "made-orchestrator",
+  "active_work_id": null,
   "works": {
     "made-rewrite": {
       "work_id": "made-rewrite",
@@ -9,16 +9,16 @@
       "session_ids": ["claude-code:main-session"],
       "status": "paused",
       "worktree_path": null,
-      "note": "31/31 numbered tasks + F2 + F4 done. F1/F3 blocked pending plans/made-orchestrator.md, which closes the gap they found. Resume this work's F1/F3 once made-orchestrator completes."
+      "note": "35/35 numbered tasks + F1 + F2 + F4 done. F3 stays unchecked: the consigliere --mode made delivery-cycle criterion needs PR #76 (github.com/douglasjarquin/consigliere) merged and a live consigliere-driven run against a real made daemon - not yet performed."
     },
     "made-orchestrator": {
       "work_id": "made-orchestrator",
       "active_plan": "plans/made-orchestrator.md",
       "plan_name": "made-orchestrator",
       "session_ids": ["claude-code:main-session"],
-      "status": "active",
+      "status": "completed",
       "worktree_path": null,
-      "note": "Claude Code has no Codex Stop-hook continuation; progress is tracked manually in-session via this file + ledger.jsonl."
+      "note": "16/16 implementation tasks + F1-F4 all done. Closed the gap made-rewrite's own Final Verification Wave found: real git-push-triggered end-to-end pipeline runs now work."
     }
   }
 }
