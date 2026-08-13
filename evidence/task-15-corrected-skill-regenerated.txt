@@ -1,0 +1,57 @@
+=== Task 15: corrected skill.go, regenerated SKILL.md ===
+
+$ grep -n 'blocks until' internal/skill/skill.go
+(exit code: 1, expect 1 = no match)
+
+$ go test ./internal/skill/... -v
+=== RUN   TestVerifyCommittedDetectsDrift
+--- PASS: TestVerifyCommittedDetectsDrift (0.00s)
+=== RUN   TestVerifyCommittedAcceptsFreshRender
+--- PASS: TestVerifyCommittedAcceptsFreshRender (0.00s)
+=== RUN   TestMarkdownIsDeterministic
+--- PASS: TestMarkdownIsDeterministic (0.00s)
+=== RUN   TestCommittedSkillFileMatchesGenerator
+--- PASS: TestCommittedSkillFileMatchesGenerator (0.00s)
+=== RUN   TestBodyDoesNotClaimPushBlocks
+--- PASS: TestBodyDoesNotClaimPushBlocks (0.00s)
+PASS
+ok  	github.com/douglasjarquin/made/internal/skill	1.477s
+
+$ go vet ./internal/skill/...
+(vet exit: 0)
+
+$ make skill (regeneration, then confirm no further diff)
+go run ./cmd/genskill
+genskill: wrote skills/made/SKILL.md
+ skills/made/SKILL.md | 42 +++++++++++++++++++++++++++---------------
+ 1 file changed, 27 insertions(+), 15 deletions(-)
+
+$ go build ./...
+(build exit: 0)
+
+$ go test ./...
+?   	github.com/douglasjarquin/made/cmd/genskill	[no test files]
+ok  	github.com/douglasjarquin/made/cmd/made	9.194s
+ok  	github.com/douglasjarquin/made/internal/agent	(cached)
+?   	github.com/douglasjarquin/made/internal/agent/agenttest	[no test files]
+ok  	github.com/douglasjarquin/made/internal/api	(cached)
+ok  	github.com/douglasjarquin/made/internal/config	(cached)
+ok  	github.com/douglasjarquin/made/internal/daemon	(cached)
+ok  	github.com/douglasjarquin/made/internal/evidence	(cached)
+ok  	github.com/douglasjarquin/made/internal/exec	(cached)
+ok  	github.com/douglasjarquin/made/internal/gitgate	(cached)
+ok  	github.com/douglasjarquin/made/internal/github	(cached)
+?   	github.com/douglasjarquin/made/internal/github/githubtest	[no test files]
+ok  	github.com/douglasjarquin/made/internal/herdrclient	(cached)
+ok  	github.com/douglasjarquin/made/internal/orchestrator	6.916s
+ok  	github.com/douglasjarquin/made/internal/pipeline	(cached)
+ok  	github.com/douglasjarquin/made/internal/pipeline/ci	(cached)
+ok  	github.com/douglasjarquin/made/internal/pipeline/document	(cached)
+ok  	github.com/douglasjarquin/made/internal/pipeline/intent	(cached)
+ok  	github.com/douglasjarquin/made/internal/pipeline/lint	(cached)
+ok  	github.com/douglasjarquin/made/internal/pipeline/pr	(cached)
+ok  	github.com/douglasjarquin/made/internal/pipeline/push	(cached)
+ok  	github.com/douglasjarquin/made/internal/pipeline/rebase	(cached)
+ok  	github.com/douglasjarquin/made/internal/pipeline/review	(cached)
+ok  	github.com/douglasjarquin/made/internal/pipeline/test	(cached)
+ok  	github.com/douglasjarquin/made/internal/skill	0.839s

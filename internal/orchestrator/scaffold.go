@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/douglasjarquin/made/internal/config"
 	"github.com/douglasjarquin/made/internal/evidence"
@@ -15,6 +16,8 @@ import (
 )
 
 const pushedConfigFileName = ".made.yml"
+
+const githubCallTimeout = 30 * time.Second
 
 type RunContext struct {
 	Config     config.Config
@@ -78,7 +81,7 @@ func Setup(ctx context.Context, gatePath, defaultBranch, worktreesDir, runID, pu
 		Worktree:   wt,
 		Visibility: vis,
 		Evidence:   store,
-		GitHub:     &github.Client{Dir: wt.Path},
+		GitHub:     &github.Client{Dir: wt.Path, Timeout: githubCallTimeout},
 	}, nil
 }
 

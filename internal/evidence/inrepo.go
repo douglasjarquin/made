@@ -11,6 +11,14 @@ type InRepoStore struct {
 	Dir      string
 }
 
+func (s *InRepoStore) Location(runID string) string {
+	dir := s.Dir
+	if dir == "" {
+		dir = DefaultDir
+	}
+	return filepath.Join(dir, runID)
+}
+
 func (s *InRepoStore) WriteEvidence(runID string, files map[string][]byte) error {
 	if runID == "" {
 		return fmt.Errorf("evidence: runID must not be empty")

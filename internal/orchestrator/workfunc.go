@@ -34,15 +34,13 @@ const (
 
 	ciStageTimeout = 30 * time.Minute
 	ciPollInterval = 10 * time.Second
-
-	prTitle = "made validation"
 )
 
-// Options carries the per-run parameters Task 14 will derive for real
-// (real PR title, real agent binary resolution, real Document rules from
-// config); until then it defaults to the zero value everywhere it is used
-// below, and only this package's own tests populate it, to stand in a fake
-// agent/gh binary in place of a real one.
+// Options carries the per-run parameters that come from outside the pushed
+// commit/config themselves (agent binary resolution, Document rules); it
+// defaults to the zero value in production and only this package's own
+// tests populate it, to stand in a fake agent/gh binary in place of a real
+// one.
 type Options struct {
 	ReviewOptions review.Options
 	DocumentRules []document.Rule
@@ -262,11 +260,17 @@ func (c *chain) pushStage() error {
 
 func (c *chain) prStage() (pr.Result, error) {
 	c.start(stageNamePR)
+
+	title, err := derivePRTitle(c.rc.Worktree.Path)
+	if err != nil {
+		return pr.Result{}, fmt.Errorf("orchestrator: derive PR title: %w", err)
+	}
+
 	result, err := pr.Run(c.ctx, c.rc.GitHub, pr.Options{
-		Title:       prTitle,
+		Title:       title,
 		Base:        c.defaultBranch,
 		Head:        c.branch,
-		EvidenceRef: c.runID,
+		EvidenceRef: deriveEvidenceRef(c.rc.Evidence, c.runID),
 	})
 	if err != nil {
 		return pr.Result{}, err

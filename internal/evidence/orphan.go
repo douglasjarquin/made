@@ -15,6 +15,18 @@ type OrphanBranchStore struct {
 	Branch   string
 }
 
+// Location names where a run's evidence commit lives on the orphan branch,
+// in the same "refs/heads/<branch>:<path>" shorthand git itself uses (e.g.
+// `git show`), so callers get a reference they can act on directly rather
+// than just the bare runID.
+func (s *OrphanBranchStore) Location(runID string) string {
+	branch := s.Branch
+	if branch == "" {
+		branch = DefaultBranch
+	}
+	return "refs/heads/" + branch + ":" + runID
+}
+
 // Builds the commit via plumbing (hash-object/write-tree/commit-tree) into a
 // scratch GIT_INDEX_FILE instead of `git checkout --orphan`, so the target
 // repo's real HEAD/index/working tree are never touched; parentless

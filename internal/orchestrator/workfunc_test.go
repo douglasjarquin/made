@@ -233,6 +233,59 @@ func TestNewWorkFunc_FullPassEndsRunningWithAwaitingMergeMessage(t *testing.T) {
 	}
 }
 
+func TestNewWorkFunc_FullPassPRTitleMatchesPushedCommitSubject(t *testing.T) {
+	f := newWFFixture(t)
+	branch := "feature-pr-title"
+	sha := f.pushFeature(t, branch, "add greeting file", "greeting.txt", "hello\n")
+	wt := f.worktree(t, sha)
+	defer func() { _ = wt.Remove() }()
+
+	ghBin := githubtest.Build(t)
+	ghLog := filepath.Join(t.TempDir(), "gh-invocations.log")
+	cfg := config.Config{
+		Agent:    string(agent.KindClaude),
+		Commands: config.Commands{Test: "true", Lint: "true"},
+		CI:       config.CI{RerunBudget: 1},
+	}
+	rc := newRunContext(wt, cfg, ghBin, ghLog)
+
+	rm := daemon.NewRunManager()
+	reviewDecisions := daemon.NewReviewDecisions()
+	runID := rm.NewRunID()
+
+	wf := NewWorkFunc(rm, reviewDecisions, nil, runID, f.defaultBranch, branch, Options{
+		ReviewOptions: cleanReviewOptions(t),
+	})
+	submitWorkFunc(t, rm, runID, "repo-pr-title", branch, wf, rc)
+
+	snap := waitForRunEnded(t, rm, runID, 30*time.Second)
+	if snap.Status != daemon.RunRunning {
+		t.Fatalf("expected final status RunRunning (awaiting merge), got %v (err=%v)", snap.Status, snap.Err)
+	}
+	assertAllStagesPassed(t, snap.Stages)
+
+	wantSubject, err := derivePRTitle(wt.Path)
+	if err != nil {
+		t.Fatalf("derivePRTitle (for expectation): %v", err)
+	}
+	if wantSubject != "feature work" {
+		t.Fatalf("test fixture assumption broken: expected pushFeature's commit subject to be %q, got %q", "feature work", wantSubject)
+	}
+
+	data, err := os.ReadFile(ghLog)
+	if err != nil {
+		t.Fatalf("read gh invocation log: %v", err)
+	}
+	log := string(data)
+	if !strings.Contains(log, "pr create") {
+		t.Fatalf("expected a pr create invocation in gh log, got:\n%s", log)
+	}
+	wantArg := "--title " + wantSubject
+	if !strings.Contains(log, wantArg) {
+		t.Fatalf("expected gh invocation log to contain %q (PR title matching the pushed commit's subject), got:\n%s", wantArg, log)
+	}
+}
+
 func TestNewWorkFunc_TestFailureHaltsBeforeLaterStages(t *testing.T) {
 	f := newWFFixture(t)
 	branch := "feature-test-fail"

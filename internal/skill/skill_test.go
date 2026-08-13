@@ -51,3 +51,13 @@ func TestCommittedSkillFileMatchesGenerator(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// The real pipeline is asynchronous (a push is admitted and returns
+// immediately; the 9-stage pipeline runs in the background and is observed
+// via `made status --json`), so the body must never regress to claiming a
+// push blocks until the pipeline finishes.
+func TestBodyDoesNotClaimPushBlocks(t *testing.T) {
+	if strings.Contains(skill.Markdown(), "blocks until") {
+		t.Error(`skill.Markdown() contains "blocks until": the pipeline is asynchronous, a push must not be described as blocking until a terminal state`)
+	}
+}

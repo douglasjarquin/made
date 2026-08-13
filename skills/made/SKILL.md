@@ -43,14 +43,17 @@ along with the command:
 
 ```sh
 made gate init                # once per repo: create the bare gate + remote
-git push made <branch>        # run all 9 stages against <branch>
-made status --json            # structured run state, per-stage results,
-                               # and any pending ask-user findings
+git push made <branch>        # admits the push and returns immediately
+made status --json            # poll structured run state, per-stage
+                               # results, and any pending ask-user findings
 ```
 
-The push blocks until the pipeline reaches a terminal state or parks on a
-finding that needs a human decision. Use `made status --json` from a
-separate call to check progress without disturbing the run.
+`git push made <branch>` only blocks long enough to admit the push; it
+returns as soon as the push is accepted, before the pipeline has run a single
+stage. The 9-stage pipeline then runs in the background against a
+daemon-managed worktree. Poll `made status --json` (it is safe to call
+repeatedly) to watch the run progress and to read its eventual outcome -
+the push itself never reports pass or fail.
 
 ## Findings and approval
 
@@ -83,18 +86,27 @@ and the run resumes.
    never merges anything.
 8. **PR** - opens a GitHub pull request for the branch and stops; made has no
    merge-capable code path, so it structurally cannot merge on your behalf.
-9. **CI** - watches the PR's checks and reports `checks-passed` once they
-   are green, without waiting for a human to merge.
+9. **CI** - watches the PR's checks; once they are green the run's message
+   reports the PR as open and awaiting merge, without waiting for a human to
+   merge it.
 
 ## Outcomes
 
-- `checks-passed` - validated and CI is green, but the PR is not merged.
-  Tell the user it is ready for their review; do not wait for the merge
-  yourself.
-- `passed` - the PR was merged or closed after checks passed.
-- `failed` or `cancelled` - something blocked the run. Read
-  `made status --json` for the failing stage, fix it, commit the fix on
-  the same branch, and push to `made` again.
+`made status --json`'s `state` field is one of `queued`,
+`running`, `completed`, or `failed`:
+
+- **All 9 stages pass** - the run's state stays `running`, not
+  `completed`. made opened a real PR and watched its checks go green,
+  but merging that PR is a human decision made cannot observe, so it never
+  marks the run done on its own. The run's message names the open PR and
+  says it is awaiting merge - tell the user it is ready for their review,
+  and do not wait for the merge yourself.
+- `failed` - a stage blocked the run. Read `made status --json` for
+  the failing stage's result and message, fix it, commit the fix on the
+  same branch, and push to `made` again.
+- An ask-user finding parks the run rather than failing it: state stays
+  `running` and `pending_findings` is populated until
+  `made review` resolves it (see above).
 
 ## herdr visibility
 

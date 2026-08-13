@@ -548,7 +548,7 @@ Wire made's 9 already-tested pipeline stages into one real, socket-authenticated
 
   **Commit**: YES | Message: `refactor(cli): restructure reviewDecisions ownership to be orchestrator-reachable` | Files: `cmd/made/daemon.go`, `cmd/made/review.go`
 
-- [ ] 14. Stage-param derivation (pr/github/ci config mapping)
+- [x] 14. Stage-param derivation (pr/github/ci config mapping)
 
   **What to do**: Implement the concrete parameter-derivation logic Task 12's WorkFunc calls into for the stages whose inputs Context flagged as previously undefined: `pr.Options{Title, Base, Head, EvidenceRef}` - `Title` from the pushed commit's subject line (`git log -1 --format=%s` in the worktree), `Base` from the gate's resolved default branch (established at `made gate init`, Task 6), `Head` from the pushed branch name, `EvidenceRef` from the evidence store's location for this run (a path or branch reference, matching whichever mode Task 2's `Evidence` config selected); `github.Client{Dir: worktreePath, Timeout: <a named constant, document your choice>}`; `ci.Run`'s `rerunBudget` from Task 2's `Config.CI.RerunBudget`, `pollInterval` as a fixed named constant (document your choice, e.g. 10 seconds); `test.Run`/`lint.Run`'s command arguments from Task 2's `TestCommand()`/`LintCommand()` helpers; `review.Run`'s `agentKind` from Task 2's `AgentKind()` helper (propagating its fail-closed error up as a run-level infra failure, not a stage `Result`, if the configured agent is invalid).
   **Must NOT do**: Do not hardcode any of these values directly in Task 12's WorkFunc - keep this derivation in its own clearly-named function(s) so it's independently testable against fixture configs.
@@ -574,7 +574,7 @@ Wire made's 9 already-tested pipeline stages into one real, socket-authenticated
 
   **Commit**: YES | Message: `feat(orchestrator): derive per-stage parameters from resolved config` | Files: `internal/orchestrator/params.go`
 
-- [ ] 15. Correct skill.go's async description, regenerate SKILL.md
+- [x] 15. Correct skill.go's async description, regenerate SKILL.md
 
   **What to do**: Update `internal/skill/skill.go`'s body text (search for "the push blocks until the pipeline reaches a terminal state") to accurately describe the real, async model established by this plan: a push returns immediately once admitted; the pipeline runs in the background; the user/agent watches progress via `made status --json` (polling or, if Task 13's wait mechanism is exposed at the CLI level, mention that too) and `made review` for any parked findings. Also verify and, if needed, correct the "pushing the default branch to the gate is not a supported flow" prose against Task 8's actual `ClassifyRef` rejection message so they match exactly. Regenerate `skills/made/SKILL.md` via `make skill` (or `go run ./cmd/genskill`), matching the prior plan's Task 23 generated-skill-file discipline (source of truth is the Go constant, the committed file is always regenerated, never hand-edited).
   **Must NOT do**: Do not hand-edit `skills/made/SKILL.md` directly - regenerate it from the corrected `skill.go` source, per the existing drift-lint test from the prior plan's Task 23.
