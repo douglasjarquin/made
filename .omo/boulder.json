@@ -1,0 +1,24 @@
+{
+  "schema_version": 2,
+  "active_work_id": "made-orchestrator",
+  "works": {
+    "made-rewrite": {
+      "work_id": "made-rewrite",
+      "active_plan": "plans/made-rewrite.md",
+      "plan_name": "made-rewrite",
+      "session_ids": ["claude-code:main-session"],
+      "status": "paused",
+      "worktree_path": null,
+      "note": "31/31 numbered tasks + F2 + F4 done. F1/F3 blocked pending plans/made-orchestrator.md, which closes the gap they found. Resume this work's F1/F3 once made-orchestrator completes."
+    },
+    "made-orchestrator": {
+      "work_id": "made-orchestrator",
+      "active_plan": "plans/made-orchestrator.md",
+      "plan_name": "made-orchestrator",
+      "session_ids": ["claude-code:main-session"],
+      "status": "active",
+      "worktree_path": null,
+      "note": "Claude Code has no Codex Stop-hook continuation; progress is tracked manually in-session via this file + ledger.jsonl."
+    }
+  }
+}
