@@ -627,7 +627,7 @@ Wire made's 9 already-tested pipeline stages into one real, socket-authenticated
 
 ## Final Verification Wave (MANDATORY - after ALL implementation tasks)
 > ALL must APPROVE. Present consolidated results to user and get explicit "okay" before completing.
-- [ ] F1. Plan Compliance Audit
+- [x] F1. Plan Compliance Audit
 
   **What to do**: Re-execute every Definition of Done command for real. Confirm every Must Have present, every Must NOT Have absent.
   **Must NOT do**: Trust task self-reports - re-run the commands yourself.
@@ -655,7 +655,7 @@ Wire made's 9 already-tested pipeline stages into one real, socket-authenticated
 
   **Commit**: NO
 
-- [ ] F2. Code Quality Review
+- [x] F2. Code Quality Review
 
   **What to do**: `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0 ./...` across the whole made module (the prior plan's F2 found 30 real issues hiding behind default issue caps - use the uncapped flags this time from the start).
   **Must NOT do**: Blanket `//nolint` - fix or justify each finding explicitly, same discipline as the prior plan's F2.
@@ -674,7 +674,7 @@ Wire made's 9 already-tested pipeline stages into one real, socket-authenticated
 
   **Commit**: NO
 
-- [ ] F3. Real Manual QA
+- [x] F3. Real Manual QA
 
   **What to do**: Actually run the ask-user park/resume flow against a REAL orchestrated run for the first time (previously only testable against a fixture StatusReport, per the prior plan's Task 22), and re-confirm herdr fail-open still holds with the orchestrator wired in.
   **Must NOT do**: Substitute the F1 scenario's output for this - park/resume needs its own real trigger (a review/document finding), not just a passing run.
@@ -700,7 +700,7 @@ Wire made's 9 already-tested pipeline stages into one real, socket-authenticated
 
   **Commit**: NO
 
-- [ ] F4. Scope Fidelity Check
+- [x] F4. Scope Fidelity Check
 
   **What to do**: Spot-check that internal/orchestrator is structurally independent from no-mistakes' internal/daemon/manager.go (the closest analog - it's the component that launches pipelines from a push event).
   **Must NOT do**: Treat "it passes F1" as sufficient - independence is a structural claim, not a behavioral one.
