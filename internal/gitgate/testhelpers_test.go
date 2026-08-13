@@ -43,13 +43,6 @@ func run(t *testing.T, dir string, extraEnv []string, name string, args ...strin
 	return string(out)
 }
 
-func runOutput(dir, name string, args ...string) (string, error) {
-	cmd := exec.Command(name, args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	return string(out), err
-}
-
 func pushRef(dir, remote string) (string, error) {
 	cmd := exec.Command("git", "push", remote, "HEAD:refs/heads/main")
 	cmd.Dir = dir
