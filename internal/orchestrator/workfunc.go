@@ -39,13 +39,13 @@ const (
 )
 
 // Options carries the per-run parameters that come from outside the pushed
-// commit/config themselves (agent binary resolution, Document rules); it
-// defaults to the zero value in production and only this package's own
-// tests populate it, to stand in a fake agent/gh binary in place of a real
-// one.
+// commit/config itself (agent binary resolution); it defaults to the zero
+// value in production and only this package's own tests populate it, to
+// stand in a fake agent binary in place of a real one. Document rules come
+// from the resolved RunContext.Config instead, since Config itself is only
+// resolved at Setup time, after a WorkFunc closure is already built.
 type Options struct {
 	ReviewOptions review.Options
-	DocumentRules []document.Rule
 }
 
 // NewWorkFunc builds the real 9-stage chain (Intent -> Rebase -> Review ->
@@ -231,7 +231,7 @@ func (c *chain) testStage() error {
 
 func (c *chain) documentStage() error {
 	c.start(stageNameDocument)
-	result, err := document.Run(c.rc.Worktree.Path, c.defaultBranch, c.opts.DocumentRules)
+	result, err := document.Run(c.rc.Worktree.Path, c.defaultBranch, deriveDocumentRules(c.rc.Config))
 	if err != nil {
 		return err
 	}

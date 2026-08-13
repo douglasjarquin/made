@@ -18,7 +18,6 @@ import (
 	"github.com/douglasjarquin/made/internal/gitgate"
 	"github.com/douglasjarquin/made/internal/github"
 	"github.com/douglasjarquin/made/internal/github/githubtest"
-	"github.com/douglasjarquin/made/internal/pipeline/document"
 	"github.com/douglasjarquin/made/internal/pipeline/review"
 )
 
@@ -363,6 +362,9 @@ func TestNewWorkFunc_DocumentFindingParksThenRejectedFailsRun(t *testing.T) {
 		Agent:    string(agent.KindClaude),
 		Commands: config.Commands{Test: "true", Lint: "true"},
 		CI:       config.CI{RerunBudget: 1},
+		Document: config.Document{Rules: []config.DocumentRule{
+			{PathPattern: "pkg/*.go", RequiredDocPattern: "docs/*.md"},
+		}},
 	}
 	rc := newRunContext(wt, cfg, ghBin, "")
 
@@ -372,7 +374,6 @@ func TestNewWorkFunc_DocumentFindingParksThenRejectedFailsRun(t *testing.T) {
 
 	wf := NewWorkFunc(rm, reviewDecisions, nil, runID, f.defaultBranch, branch, Options{
 		ReviewOptions: cleanReviewOptions(t),
-		DocumentRules: []document.Rule{{SourcePattern: "pkg/*.go", DocPattern: "docs/*.md"}},
 	})
 	submitWorkFunc(t, rm, runID, "repo-doc-reject", branch, wf, rc)
 
@@ -407,6 +408,9 @@ func TestNewWorkFunc_DocumentFindingParksThenApprovedResumesToCompletion(t *test
 		Agent:    string(agent.KindClaude),
 		Commands: config.Commands{Test: "true", Lint: "true"},
 		CI:       config.CI{RerunBudget: 1},
+		Document: config.Document{Rules: []config.DocumentRule{
+			{PathPattern: "pkg/*.go", RequiredDocPattern: "docs/*.md"},
+		}},
 	}
 	rc := newRunContext(wt, cfg, ghBin, "")
 
@@ -416,7 +420,6 @@ func TestNewWorkFunc_DocumentFindingParksThenApprovedResumesToCompletion(t *test
 
 	wf := NewWorkFunc(rm, reviewDecisions, nil, runID, f.defaultBranch, branch, Options{
 		ReviewOptions: cleanReviewOptions(t),
-		DocumentRules: []document.Rule{{SourcePattern: "pkg/*.go", DocPattern: "docs/*.md"}},
 	})
 	submitWorkFunc(t, rm, runID, "repo-doc-approve", branch, wf, rc)
 

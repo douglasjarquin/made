@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/douglasjarquin/made/internal/config"
 	"github.com/douglasjarquin/made/internal/evidence"
 	execpkg "github.com/douglasjarquin/made/internal/exec"
+	"github.com/douglasjarquin/made/internal/pipeline/document"
 )
 
 func derivePRTitle(worktreePath string) (string, error) {
@@ -33,4 +35,15 @@ func deriveEvidenceRef(store evidence.Store, runID string) string {
 	default:
 		return runID
 	}
+}
+
+func deriveDocumentRules(cfg config.Config) []document.Rule {
+	rules := make([]document.Rule, len(cfg.Document.Rules))
+	for i, r := range cfg.Document.Rules {
+		rules[i] = document.Rule{
+			SourcePattern: r.PathPattern,
+			DocPattern:    r.RequiredDocPattern,
+		}
+	}
+	return rules
 }
