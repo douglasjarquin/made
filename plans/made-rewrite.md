@@ -1261,7 +1261,7 @@ Ship a working `made` daemon + CLI + socket API that independently re-implements
 
 ## Final Verification Wave (MANDATORY - after ALL implementation tasks)
 > ALL must APPROVE. Present consolidated results to user and get explicit "okay" before completing.
-- [ ] F1. Plan Compliance Audit
+- [x] F1. Plan Compliance Audit
 
   **What to do**: Verify every Must Have is present and every Must NOT Have is absent. Re-run the Definition of Done commands from the Work Objectives section and confirm each passes. Confirm no task was skipped or silently descoped.
   **Must NOT do**: Approve based on partial evidence or task self-reports alone - re-execute the commands.
@@ -1285,6 +1285,8 @@ Ship a working `made` daemon + CLI + socket API that independently re-implements
     Expected: Non-zero exit, clear message naming the Test stage, real remote receives no new ref (`git ls-remote origin` unchanged).
     Evidence: evidence/task-F1-failing-test-block.txt
   ```
+
+  **RESOLVED via plans/made-orchestrator.md**: at the time this plan's own tasks completed, no task wired the 9 stages into a real run, so this F1 could not pass - that gap became made-orchestrator.md's entire reason to exist. made-orchestrator.md's own F1 re-ran these exact two QA scenarios for real (same evidence file paths, now populated) against a real `made` binary, a real daemon, and real generated git hooks - full pass and failing-test-halt both proven live. One refinement: "all 9 stages report success" now means the run's final `state` is `running` (not `completed`) with all 9 `stages[].result == "pass"`, since a CI-passed run stays open pending human merge (a deliberate design decision made during that plan, not a shortfall) - PR-opened-not-merged still holds exactly as stated here.
 
   **Commit**: NO
 
@@ -1332,6 +1334,8 @@ Ship a working `made` daemon + CLI + socket API that independently re-implements
     Expected: Gate run completes successfully; log shows a fail-open warning, not an error.
     Evidence: evidence/task-F3-herdr-down.txt
   ```
+
+  **PARTIALLY RESOLVED via plans/made-orchestrator.md, still open**: that plan's own F3 proved the herdr up/herdr-down fail-open pair for real against a genuinely orchestrated run (evidence/task-F3-herdr-fail-open-real.txt) - including against a real, protocol-incompatible live herdr instance found running on the host, which strengthens rather than weakens the proof (a mismatched-but-real herdr still failed open correctly). The consigliere `--mode made` full delegate-validate-PR cycle criterion is STILL NOT PROVEN: consigliere's own migration (PR #76 at github.com/douglasjarquin/consigliere) is still open, unmerged, and its `--mode made` path has never been exercised against a live `made` daemon through consigliere's real bash orchestration. This box stays unchecked until PR #76 merges and a real consigliere-driven run is performed.
 
   **Commit**: NO
 
