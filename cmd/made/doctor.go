@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/douglasjarquin/made/internal/api"
-	"github.com/douglasjarquin/made/internal/github"
 	"github.com/douglasjarquin/made/internal/gitgate"
+	"github.com/douglasjarquin/made/internal/github"
 	"github.com/douglasjarquin/made/internal/herdrclient"
 )
 
