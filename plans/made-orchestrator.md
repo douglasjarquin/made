@@ -317,7 +317,7 @@ Wire made's 9 already-tested pipeline stages into one real, socket-authenticated
 
   **Commit**: YES | Message: `feat(cli): add made gate init` | Files: `cmd/made/gate.go`, `cmd/made/main.go`
 
-- [ ] 7. `made doctor` gate-initialization check
+- [x] 7. `made doctor` gate-initialization check
 
   **What to do**: Add a check to `runDoctorCommand` (`cmd/made/doctor.go`) that reports whether the current directory (or a target path, if `made doctor` grows a positional arg - your call, document it) is a `made`-managed gate: resolve `gitgate.GatePath` for the current directory and check whether the bare repo exists at that path. Report `gate: initialized` or `gate: not initialized (run made gate init)` alongside the existing daemon/gh/herdr checks, consistent with the existing report format.
   **Must NOT do**: Make gate-uninitialized a fatal/`healthy = false` condition - it's informational (a fresh checkout legitimately has no gate yet, same spirit as herdr's own informational-only report in the existing doctor command).
