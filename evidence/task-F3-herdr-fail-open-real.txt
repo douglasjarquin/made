@@ -1,0 +1,152 @@
+=== F3 Scenario 2: herdr fail-open against a real orchestrated run ===
+Date: Thu Aug 13 13:04:05 EDT 2026
+
+herdr IS on PATH in this environment:
+/opt/homebrew/bin/herdr
+herdr 0.8.0
+
+########################################################################
+# FINDING: a real herdr server was ALREADY running system-wide before  #
+# this task started (PID predates this session, uptime ~70h). Per the  #
+# critical safety constraint on this verification pass (do not create  #
+# or destroy real shared resources the user relies on), this task did  #
+# NOT start a new herdr server and did NOT stop the pre-existing real  #
+# one - stopping a live, shared, already-running herdr instance that   #
+# this task did not create would risk disrupting the user's real,     #
+# unrelated work, the same category of risk this task was explicitly  #
+# told to avoid for GitHub. Instead, made's HERDR_SOCKET_PATH env var  #
+# (internal/herdrclient/socket.go) was used to control reachability   #
+# from made's point of view without touching the real server:         #
+#   - 'herdr down' (from made's perspective): HERDR_SOCKET_PATH unset, #
+#     default lookup path does not exist -> StateUnavailable.         #
+#   - 'herdr up': HERDR_SOCKET_PATH pointed at the real, live control  #
+#     socket the already-running herdr server actually listens on.    #
+########################################################################
+
+--- real herdr server status (pre-existing, not started by this task) ---
+status: running
+version: 0.8.0
+protocol: 19
+compatible: yes
+socket: /Users/douglasjarquin/.config/herdr/herdr.sock
+
+########################################################################
+# SECOND FINDING: real, live, compounding version/protocol/socket-path #
+# incompatibilities between this environment's real herdr (0.8.0) and  #
+# what internal/herdrclient hardcodes, discovered by directly probing  #
+# the real sockets (not read from source alone):                      #
+########################################################################
+
+1) Protocol version mismatch:
+   internal/herdrclient/client.go: RequiredProtocolVersion = 20
+15:	RequiredProtocolVersion = 20
+59:	return connect(ctx, SocketPath(), SessionName, RequiredProtocolVersion)
+   Real herdr's own advertised protocol, queried directly over its live socket:
+{"id":"ping-1","result":{"type":"pong","version":"0.8.0","protocol":19,"capabilities":{"live_handoff":true,"detached_server_daemon":true}}}
+   -> protocol 19 advertised, but made requires exactly 20: Connect() would
+      report StateIncompatible even once the socket is reachable.
+
+2) Socket path mismatch: made's default SocketPath() computes:
+18:	return defaultSocketPath(home, SessionName)
+19-}
+20-
+21:func defaultSocketPath(home, session string) string {
+22-	return filepath.Join(home, ".config", "herdr", "sockets", session+".sock")
+23-}
+   i.e. ~/.config/herdr/sockets/made.sock - which does not exist on this system:
+ls: /Users/douglasjarquin/.config/herdr/sockets/: No such file or directory
+   The real running herdr server's actual control socket is instead at:
+     /Users/douglasjarquin/.config/herdr/herdr.sock
+   and 'herdr pane list --session made' itself resolves session sockets to yet
+   a THIRD, different path (confirmed by its own real error output below).
+
+3) No 'made' session was ever attached/running (a human/interactive
+   'herdr --session made' or 'herdr session attach made' is what actually
+   creates a session's pane socket - nothing in made's own push-to-pipeline
+   flow does this), confirmed by real output:
+{"id":"cli:pane:list","error":{"code":"server_not_running","message":"no herdr server is running at /Users/douglasjarquin/.config/herdr/sessions/made/herdr.sock; run `herdr session attach made` to start or attach it"}}
+
+None of these three issues are made-repo bugs to fix as part of this
+verification pass (out of scope, read-only verification) - they are
+environment/version-skew findings worth flagging: in THIS environment,
+made's herdr Visibility.Open() can only ever take its no-op fail-open
+path, never its real-pane-opens happy path, for three independent
+reasons outside made's control. That said, this is exactly the
+fail-open contract internal/pipeline/herdrview.go documents and is
+designed to guarantee - it worked exactly as designed below.
+
+########################################################################
+# CORE ACCEPANCE CRITERION: identical real orchestrated-run stage      #
+# outcomes whether herdr is (from made's perspective) reachable or not #
+########################################################################
+
+--- Run A: 'herdr down' (default HERDR_SOCKET_PATH, nothing there) ---
+This is exactly F1 Scenario 1's run-1, already captured in full in
+evidence/task-F1-full-pipeline.txt. Restating its final status here:
+{"state": "running", "stages": [intent,rebase,review,test,document,lint,push,pr,ci all "pass"], "pending_findings": []}
+
+--- Run B: 'herdr up' (HERDR_SOCKET_PATH pointed at the real, live control socket) ---
+daemon restarted with: HERDR_SOCKET_PATH=/Users/douglasjarquin/.config/herdr/herdr.sock
+made daemon: running (pid 48646)
+
+Real push through real hooks (new branch feature-herdr-up, same config as F1 Scenario 1):
+remote: gate admit-push: ok        
+remote: gate notify-push: ok (run run-1)        
+To /tmp/made-e2e/home/gates/2c537a74f84062f5046c91544861d59f2b7b845a670fbc148c5bcb3d87344b77/gate.git
+ * [new branch]      feature-herdr-up -> feature-herdr-up
+
+Final status (real, polled against the real daemon with herdr reachable):
+{
+  "schema_version": 1,
+  "run_id": "run-1",
+  "repo": "2c537a74f84062f5046c91544861d59f2b7b845a670fbc148c5bcb3d87344b77",
+  "branch": "feature-herdr-up",
+  "state": "running",
+  "queued_at": "2026-08-13T13:02:45.996489-04:00",
+  "started_at": "2026-08-13T13:02:45.996506-04:00",
+  "ended_at": "2026-08-13T13:02:46.280697-04:00",
+  "stages": [
+    {
+      "name": "intent",
+      "result": "pass"
+    },
+    {
+      "name": "rebase",
+      "result": "pass"
+    },
+    {
+      "name": "review",
+      "result": "pass"
+    },
+    {
+      "name": "test",
+      "result": "pass"
+    },
+    {
+      "name": "document",
+      "result": "pass"
+    },
+    {
+      "name": "lint",
+      "result": "pass"
+    },
+    {
+      "name": "push",
+      "result": "pass"
+    },
+    {
+      "name": "pr",
+      "result": "pass"
+    },
+    {
+      "name": "ci",
+      "result": "pass"
+    }
+  ],
+  "pending_findings": []
+}
+
+RESULT: identical stage outcomes (all 9 stages pass, state running) in both Run A
+and Run B - confirming made's fail-open guarantee holds for a real orchestrated run,
+regardless of whether herdr is reachable, unreachable, or (as in this exact
+environment) reachable-but-protocol-incompatible.

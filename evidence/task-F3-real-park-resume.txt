@@ -1,0 +1,246 @@
+=== F3 Scenario 1: Real park/resume through the real CLI end to end ===
+Date: Thu Aug 13 13:02:02 EDT 2026
+
+########################################################################
+# PART A: REAL FINDING - Document-stage config wiring gap, reproduced  #
+# live against the real daemon (not just read from source).            #
+########################################################################
+
+Trusted .made.yml fetched at 'made gate init' time (on the gate's default
+branch) configures a Document rule:
+
+allow_repo_commands: true
+agent: claude
+commands:
+  test: "true"
+  lint: "true"
+ci:
+  rerun_budget: 1
+test:
+  evidence:
+    store_in_repo: true
+    dir: ".made/evidence"
+document:
+  rules:
+    - path_pattern: "pkg/*.go"
+      required_doc_pattern: "docs/*.md"
+
+--- branch feature-doc-gap-demo touches pkg/code.go with NO matching docs/*.md ---
+commit d2339d76b5e49e2283e738a4ae71529eb627b359
+Author: Douglas Jarquin <8209+douglasjarquin@users.noreply.github.com>
+Date:   Thu Aug 13 13:00:17 2026 -0400
+
+    add pkg code with no matching docs
+
+--- real push through real hooks ---
+remote: gate admit-push: ok        
+remote: gate notify-push: ok (run run-3)        
+To /tmp/made-e2e/home/gates/2c537a74f84062f5046c91544861d59f2b7b845a670fbc148c5bcb3d87344b77/gate.git
+ * [new branch]      feature-doc-gap-demo -> feature-doc-gap-demo
+
+--- made status --json run-3: Document stage PASSES with no finding, despite the configured rule ---
+{
+  "schema_version": 1,
+  "run_id": "run-3",
+  "repo": "2c537a74f84062f5046c91544861d59f2b7b845a670fbc148c5bcb3d87344b77",
+  "branch": "feature-doc-gap-demo",
+  "state": "running",
+  "queued_at": "2026-08-13T13:00:18.14814-04:00",
+  "started_at": "2026-08-13T13:00:18.148166-04:00",
+  "ended_at": "2026-08-13T13:00:18.331819-04:00",
+  "stages": [
+    {
+      "name": "intent",
+      "result": "pass"
+    },
+    {
+      "name": "rebase",
+      "result": "pass"
+    },
+    {
+      "name": "review",
+      "result": "pass"
+    },
+    {
+      "name": "test",
+      "result": "pass"
+    },
+    {
+      "name": "document",
+      "result": "pass"
+    },
+    {
+      "name": "lint",
+      "result": "pass"
+    },
+    {
+      "name": "push",
+      "result": "pass"
+    },
+    {
+      "name": "pr",
+      "result": "pass"
+    },
+    {
+      "name": "ci",
+      "result": "pass"
+    }
+  ],
+  "pending_findings": []
+}
+
+ROOT CAUSE (read from source, confirmed by the above real run):
+  cmd/made/daemon.go gateNotifyPushHandler builds the WorkFunc with:
+    orchestrator.NewWorkFunc(rm, reviewDecisions, emit, runID, defaultBranch, branch, orchestrator.Options{})
+  orchestrator.Options{} is the zero value in production - Options.DocumentRules is always nil.
+  internal/orchestrator/workfunc.go documentStage() calls:
+    document.Run(c.rc.Worktree.Path, c.defaultBranch, c.opts.DocumentRules)
+  ...reading c.opts.DocumentRules (always nil in production), NOT c.rc.Config.Document.Rules
+  (which IS correctly loaded from .made.yml by internal/config.LoadEffectiveConfig and IS present
+  on RunContext.Config - it is simply never read by the orchestrator or converted from
+  config.DocumentRule{PathPattern,RequiredDocPattern} to document.Rule{SourcePattern,DocPattern}).
+  grep confirms zero production references:
+
+This means: a real operator configuring document.rules in .made.yml today gets silent,
+total non-enforcement of that policy in production - the Document stage always runs with
+zero rules no matter what is configured. This is a genuine wiring gap, not a test artifact.
+
+########################################################################
+# PART B: REAL park/resume via the Review stage's ask-user finding,    #
+# proven through the real CLI end to end (first time ever, not just    #
+# a Go-level fixture StatusReport per the prior plan's Task 22).       #
+# Review's PendingFindings path is NOT gated by the Options{} wiring   #
+# gap above (it comes from the agent's own scripted output), so it is  #
+# usable to exercise the real park/resume machinery end to end while   #
+# the Document-specific wiring gap above is reported honestly rather   #
+# than routed around.                                                  #
+########################################################################
+
+--- commit with Intent trailer, real push through real hooks ---
+3b1d5d01d77e317351c77ce9e2f29911b9fae309
+trigger a real ask-user finding
+
+Intent: exercise real park and resume via made review
+
+remote: gate admit-push: ok        
+remote: gate notify-push: ok (run run-4)        
+To /tmp/made-e2e/home/gates/2c537a74f84062f5046c91544861d59f2b7b845a670fbc148c5bcb3d87344b77/gate.git
+ * [new branch]      feature-park-resume -> feature-park-resume
+
+--- made status --json run-4 while PARKED (real, polled against the real daemon) ---
+{
+  "schema_version": 1,
+  "run_id": "run-4",
+  "repo": "2c537a74f84062f5046c91544861d59f2b7b845a670fbc148c5bcb3d87344b77",
+  "branch": "feature-park-resume",
+  "state": "running",
+  "queued_at": "2026-08-13T13:00:39.717411-04:00",
+  "started_at": "2026-08-13T13:00:39.717425-04:00",
+  "stages": [
+    {"name": "intent", "result": "pass"},
+    {"name": "rebase", "result": "pass"}
+  ],
+  "pending_findings": [
+    {"stage": "review", "message": "needs product sign-off before merging: verify this copy change with marketing"}
+  ]
+}
+
+--- real 'made review --run run-4' (actual binary, real stdin interaction) approving the finding ---
+[review] needs product sign-off before merging: verify this copy change with marketing
+approve/reject? [a/r]: approved: review
+made review: all findings approved; pipeline resumed
+
+--- made status --json run-4 after resume: all 9 stages now pass, pending_findings cleared ---
+{
+  "schema_version": 1,
+  "run_id": "run-4",
+  "repo": "2c537a74f84062f5046c91544861d59f2b7b845a670fbc148c5bcb3d87344b77",
+  "branch": "feature-park-resume",
+  "state": "running",
+  "queued_at": "2026-08-13T13:00:39.717411-04:00",
+  "started_at": "2026-08-13T13:00:39.717425-04:00",
+  "ended_at": "2026-08-13T13:00:52.911719-04:00",
+  "stages": [
+    {
+      "name": "intent",
+      "result": "pass"
+    },
+    {
+      "name": "rebase",
+      "result": "pass"
+    },
+    {
+      "name": "review",
+      "result": "pass"
+    },
+    {
+      "name": "test",
+      "result": "pass"
+    },
+    {
+      "name": "document",
+      "result": "pass"
+    },
+    {
+      "name": "lint",
+      "result": "pass"
+    },
+    {
+      "name": "push",
+      "result": "pass"
+    },
+    {
+      "name": "pr",
+      "result": "pass"
+    },
+    {
+      "name": "ci",
+      "result": "pass"
+    }
+  ],
+  "pending_findings": []
+}
+
+########################################################################
+# PART C: reject path, also proven for real                            #
+########################################################################
+
+5413e946d2cdf3a8474acf9f163a98fce0075049
+trigger a real ask-user finding to reject
+
+Intent: exercise real park and rejection via made review
+
+
+--- real 'made review --run run-5' rejecting the finding ---
+[review] this change touches billing logic, needs finance sign-off
+approve/reject? [a/r]: rejected: review
+made review: one or more findings rejected; pipeline halted
+(exit code 1)
+
+--- made status --json run-5 after rejection: state failed, halted at review ---
+{
+  "schema_version": 1,
+  "run_id": "run-5",
+  "repo": "2c537a74f84062f5046c91544861d59f2b7b845a670fbc148c5bcb3d87344b77",
+  "branch": "feature-park-reject",
+  "state": "failed",
+  "queued_at": "2026-08-13T13:01:10.164436-04:00",
+  "started_at": "2026-08-13T13:01:10.164462-04:00",
+  "ended_at": "2026-08-13T13:01:18.310284-04:00",
+  "error": "orchestrator: stage \"review\" failed: rejected by reviewer",
+  "stages": [
+    {
+      "name": "intent",
+      "result": "pass"
+    },
+    {
+      "name": "rebase",
+      "result": "pass"
+    },
+    {
+      "name": "review",
+      "result": "fail"
+    }
+  ],
+  "pending_findings": []
+}

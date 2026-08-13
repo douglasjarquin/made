@@ -1,0 +1,88 @@
+=== F1 Scenario 1: Full pipeline end to end (real binary, real daemon, real hooks) ===
+Date: Thu Aug 13 12:59:29 EDT 2026
+
+--- made daemon status (real background OS process) ---
+made daemon: running (pid 52082)
+
+--- gate init output (already run earlier; re-showing gate layout) ---
+(gate path recorded from actual run below)
+
+--- source repo commit with Intent trailer ---
+e943f17ce4885c26ac23c94dee7eb18e5c03b07f
+add greeting file
+
+Intent: add a friendly greeting file
+
+
+--- real git push made feature-full-pass (through REAL pre-receive + post-receive hooks) ---
+(transcript captured live below)
+remote: gate admit-push: ok        
+remote: gate notify-push: ok (run run-1)        
+To /tmp/made-e2e/home/gates/2c537a74f84062f5046c91544861d59f2b7b845a670fbc148c5bcb3d87344b77/gate.git
+ * [new branch]      feature-full-pass -> feature-full-pass
+
+--- made status --json run-1 (first poll already reached terminal-ish state) ---
+{
+  "schema_version": 1,
+  "run_id": "run-1",
+  "repo": "2c537a74f84062f5046c91544861d59f2b7b845a670fbc148c5bcb3d87344b77",
+  "branch": "feature-full-pass",
+  "state": "running",
+  "queued_at": "2026-08-13T12:58:46.751934-04:00",
+  "started_at": "2026-08-13T12:58:46.751958-04:00",
+  "ended_at": "2026-08-13T12:58:47.362488-04:00",
+  "stages": [
+    {
+      "name": "intent",
+      "result": "pass"
+    },
+    {
+      "name": "rebase",
+      "result": "pass"
+    },
+    {
+      "name": "review",
+      "result": "pass"
+    },
+    {
+      "name": "test",
+      "result": "pass"
+    },
+    {
+      "name": "document",
+      "result": "pass"
+    },
+    {
+      "name": "lint",
+      "result": "pass"
+    },
+    {
+      "name": "push",
+      "result": "pass"
+    },
+    {
+      "name": "pr",
+      "result": "pass"
+    },
+    {
+      "name": "ci",
+      "result": "pass"
+    }
+  ],
+  "pending_findings": []
+}
+
+--- gh invocation log (real fake-gh double invocation record) ---
+invoked: args=auth status
+invoked: args=pr create --title add greeting file --body Evidence: .made/evidence/run-1
+ --base main --head feature-full-pass
+invoked: args=auth status
+invoked: args=pr view https://github.com/example/repo/pull/1 --json mergeStateStatus
+
+--- confirm no merge-shaped gh call ever occurred ---
+CONFIRMED: no pr-merge or merge-shaped invocation in the log
+
+--- real remote now has the pushed branch (via real git push through real hooks) ---
+64cb647c5af52c90a153eeeea9a200b43ad4a738	HEAD
+e943f17ce4885c26ac23c94dee7eb18e5c03b07f	refs/heads/feature-full-pass
+64cb647c5af52c90a153eeeea9a200b43ad4a738	refs/heads/main

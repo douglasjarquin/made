@@ -1,0 +1,70 @@
+=== F1 Scenario 2: Failing test blocks push (real binary, real daemon, real hooks) ===
+Date: Thu Aug 13 13:00:08 EDT 2026
+
+--- pushed .made.yml (allow_repo_commands: true lets this branch override commands.test) ---
+allow_repo_commands: true
+agent: claude
+commands:
+  test: "exit 1"
+  lint: "true"
+
+--- commit with Intent trailer ---
+9e8261ae0aee646f0a123cbad1d47964ff213340
+add file with failing test config
+
+Intent: add a file whose test command will fail
+
+
+--- real git push made feature-test-fail (through REAL pre-receive + post-receive hooks) ---
+remote: gate admit-push: ok        
+remote: gate notify-push: ok (run run-2)        
+To /tmp/made-e2e/home/gates/2c537a74f84062f5046c91544861d59f2b7b845a670fbc148c5bcb3d87344b77/gate.git
+ * [new branch]      feature-test-fail -> feature-test-fail
+
+--- made status --json run-2 ---
+{
+  "schema_version": 1,
+  "run_id": "run-2",
+  "repo": "2c537a74f84062f5046c91544861d59f2b7b845a670fbc148c5bcb3d87344b77",
+  "branch": "feature-test-fail",
+  "state": "failed",
+  "queued_at": "2026-08-13T12:59:37.318433-04:00",
+  "started_at": "2026-08-13T12:59:37.318454-04:00",
+  "ended_at": "2026-08-13T12:59:37.390434-04:00",
+  "error": "orchestrator: stage \"test\" failed: test command \"sh -c exit 1\" failed with exit code 1",
+  "stages": [
+    {
+      "name": "intent",
+      "result": "pass"
+    },
+    {
+      "name": "rebase",
+      "result": "pass"
+    },
+    {
+      "name": "review",
+      "result": "pass"
+    },
+    {
+      "name": "test",
+      "result": "fail"
+    }
+  ],
+  "pending_findings": []
+}
+
+--- git ls-remote on the real remote: no feature-test-fail ref ever appears ---
+64cb647c5af52c90a153eeeea9a200b43ad4a738	HEAD
+e943f17ce4885c26ac23c94dee7eb18e5c03b07f	refs/heads/feature-full-pass
+64cb647c5af52c90a153eeeea9a200b43ad4a738	refs/heads/main
+
+--- gh invocation log: untouched by run-2 (Test failed before Push/PR stages ran) ---
+invoked: args=auth status
+invoked: args=pr create --title add greeting file --body Evidence: .made/evidence/run-1
+ --base main --head feature-full-pass
+invoked: args=auth status
+invoked: args=pr view https://github.com/example/repo/pull/1 --json mergeStateStatus
+
+CONCLUSION: push.Run never ran for this branch (Test failed first, per Task 12's fixed stage order
+intent -> rebase -> review -> test -> document -> lint -> push -> pr -> ci). The real remote was
+never touched, matching the acceptance criterion exactly.
