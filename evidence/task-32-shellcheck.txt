@@ -1,0 +1,28 @@
+cs-lint.sh: ShellCheck 0.11.0 (pinned 0.11.0)
+
+In bin/cs-made-run-lib.sh line 45:
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/cs-timeout-lib.sh"
+  ^-- SC1091 (info): Not following: bin/cs-timeout-lib.sh was not specified as input (see shellcheck -x).
+
+
+In bin/cs-crew-state.sh line 55:
+. "$SCRIPT_DIR/cs-root-lib.sh"
+  ^--------------------------^ SC1091 (info): Not following: bin/cs-root-lib.sh was not specified as input (see shellcheck -x).
+
+
+In bin/cs-crew-state.sh line 59:
+. "$SCRIPT_DIR/cs-herdr-lib.sh"
+  ^---------------------------^ SC1091 (info): Not following: bin/cs-herdr-lib.sh was not specified as input (see shellcheck -x).
+
+
+In bin/cs-crew-state.sh line 61:
+. "$SCRIPT_DIR/cs-meta-lib.sh"
+  ^--------------------------^ SC1091 (info): Not following: bin/cs-meta-lib.sh was not specified as input (see shellcheck -x).
+
+
+In bin/cs-crew-state.sh line 63:
+. "$SCRIPT_DIR/cs-classify-lib.sh"
+  ^-- SC1091 (info): Not following: bin/cs-classify-lib.sh was not specified as input (see shellcheck -x).
+
+For more information:
+  https://www.shellcheck.net/wiki/SC1091 -- Not following: bin/cs-classify-li...

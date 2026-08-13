@@ -110,7 +110,7 @@ Ship a working `made` daemon + CLI + socket API that independently re-implements
 | 12. Review stage + agent adapters | 3, 4, 8, 11 | 13 |
 | 13. Test stage | 4, 8, 12 | 14 |
 | 14. Document stage | 8, 13 | 15 |
-| 15. Lint stage | 8, 14 | 16 |
+| 15. Lint stage | 8, 14 | 17 |
 | 16. GitHub client wrapper | 1 | 17, 18, 19 |
 | 17. Push stage | 8, 15, 16 | 18 |
 | 18. PR stage (open-only) | 16, 17 | 19 |
@@ -871,6 +871,7 @@ Ship a working `made` daemon + CLI + socket API that independently re-implements
   - [ ] `go test ./internal/skill/...` passes.
   - [ ] `make skill` regenerates `skills/made/SKILL.md` byte-identical to a fresh render from `internal/skill/skill.go`.
   - [ ] `make lint` fails when the committed `SKILL.md` is manually drifted from the generator's output, and passes when they match.
+    *(Delivered via `make test` instead: the drift check lives in `internal/skill`'s `TestCommittedSkillFileMatchesGenerator`, so `go test`/CI catches drift rather than `make lint`. Disclosed in evidence/task-23-drift-detected.txt; CI-effective either way.)*
 
   **QA Scenarios**:
   ```
@@ -1288,6 +1289,8 @@ Ship a working `made` daemon + CLI + socket API that independently re-implements
 
   **RESOLVED via plans/made-orchestrator.md**: at the time this plan's own tasks completed, no task wired the 9 stages into a real run, so this F1 could not pass - that gap became made-orchestrator.md's entire reason to exist. made-orchestrator.md's own F1 re-ran these exact two QA scenarios for real (same evidence file paths, now populated) against a real `made` binary, a real daemon, and real generated git hooks - full pass and failing-test-halt both proven live. One refinement: "all 9 stages report success" now means the run's final `state` is `running` (not `completed`) with all 9 `stages[].result == "pass"`, since a CI-passed run stays open pending human merge (a deliberate design decision made during that plan, not a shortfall) - PR-opened-not-merged still holds exactly as stated here.
 
+  **PARTIAL, same caveat as F3**: the second acceptance criterion (zero `no-mistakes` matches in `consigliere/bin/`) holds only on consigliere's `made-migration` branch (PR #76, open). It cannot hold on consigliere's main until that PR merges. The made-side criteria (build/test, forbidden-SCM grep) are fully proven.
+
   **Commit**: NO
 
 - [x] F2. Code Quality Review
@@ -1361,6 +1364,8 @@ Ship a working `made` daemon + CLI + socket API that independently re-implements
 
 ## Commit Strategy
 Each implementation task (1-35) commits independently once its own acceptance criteria and QA scenarios pass, using Conventional Commits (`feat(gitgate): ...`, `feat(pipeline): ...`, `fix(consigliere): ...` for cross-repo migration tasks committed in the consigliere repo). Final Verification Wave tasks (F1-F4) do not commit - they are read-only audits of what waves 1-6 already committed. No task should be committed with failing tests or unresolved lint findings.
+
+**Deviation (disclosed)**: tasks 1-23 were executed before any commit was made, then committed by SUBSYSTEM in one batch (`393413e`..`93004ff` plus plan/state/evidence commits) rather than per-task, per an explicit mid-session decision ("commit now, then per-task going forward"). Additionally `745f7c7` combined Tasks 21 and 22 into one CLI commit. Consigliere tasks 24-35 were committed per-task on that repo's `made-migration` branch (PR #76). Evidence for tasks 24-35 was later copied into this repo's evidence/ directory, where this plan's Verification Strategy says it belongs.
 
 ## Success Criteria
 - `made` fully replaces no-mistakes as consigliere's validation backend; no-mistakes is no longer referenced anywhere in consigliere's bin/, skills/, or config.

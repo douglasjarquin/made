@@ -1,0 +1,51 @@
+=== tests/cs-watch-made-busy.test.sh (busy scenario + full suite) ===
+ok - made_run_state/made_run_is_busy report busy for a running made run
+ok - made_run_state reports busy for a queued made run
+ok - made_run_state/made_run_is_busy report idle for a completed made run
+ok - made_run_state reports idle for a failed made run
+ok - made_run_state reports unreachable when made's daemon is down, never a false idle/busy
+ok - made_run_state reports unreachable when the made binary is missing
+ok - made_run_state reports unreachable on empty made status output
+ok - cs-watch.sh made-status busy-detection: busy/idle/unreachable are all distinct and correct
+
+=== tests/cs-watch-triage.test.sh (regression check, full suite) ===
+ok - a no-verb signal whose soldier is provably working is absorbed (no exit, no queue, suppressor advanced, beacon present)
+ok - a bare turn-end whose soldier is provably working (busy pane) is absorbed
+ok - a bare turn-end whose soldier is not provably working is surfaced (the swallowed-finish guard)
+ok - a no-verb working: note whose soldier is idle with no running pipeline is surfaced
+ok - boss-relevant signal is surfaced (queue + exit) and marked surfaced
+ok - a committed-but-unreviewed lane is surfaced, never absorbed
+ok - a signal already carrying a boss verb takes the short coalescing grace
+ok - a no-verb signal keeps the full grace so a late boss verb can still coalesce
+ok - a stale pane sitting on a terminal status is surfaced (queue + exit)
+ok - a live (non-terminal) headless scout is not stale-triaged (no spurious wake)
+ok - a finished (terminal) headless scout is still surfaced
+ok - a stale terminal-looking status is overridden and absorbed while a run is actively working, then wedge-escalated
+ok - provably-working non-terminal stale is absorbed on first sight, then wedge-escalated past the threshold
+ok - consecutive wedge escalations on the same pane accumulate and demand deep inspection at the threshold
+ok - a not-provably-working non-terminal stale is surfaced immediately (never left to wait out the timer)
+ok - a declared pause is absorbed on first sight, then re-surfaced as a recheck past the threshold, never wedge-escalated
+ok - a busy pane whose turn completed recently is left alone
+ok - a busy pane with no completed turn past the bound wedge-escalates for inspection
+ok - a completed turn resets the busy-turn bound
+ok - a native blocked pane is surfaced immediately with the push reason, deduped across re-arms
+ok - a blocked pane under a declared pause is absorbed (marker committed) instead of escalated
+ok - a hash-registered custom check runs from its validated snapshot and surfaces its output
+ok - an unauthenticated state check is rejected and surfaced without ever being executed
+ok - a registered check whose bytes no longer match its trust binding is rejected without execution
+ok - a heartbeat with no boss-relevant change is absorbed and backs off the cadence
+ok - heartbeat backstop fail-safe surfaces a boss-relevant status the per-wake path missed
+ok - the liveness beacon stays fresh while the watcher absorbs benign wakes (guards never false-alarm)
+ok - with .afk present the watcher reverts to one-shot so the daemon owns triage (no double-triage)
+ok - the event splice returns blocked edges, clears the dedupe marker on working, and fails closed on subscribe failure
+ok - the level reconcile catches a pane already blocked when the subscription (re)connects
+ok - a duplicate watcher invocation no-ops through the singleton lock
+ok - a boss-relevant capo worker event surfaces without the capo taking a turn
+ok - capo worker events dedupe on the surfaced line and skip unmarked homes
+ok - a capo decision survives a later working: append (the exact overnight bug class)
+ok - a resolved capo decision does not resurface
+ok - identically-worded decisions on different tasks each get their own marker and both surface
+ok - a decision reopened under the same key and wording after a resolve is treated as a new surfacing event
+ok - the splice handles exited and output kinds and ignores an unknown one
+ok - the per-cycle snapshot answers pane status without a per-pane query
+ok - a pane absent from the snapshot falls back to a direct query

@@ -1,0 +1,30 @@
+=== Task 29 evidence: --mode made dispatch correctness ===
+
+--- 1. cs-project-mode.sh reports 'made' for a registered project ---
+made off
+
+--- 2. cs-brief.sh --mode made scaffolds a ship brief with the made contract ---
+scaffolded: /var/folders/5j/n805d0vn43g2bjt7ykqmyxmm0000gn/T//task29-dispatch.p6sRzb/home/data/t1/brief.md (ship, mode=made, exec-mode=ultrawork; replace {TASK})
+
+87:Delivery contract: mode=made
+
+--- 3. cs-spawn.sh --mode made dispatches through the herdr shim in order (worktree create, pane run) ---
+spawned t1 kind=ship mode=made yolo=off workspace=w1 pane=w1:p1 worktree=/private/var/folders/5j/n805d0vn43g2bjt7ykqmyxmm0000gn/T/task29-dispatch.p6sRzb/wt-t1
+
+herdr call order recorded by the shim:
+status --json
+worktree create
+pane run
+agent get
+agent get
+pane read
+
+recorded task metadata (mode=made persisted):
+workspace=w1
+pane=w1:p1
+worktree=/private/var/folders/5j/n805d0vn43g2bjt7ykqmyxmm0000gn/T/task29-dispatch.p6sRzb/wt-t1
+project=/private/var/folders/5j/n805d0vn43g2bjt7ykqmyxmm0000gn/T/task29-dispatch.p6sRzb/repo-alpha
+kind=ship
+mode=made
+yolo=off
+harness=claude

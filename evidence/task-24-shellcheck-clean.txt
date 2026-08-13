@@ -1,0 +1,2 @@
+$ shellcheck bin/cs-made-lib.sh
+exit=0

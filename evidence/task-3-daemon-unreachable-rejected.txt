@@ -1,22 +1,18 @@
-=== go test ./internal/gitgate/... -v ===
-=== RUN   TestInitBareCreatesBareRepository
---- PASS: TestInitBareCreatesBareRepository (0.02s)
-=== RUN   TestInitBareRejectsEmptyPath
---- PASS: TestInitBareRejectsEmptyPath (0.00s)
-=== RUN   TestInstallHooksBakesBinaryPathAndMadeHomeIntoPreReceive
---- PASS: TestInstallHooksBakesBinaryPathAndMadeHomeIntoPreReceive (0.01s)
-=== RUN   TestInstallHooksPostReceiveAlwaysExitsZero
---- PASS: TestInstallHooksPostReceiveAlwaysExitsZero (0.01s)
-=== RUN   TestGatePathIsDeterministicPerRepo
---- PASS: TestGatePathIsDeterministicPerRepo (0.00s)
-=== RUN   TestWorktreesDirIsSiblingOfGateGit
---- PASS: TestWorktreesDirIsSiblingOfGateGit (0.00s)
-=== RUN   TestAddWorktreeChecksOutRef
---- PASS: TestAddWorktreeChecksOutRef (0.76s)
-=== RUN   TestWorktreeRemovedAfterSimulatedStageFailure
---- PASS: TestWorktreeRemovedAfterSimulatedStageFailure (0.85s)
-PASS
-ok  	github.com/douglasjarquin/made/internal/gitgate	(cached)
+=== Scenario: pre-receive rejects when daemon unreachable ===
+$ ls $MADE_HOME (no daemon running, no socket)
+total 0
+drwxr-xr-x@ 3 douglasjarquin  wheel   96 Aug 13 18:03 .
+drwxr-xr-x@ 7 douglasjarquin  wheel  224 Aug 13 18:03 ..
+drwxr-xr-x@ 3 douglasjarquin  wheel   96 Aug 13 18:03 gates
 
-=== go vet ./internal/gitgate/... ===
-(vet exit code: 0)
+$ git push made feature-x   (daemon NOT running)
+remote: made gate admit-push: dial /private/tmp/claude-501/-Users-douglasjarquin-github-douglasjarquin-made/328d892a-f6d9-4303-8c9a-24324ae4857f/scratchpad/task3-recapture/home/daemon.sock: dial unix /private/tmp/claude-501/-Users-douglasjarquin-github-douglasjarquin-made/328d892a-f6d9-4303-8c9a-24324ae4857f/scratchpad/task3-recapture/home/daemon.sock: connect: invalid argument        
+To /private/tmp/claude-501/-Users-douglasjarquin-github-douglasjarquin-made/328d892a-f6d9-4303-8c9a-24324ae4857f/scratchpad/task3-recapture/home/gates/ed81503c23bd6032cad82b253a9a87494123b4a5a5e83cf76297673292594deb/gate.git
+ ! [remote rejected] feature-x -> feature-x (pre-receive hook declined)
+error: failed to push some refs to '/private/tmp/claude-501/-Users-douglasjarquin-github-douglasjarquin-made/328d892a-f6d9-4303-8c9a-24324ae4857f/scratchpad/task3-recapture/home/gates/ed81503c23bd6032cad82b253a9a87494123b4a5a5e83cf76297673292594deb/gate.git'
+push exit code: 1
+
+$ git ls-remote made   (gate received nothing)
+3a6e20e7f83c2317f9828cfca7929f06bab88846	HEAD
+3a6e20e7f83c2317f9828cfca7929f06bab88846	refs/heads/main
+3a6e20e7f83c2317f9828cfca7929f06bab88846	refs/remotes/origin/main

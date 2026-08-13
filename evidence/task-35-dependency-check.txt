@@ -1,0 +1,133 @@
+=== Task 35: cs-deps-lib.sh / cs-harness-lib.sh / cs-sessionstart-run.sh / cs-update.sh migration ===
+
+--- TDD: tests/cs-deps-lib.test.sh (new file; was RED before the cs-deps-lib.sh source change, GREEN after) ---
+ok - cs_deps_tools optional reports made, not no-mistakes
+ok - cs_deps_purpose made describes made, not no-mistakes
+ok - cs_deps_hint made installs from made's own repo
+ok - cs-deps-lib reports made (not no-mistakes) as the optional delivery-pipeline dependency
+exit=0
+
+--- Regression fix: tests/cs-doctor.test.sh ---
+cs_deps_hint's old-name/old-URL assertion (line 112-114) was stale after the
+cs-deps-lib.sh rename and would have failed; updated it to assert made / the
+douglasjarquin/made URL instead of no-mistakes / kunchenguid.
+ok - --help and argument validation
+ok - bare machine: required gaps fail with suggestions, dependent checks skip
+ok - optional and contributor gaps are reported without failing
+ok - a present-but-unusable tool fails the service check, not the tool check
+ok - cs-bootstrap.sh and cs-doctor.sh read one shared inventory
+ok - every inventory tool has a purpose and an install suggestion
+ok - doctor gates the axi floors it shares with bootstrap
+ok - the config section reports migration state, symlink targets, and the loss tripwires
+ok - telemetry is reported as optional: disabled informs, enabled names its path, malformed warns
+ok - cs-doctor behaviors
+exit=0
+
+--- Regression: tests/cs-harness-lib.test.sh ---
+ok - CS_HARNESS_OVERRIDE has highest precedence
+ok - host/harness.conf beats env and ignores invalid values
+ok - CLAUDECODE env then default codex
+ok - valid and binary
+ok - the autonomy flag per harness
+ok - config/permission-mode.conf selects a narrower claude launch mode
+ok - config/permission-mode.conf fails closed on unusable, unknown, and duplicate records
+ok - launch strings per harness and role
+ok - configured permission mode reaches every claude launch role and fails closed
+ok - claude launch roles forward the selected credential store
+ok - claude settings json shape (touch-only)
+ok - claude folder-trust pre-seed and cleanup
+ok - codex folder-trust pre-seed and cleanup
+ok - codex trust round trip is byte-identical and keeps table separation
+ok - codex trust store path resolution
+ok - skill/resume/instruction/busy accessors
+ok - cs_harness_omo_installed detects the real plugin cache dir per harness, isolated from the developer's own installs
+ok - cs-harness-lib behavior
+exit=0
+
+--- Regression: tests/cs-sessionstart-run.test.sh ---
+ok - source=startup runs the full digest
+ok - unrecognized and unreadable sources fall through to the full digest
+ok - clear after a truncated startup finishes startup instead of re-emitting
+ok - clear and compact re-emit only for the lock owner with completion proof
+ok - a completion record from another owner never gates a re-emit
+ok - resume, reload, and fork delegate to one typed nudge line
+ok - a gate agent and an unmarked linked task worktree never start a session
+ok - the runtime bound truncates loudly, names stalled and never-run stages, and exits 0
+ok - a completed locked startup records completion proof matching the lock owner
+ok - --reemit re-verifies the lock, drains wakes, skips sweeps, and keeps repair ownership
+ok - CS_BOOTSTRAP_LOCKED decides tangle repair ownership under detect-only
+ok - the tracked session-open hook entries run the digest at home and stay inert elsewhere
+ok - a bound that cannot be established is reported as never-ran, never as a stall
+all cs-sessionstart-run tests passed
+exit=0
+
+--- Regression: tests/cs-update.test.sh ---
+ok - already-current no-op
+ok - instruction FF triggers reread
+ok - non-instruction FF skips reread
+ok - tracked-dirty skips; untracked never blocks
+ok - diverged branch skips
+ok - tangled checkout skips
+ok - the capo sweep summary names advanced capos and skips the rest
+ok - cs-update behaviors
+exit=0
+
+--- Regression: tests/cs-bootstrap.test.sh (consumes cs-deps-lib.sh's optional-tool list) ---
+Note: one ad hoc run during development hit a transient failure in the
+'skip + only is not the unsplit run' partition check (an unrelated, timing-
+sensitive multiset comparison unaffected by this task's edits); 5 immediate
+reruns and the run captured below all passed cleanly.
+ok - gh-axi floor: below fires, at-floor is silent
+ok - tasks-axi floor: below fires, at-floor is silent
+ok - lavish-axi floor: below fires, at-floor is silent
+ok - quota-axi floor: below fires, at-floor is silent
+ok - gh-axi unparseable build: diagnostic fires
+ok - tasks-axi unparseable build: diagnostic fires
+ok - lavish-axi unparseable build: diagnostic fires
+ok - quota-axi unparseable build: diagnostic fires
+ok - one clean release, bare or behind a tool-name prefix, is comparable
+ok - a failing --version never reports as an above-floor number
+ok - gh-axi absent: reported as absent, not as an out-of-date build
+ok - quota-axi absent: reported as absent, not as an out-of-date build
+ok - a version-reporting fake suite is never reported as out of date
+ok - CS_BOOTSTRAP_NETWORK skip and only are a strict partition of the unsplit run
+ok - an unrecognized CS_BOOTSTRAP_NETWORK falls back to the full run
+ok - a deferred worker sweeps only while state/.lock still names the session that asked
+ok - cs-bootstrap axi version floors and network phase split
+exit=0
+
+=== shellcheck bin/cs-deps-lib.sh bin/cs-harness-lib.sh bin/cs-sessionstart-run.sh bin/cs-update.sh ===
+
+In bin/cs-sessionstart-run.sh line 50:
+. "$SCRIPT_DIR/cs-root-lib.sh"
+  ^--------------------------^ SC1091 (info): Not following: bin/cs-root-lib.sh was not specified as input (see shellcheck -x).
+
+
+In bin/cs-sessionstart-run.sh line 53:
+CS_LAYOUT_GATE_SKIP=
+^-----------------^ SC2034 (warning): CS_LAYOUT_GATE_SKIP appears unused. Verify use (or export if used externally).
+
+
+In bin/cs-sessionstart-run.sh line 56:
+. "$SCRIPT_DIR/cs-primary-scope-lib.sh"
+  ^-- SC1091 (info): Not following: bin/cs-primary-scope-lib.sh was not specified as input (see shellcheck -x).
+
+
+In bin/cs-sessionstart-run.sh line 134:
+    . "$SCRIPT_DIR/cs-operational-input.sh"
+      ^-- SC1091 (info): Not following: bin/cs-operational-input.sh was not specified as input (see shellcheck -x).
+
+
+In bin/cs-update.sh line 26:
+. "$SCRIPT_DIR/cs-root-lib.sh"
+  ^--------------------------^ SC1091 (info): Not following: bin/cs-root-lib.sh was not specified as input (see shellcheck -x).
+
+For more information:
+  https://www.shellcheck.net/wiki/SC2034 -- CS_LAYOUT_GATE_SKIP appears unuse...
+  https://www.shellcheck.net/wiki/SC1091 -- Not following: bin/cs-operational...
+shellcheck exit=1
+(All findings above are pre-existing SC1091/SC2034 notes at lines unrelated
+to this task's edits - confirmed identical via 'git stash' before/after diff.)
+
+=== grep -n "no-mistakes" bin/cs-deps-lib.sh bin/cs-harness-lib.sh bin/cs-sessionstart-run.sh bin/cs-update.sh (must be zero matches) ===
+grep exit=1 (1 = no matches found, as expected: zero matches)

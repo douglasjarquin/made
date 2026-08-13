@@ -1,0 +1,115 @@
+Task 25 - Git remote migration (no-mistakes remote -> made remote)
+====================================================================
+
+Scope: bin/cs-home-seed.sh, initialize_no_mistakes_project()'s remote-seeding
+check at (originally) lines 475 and 479 only. No other lines in that file
+touched. Lines 482/483/486/487 (the no-mistakes init/doctor shellout) are
+Task 31's territory and were left untouched.
+
+--------------------------------------------------------------------
+1. Implementation diff (git diff bin/cs-home-seed.sh)
+--------------------------------------------------------------------
+diff --git a/bin/cs-home-seed.sh b/bin/cs-home-seed.sh
+index c4bfb1e..8efcfb4 100755
+--- a/bin/cs-home-seed.sh
++++ b/bin/cs-home-seed.sh
+@@ -472,11 +472,11 @@ initialize_no_mistakes_project() {  # <home> <project> <created:0|1>
+   mode=$(project_mode_in_home "$home" "$project")
+   [ "$mode" = no-mistakes ] || return 0
+   dst="$home/projects/$project"
+-  if git -C "$dst" remote get-url no-mistakes >/dev/null 2>&1; then
++  if git -C "$dst" remote get-url made >/dev/null 2>&1; then
+     return 0
+   fi
+   if [ "$created" != 1 ]; then
+-    echo "error: seeded project $project at $dst is not initialized for no-mistakes; refusing to mutate preexisting clone" >&2
++    echo "error: seeded project $project at $dst is not initialized for made; refusing to mutate preexisting clone" >&2
+     return 1
+   fi
+   command -v no-mistakes >/dev/null 2>&1 || {
+
+--------------------------------------------------------------------
+2. Test additions (tests/cs-home-seed.test.sh, section 11a/11b): TDD RED then GREEN
+--------------------------------------------------------------------
+New sections 11a/11b exercise initialize_no_mistakes_project's created=0
+(preexisting-clone) branch only, so they never reach the no-mistakes/made
+init-and-doctor shellout at lines 482-487 (Task 31's territory):
+  11a. a preexisting destination clone that already carries a `made` remote
+       (as `made gate init` would leave behind) is accepted as already
+       initialized, and grows no `no-mistakes` remote.
+  11b. a preexisting destination clone carrying only a legacy `no-mistakes`
+       remote (no `made` remote) is now correctly REJECTED as uninitialized
+       (the old remote name no longer satisfies the check).
+
+--- RED (before the fix; bin/cs-home-seed.sh reverted, test file with new
+    sections applied) -- tail of `bash tests/cs-home-seed.test.sh`:
+
+ok - sweep retrofits an absent host/activation.conf (idempotently)
+ok - sweep never overwrites a present host/activation.conf
+ok - sweep preserves a dangling host/activation.conf symlink
+ok - sweep rejects a symlinked host directory
+not ok - seeding an already made-gated project must succeed: error: seeded project gamma at /private/var/folders/5j/n805d0vn43g2bjt7ykqmyxmm0000gn/T/cs-home-seed.3Xwmjn/capos/alpha-capo/projects/gamma is not initialized for no-mistakes; refusing to mutate preexisting clone
+exit status: 1
+
+--- GREEN (after the fix) -- full `bash tests/cs-home-seed.test.sh` output:
+
+ok - happy-path seed provisions a marked detached-worktree home
+ok - re-seed of the same id is idempotent (registry round-trip)
+ok - registry validate refuses duplicate ids
+ok - an EOF-truncated registry still refuses a duplicate home and an id rebind
+ok - registry validate refuses a malformed row instead of skipping it
+ok - transactional seed rolls back home, clones, brief, and registry on failure
+ok - missing charter refuses loudly with nothing created
+ok - --no-projects and a project list are mutually exclusive
+ok - sweep fast-forwards a registered capo home (silent when current)
+ok - sweep never disturbs a dirty capo home
+ok - liveness sweep respawns a confidently dead capo
+ok - liveness sweep leaves a live capo alone
+ok - liveness sweep never acts on an inconclusive reading
+ok - liveness sweep preserves the meta record when respawn fails
+ok - sweep stays silent for a registered capo that has no live record yet
+ok - sweep reports a live record that has no endpoint
+ok - sweep retrofits an absent host/activation.conf (idempotently)
+ok - sweep never overwrites a present host/activation.conf
+ok - sweep preserves a dangling host/activation.conf symlink
+ok - sweep rejects a symlinked host directory
+ok - a preexisting made remote satisfies no-mistakes-mode initialization
+ok - a legacy no-mistakes remote no longer satisfies made-mode initialization
+ok - cs-home-seed provisioning, rollback, and sweep behavior
+exit status: 0
+
+--------------------------------------------------------------------
+3. shellcheck
+--------------------------------------------------------------------
+$ shellcheck -x bin/cs-home-seed.sh
+(no output)
+exit=0
+
+$ shellcheck -x tests/cs-home-seed.test.sh
+(no output)
+exit=0
+
+Note: `shellcheck bin/cs-home-seed.sh` (no -x) alone emits SC1091 info notices
+for every `. "$SCRIPT_DIR/cs-*-lib.sh"` source line because the sibling files
+aren't passed as input; that is pre-existing and unrelated to this change
+(reproduced identically on the pre-Task-25 revision via `git stash`). The
+project's own lint driver, bin/cs-lint.sh, resolves this by linting the full
+source-linked file set; running it confirms zero findings anywhere in
+bin/cs-home-seed.sh or tests/cs-home-seed.test.sh (all findings it reports
+belong to other in-flight, unrelated migration tasks in this same worktree).
+
+--------------------------------------------------------------------
+4. Scope confirmation: grep -n "no-mistakes" bin/cs-home-seed.sh
+--------------------------------------------------------------------
+443:    echo "error: project $project is local-only; capo routes support only no-mistakes and direct-PR projects" >&2
+473:  [ "$mode" = no-mistakes ] || return 0
+482:  command -v no-mistakes >/dev/null 2>&1 || {
+483:    echo "error: no-mistakes command not found; cannot initialize $project in $home" >&2
+486:  ( cd "$dst" && no-mistakes init && no-mistakes doctor ) || {
+487:    echo "error: failed to initialize no-mistakes for $project at $dst" >&2
+
+Former lines 475 and 479 (the remote-seeding check and its error message) no
+longer appear in this list: both now reference `made`, not `no-mistakes`.
+Remaining matches are explicitly out of scope for Task 25 (443: capo-routing
+error message; 473: delivery-mode string; 482/483/486/487: the init/doctor
+shellout, Task 31's job).

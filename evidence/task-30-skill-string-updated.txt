@@ -1,0 +1,95 @@
+=== Task 30: skill string migration ($no-mistakes -> $made) in bin/cs-brief.sh ===
+
+--- Site verification: 'no-mistakes' occurrences remaining in bin/cs-brief.sh (must be ONLY Task 29's mode-semantics sites, not this task's 7 sites) ---
+9:# Usage: cs-brief.sh <task-id> <repo-name> --mode <no-mistakes|direct-PR|local-only> [--exec-mode <ultrawork|plan-first>] [--issue <n>] [--herdr-lab]
+63:#   no-mistakes  implement -> needs-review: (consigliere reviews the commit and
+386:7. Never stop, restart, or update the shared \`no-mistakes\` daemon - it is one instance serving
+387:   every lane/home, so restarting it kills other lanes' in-flight pipeline runs. On ANY no-mistakes
+426:# Shared by direct-PR and no-mistakes only (local-only never opens a PR, so it
+456:This task ships **direct-PR**: you raise the PR yourself, without the no-mistakes pipeline.
+467:Do NOT run /no-mistakes. The configured merge authority decides whether to merge the PR; consigliere relays the outcome.
+482:  *)  # no-mistakes; the closed-set validation above admits nothing else
+533:  elif [ "$MODE" = no-mistakes ]; then
+538:You do NOT open the PR - the no-mistakes pipeline owns push and PR creation. So do not try to create or find a PR to satisfy this; instead route the closing keyword into the material the pipeline builds the PR from:
+539:- Put the line \`Closes #$ISSUE\` in your commit message body before you run no-mistakes.
+540:- Include "This PR closes #$ISSUE." in the \`--intent\` you pass to \`no-mistakes axi run\`, so the pipeline's PR step writes the closing keyword into the PR description.
+599:7. Never stop, restart, or update the shared \`no-mistakes\` daemon - it is one instance serving
+600:   every lane/home, so restarting it kills other lanes' in-flight pipeline runs. On ANY no-mistakes
+
+--- New failing-first test: tests/cs-brief-made-skill-string.test.sh ---
+ok - codex no-mistakes-mode brief names made at every skill-invocation site
+ok - claude no-mistakes-mode brief names made at every skill-invocation site
+ok - cs-brief made skill-string migration
+EXIT=0
+
+--- Existing suite: tests/cs-brief.test.sh (must still pass; line 31 updated to match this task's site-484 change) ---
+ok - ship brief (no-mistakes) scaffold
+ok - existing brief refuses overwrite
+ok - ship brief (direct-PR) scaffold
+ok - ship brief (local-only) scaffold
+ok - needs-review appears only in no-mistakes briefs
+ok - scout brief scaffold
+ok - ship and scout briefs carry the unmarked-boss-message rule
+ok - herdr-lab guarded brief
+ok - ship brief --issue bakes in the Closes contract
+ok - ship brief --issue local-only variant
+ok - --issue misuse refusals
+ok - capo charter scaffold
+ok - capo project-list gating
+ok - flag misuse refusals
+ok - ship brief defaults --exec-mode to ultrawork
+ok - ship brief --exec-mode plan-first on codex names ulw-plan/start-work
+ok - ship brief --exec-mode plan-first on claude names omo:planing-prometheustic/omo:start-work
+ok - --exec-mode misuse refusals and the scout regression guard
+ok - the omo guard refuses plan-first and warns-but-proceeds on ultrawork when the plugin is absent
+ok - no-mistakes brief attaches bossless evidence via committed file + intent pointer, never a PR edit
+ok - direct-PR brief attaches bossless evidence via committed file + a short PR-body section
+ok - local-only brief is untouched by the bossless-evidence attachment step
+ok - the render-and-commit recipe embedded in a real generated brief works end to end against a fixture ledger
+ok - cs-brief behaviors
+EXIT=0
+
+--- shellcheck bin/cs-brief.sh ---
+
+In bin/cs-brief.sh line 100:
+. "$SCRIPT_DIR/cs-marker-lib.sh"
+  ^----------------------------^ SC1091 (info): Not following: bin/cs-marker-lib.sh was not specified as input (see shellcheck -x).
+
+
+In bin/cs-brief.sh line 102:
+. "$SCRIPT_DIR/cs-classify-lib.sh"
+  ^-- SC1091 (info): Not following: bin/cs-classify-lib.sh was not specified as input (see shellcheck -x).
+
+
+In bin/cs-brief.sh line 105:
+. "$SCRIPT_DIR/cs-delivery-lib.sh"
+  ^-- SC1091 (info): Not following: bin/cs-delivery-lib.sh was not specified as input (see shellcheck -x).
+
+
+In bin/cs-brief.sh line 107:
+. "$SCRIPT_DIR/cs-root-lib.sh"
+  ^--------------------------^ SC1091 (info): Not following: bin/cs-root-lib.sh was not specified as input (see shellcheck -x).
+
+
+In bin/cs-brief.sh line 109:
+. "$SCRIPT_DIR/cs-exec-mode-lib.sh"
+  ^-- SC1091 (info): Not following: bin/cs-exec-mode-lib.sh was not specified as input (see shellcheck -x).
+
+
+In bin/cs-brief.sh line 111:
+. "$SCRIPT_DIR/cs-harness-lib.sh"
+  ^-----------------------------^ SC1091 (info): Not following: bin/cs-harness-lib.sh was not specified as input (see shellcheck -x).
+
+For more information:
+  https://www.shellcheck.net/wiki/SC1091 -- Not following: bin/cs-classify-li...
+EXIT=1
+
+--- shellcheck tests/cs-brief-made-skill-string.test.sh ---
+
+In tests/cs-brief-made-skill-string.test.sh line 22:
+. "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+  ^-- SC1091 (info): Not following: tests/lib.sh was not specified as input (see shellcheck -x).
+
+For more information:
+  https://www.shellcheck.net/wiki/SC1091 -- Not following: tests/lib.sh was n...
+EXIT=1

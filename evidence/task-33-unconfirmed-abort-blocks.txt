@@ -1,0 +1,158 @@
+############################################################
+# Part 1: no --force. Teardown must REFUSE and leave everything intact.
+############################################################
+=== running: cs-teardown.sh p2 ===
+note: concluding this task's made run parked at a gate before cleanup.
+REFUSED: this task's made run is still parked at a gate after an abort attempt.
+Nothing was removed. Retry once the daemon responds, or get the boss's explicit OK to discard, then --force.
+
+=== exit code: 1 ===
+
+=== made CLI calls made by teardown ===
+[made called from /var/folders/5j/n805d0vn43g2bjt7ykqmyxmm0000gn/T/cs-teardown-evidence2.frGdsW/wt-p2] axi status
+[made called from /var/folders/5j/n805d0vn43g2bjt7ykqmyxmm0000gn/T/cs-teardown-evidence2.frGdsW/wt-p2] axi abort
+[made called from /var/folders/5j/n805d0vn43g2bjt7ykqmyxmm0000gn/T/cs-teardown-evidence2.frGdsW/wt-p2] axi status
+[made called from /var/folders/5j/n805d0vn43g2bjt7ykqmyxmm0000gn/T/cs-teardown-evidence2.frGdsW/wt-p2] axi status
+[made called from /var/folders/5j/n805d0vn43g2bjt7ykqmyxmm0000gn/T/cs-teardown-evidence2.frGdsW/wt-p2] axi status
+
+=== worktree/meta state after refusal ===
+worktree still present: /var/folders/5j/n805d0vn43g2bjt7ykqmyxmm0000gn/T/cs-teardown-evidence2.frGdsW/wt-p2
+meta still present: /var/folders/5j/n805d0vn43g2bjt7ykqmyxmm0000gn/T/cs-teardown-evidence2.frGdsW/state/p2.meta
+task branch cs/p2 still present
+
+=== assertions (Part 1) ===
+PASS: teardown REFUSED (exit 1), naming the still-parked made run, and left the worktree/branch/meta untouched.
+
+############################################################
+# Part 2: --force. Explicit discard authority downgrades the refusal to a
+# named WARNING and teardown proceeds anyway (same branching as before this
+# migration, now against made instead of no-mistakes).
+############################################################
+=== running: cs-teardown.sh p2 --force ===
+note: concluding this task's made run parked at a gate before cleanup.
+WARNING: this task's made run is still parked at a gate after an abort attempt; --force is proceeding. Check it by hand.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WORKTREE TANGLE - PRIMARY CHECKOUT IS ON A FEATURE BRANCH
+●  /private/tmp/claude-501/-Users-douglasjarquin-github-douglasjarquin-made/328d892a-f6d9-4303-8c9a-24324ae4857f/scratchpad/consigliere-made-migration is on 'made-migration', not its default branch 'main'.
+●  A soldier likely branched/committed in the primary instead of its own worktree.
+●  The work is SAFE on the 'made-migration' ref.
+●  Restore the primary to 'main':
+●      git -C /private/tmp/claude-501/-Users-douglasjarquin-github-douglasjarquin-made/328d892a-f6d9-4303-8c9a-24324ae4857f/scratchpad/consigliere-made-migration checkout main
+●  then re-validate 'made-migration' in a proper isolated worktree.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/var/folders/5j/n805d0vn43g2bjt7ykqmyxmm0000gn/T/cs-teardown-evidence2.frGdsW/proj-p2: skipped: no origin remote
+teardown p2 complete (pane <none>, worktree /var/folders/5j/n805d0vn43g2bjt7ykqmyxmm0000gn/T/cs-teardown-evidence2.frGdsW/wt-p2)
+reminder: record completion in the backlog and re-evaluate queued work.
+
+=== exit code: 0 ===
+
+=== assertions (Part 2) ===
+PASS: --force downgraded the refusal to a named WARNING and completed teardown.
+
+NOTE: the "WORKTREE TANGLE" banner above is unrelated pre-existing bin/cs-guard.sh
+behavior (invoked by bin/cs-fleet-sync.sh at the end of a successful ship-mode
+teardown) warning that THIS repo checkout - the one this evidence was captured
+in - is on the made-migration feature branch rather than main. That is expected
+for this migration work and is not part of the Task 33 abort/teardown logic
+under test; it does not affect the exit code or any assertion above.
+
+############################################################
+# Full tests/cs-teardown.test.sh suite run (all 22 cases, including
+# the general-purpose fixtures in tests/ that also exercise conclude_nm_run)
+############################################################
+ok - dirty ship worktree refuses
+ok - committed-unlanded worktree refuses
+ok - squash-landed content teardown completes
+ok - clean worktree teardown completes and cleans this task's watcher markers
+ok - scout report gate
+ok - --force discard path
+ok - tampered artifact refuses cleanup
+ok - pane quiesce runs before the safety proof
+ok - records are retained unless the pane is proven gone
+ok - --force proceeds past the gate but never silently
+ok - retiring a dotted capo id leaves the near-miss route intact
+ok - non-made mode skips run conclusion
+On branch main
+nothing to commit, working tree clean
+ok - unreadable made status fails closed
+ok - a parked run attributed to this task is aborted and confirmed before cleanup
+ok - a parked run that will not conclude fails the teardown closed
+ok - identity mismatch refuses abort without touching the run
+ok - unreadable post-abort status fails closed
+ok - a parked run on another branch is left untouched
+ok - a run on this branch at a diverged head is left untouched
+ok - a retried teardown after a partial first attempt converges
+ok - leaked worktree processes are reaped and unrelated processes are spared
+ok - cs-teardown landed-work proofs
+
+suite exit code: 0
+
+############################################################
+# shellcheck bin/cs-teardown.sh
+############################################################
+
+In bin/cs-teardown.sh line 77:
+. "$SCRIPT_DIR/cs-herdr-lib.sh"
+  ^---------------------------^ SC1091 (info): Not following: bin/cs-herdr-lib.sh was not specified as input (see shellcheck -x).
+
+
+In bin/cs-teardown.sh line 79:
+. "$SCRIPT_DIR/cs-meta-lib.sh"
+  ^--------------------------^ SC1091 (info): Not following: bin/cs-meta-lib.sh was not specified as input (see shellcheck -x).
+
+
+In bin/cs-teardown.sh line 81:
+. "$SCRIPT_DIR/cs-harness-lib.sh"
+  ^-----------------------------^ SC1091 (info): Not following: bin/cs-harness-lib.sh was not specified as input (see shellcheck -x).
+
+
+In bin/cs-teardown.sh line 83:
+. "$SCRIPT_DIR/cs-made-run-lib.sh"
+  ^-- SC1091 (info): Not following: bin/cs-made-run-lib.sh was not specified as input (see shellcheck -x).
+
+
+In bin/cs-teardown.sh line 85:
+. "$SCRIPT_DIR/cs-made-lib.sh"
+  ^--------------------------^ SC1091 (info): Not following: bin/cs-made-lib.sh was not specified as input (see shellcheck -x).
+
+
+In bin/cs-teardown.sh line 87:
+CS_LOCK_LOG_PREFIX="cs-teardown" . "$SCRIPT_DIR/cs-lock-lib.sh"
+                                   ^--------------------------^ SC1091 (info): Not following: bin/cs-lock-lib.sh was not specified as input (see shellcheck -x).
+
+
+In bin/cs-teardown.sh line 90:
+. "$SCRIPT_DIR/cs-capo-registry-lib.sh"
+  ^-- SC1091 (info): Not following: bin/cs-capo-registry-lib.sh was not specified as input (see shellcheck -x).
+
+
+In bin/cs-teardown.sh line 94:
+. "$SCRIPT_DIR/cs-telemetry-lib.sh"
+  ^-- SC1091 (info): Not following: bin/cs-telemetry-lib.sh was not specified as input (see shellcheck -x).
+
+
+In bin/cs-teardown.sh line 97:
+. "$SCRIPT_DIR/cs-root-lib.sh"
+  ^--------------------------^ SC1091 (info): Not following: bin/cs-root-lib.sh was not specified as input (see shellcheck -x).
+
+
+In bin/cs-teardown.sh line 105:
+META="$STATE/$ID.meta"
+      ^----^ SC2153 (info): Possible misspelling: STATE may not be assigned. Did you mean state?
+
+For more information:
+  https://www.shellcheck.net/wiki/SC1091 -- Not following: bin/cs-capo-regist...
+  https://www.shellcheck.net/wiki/SC2153 -- Possible misspelling: STATE may n...
+shellcheck exit code (default severity, includes info): 1
+
+shellcheck --severity=warning bin/cs-teardown.sh (excludes info-level):
+shellcheck --severity=warning exit code: 0
+
+Note: the 10 SC1091/SC2153 info-level findings above are pre-existing
+(baseline HEAD version of this file already had 9 SC1091 + 2 SC2153
+before this task's changes - SC1091 is shellcheck being unable to follow
+sourced sibling scripts without -x, SC2153 flags the STATE var name as a
+possible misspelling of 'state', both pre-existing and unrelated to this
+migration). The one new SC1091 is the newly added 'source cs-made-lib.sh'
+line. Zero warning-or-higher severity findings, matching the file's
+state before this task.

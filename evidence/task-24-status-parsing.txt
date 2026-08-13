@@ -1,0 +1,18 @@
+$ bash tests/cs-made-lib.test.sh
+--- RED: run with bin/cs-made-lib.sh temporarily removed ---
+tests/cs-made-lib.test.sh: line 25: /private/tmp/claude-501/-Users-douglasjarquin-github-douglasjarquin-made/328d892a-f6d9-4303-8c9a-24324ae4857f/scratchpad/consigliere-made-migration/bin/cs-made-lib.sh: No such file or directory
+tests/cs-made-lib.test.sh: line 63: cs_made_status: command not found
+not ok - cs_made_status must succeed against a mocked made
+exit=1
+
+--- GREEN: run with bin/cs-made-lib.sh implemented ---
+ok - cs_made_status echoes made status --json's parsed fields
+ok - cs_made_status forwards an explicit run-id
+ok - cs_made_gate_init forwards to made gate init
+ok - cs_made_doctor forwards to made doctor
+ok - cs_made_daemon_start forwards to made daemon start
+ok - cs_made_daemon_stop forwards to made daemon stop
+ok - cs_made_abort runs made axi abort from the given worktree
+ok - cs_made_require reports a missing made binary
+ok - cs-made-lib shim forwards to the made CLI
+exit=0

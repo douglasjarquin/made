@@ -1,0 +1,16 @@
+=== RED confirmation: made_run_state removed -> test fails ===
+tests/cs-watch-made-busy.test.sh: line 46: made_run_state: command not found
+not ok - made_run_state must report busy for state=running, got ''
+exit code: 1
+
+=== GREEN: cs_watch_made_busy unreachable-scenario tests (subset) ===
+ok - made_run_state reports unreachable when made's daemon is down, never a false idle/busy
+ok - made_run_state reports unreachable when the made binary is missing
+ok - made_run_state reports unreachable on empty made status output
+ok - cs-watch.sh made-status busy-detection: busy/idle/unreachable are all distinct and correct
+
+=== shellcheck -x bin/cs-watch.sh ===
+shellcheck exit: 0
+
+=== grep -n "no-mistakes" bin/cs-watch.sh (must be empty) ===
+grep exit: 1 (1 = zero matches, confirmed)

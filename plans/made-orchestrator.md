@@ -722,6 +722,8 @@ Wire made's 9 already-tested pipeline stages into one real, socket-authenticated
 ## Commit Strategy
 Each implementation task (1-16) commits independently once its acceptance criteria and QA scenarios pass, Conventional Commits (`feat(orchestrator): ...`, `fix(gitgate): ...`). Final Verification Wave tasks do not commit.
 
+**Deviation (disclosed)**: tasks 1-8 ran before the repo's first commit batch, so their work landed inside made-rewrite's SUBSYSTEM commits (`3e5756b` gitgate covers tasks 3+8, `4f7c370` config covers task 2, `2db916b` daemon covers tasks 1+4+5, `745f7c7` cli covers tasks 6+7). Tasks 9+11+13 were bundled (`7697a36`) and 14+15 bundled (`9a87086`) as same-wave work; only tasks 10 (`54f315e`), 12 (`89044e9`), and 16 (`f4731d0`) got clean single-task commits. All work is present and verified; the granularity, not the content, deviated.
+
 ## Success Criteria
 - A real `git push made <branch>` runs all 9 stages end to end, reports real per-stage results, opens a PR, and never merges it.
 - Ask-user findings genuinely park and resume a real run, not just a fixture.

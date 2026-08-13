@@ -1,0 +1,26 @@
+=== bash tests/cs-made-run-lib.test.sh ===
+ok - equal head matches
+ok - ancestor rules: descendant matches, strict-ancestor does not
+ok - empty and unresolvable heads do not match
+ok - attribution requires both exact branch and current head
+ok - gate-parked predicate: gates park, running and terminal do not
+ok - TOON scalar field and quote stripping
+ok - trim primitive
+ok - renamed functions exist, old cs_nm_run does not
+ok - cs_made_run wraps a bounded made call, equivalent to old cs_nm_run
+ok - axi status reader preserves reachability
+ok - cs-made-run-lib attribution contract
+exit=0
+
+=== bash tests/cs-crew-state.test.sh (informational; this file's remaining
+    no-mistakes-mock lines / cs-nm-run-lib comments are Task 26/27's scope, not touched here) ===
+not ok - active run -> working (missing: 'state: working')
+--- output ---
+state: unknown · source: none · no current-state source available
+exit=1 (expected non-zero until Task 26 migrates the rest of cs-crew-state.sh and its test mocks from a fake no-mistakes binary to made; this task's own assigned lines were verified correct by tests/cs-made-run-lib.test.sh above)
+
+=== grep -rn <old cs_nm_* symbols / cs-nm-run-lib> bin/cs-made-run-lib.sh ===
+grep exit=1 (1 = zero matches, as expected)
+
+=== grep <same pattern> against this task's touched cs-crew-state.sh lines only (64-65,172-179,270,279-283,356) ===
+grep exit=1 (1 = zero matches in this task's assigned lines, as expected)

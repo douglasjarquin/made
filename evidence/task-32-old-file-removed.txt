@@ -1,0 +1,16 @@
+=== test -f bin/cs-nm-run-lib.sh ===
+exit=1 (1 = file absent, as expected)
+
+=== test -f bin/cs-made-run-lib.sh ===
+exit=0 (0 = file present, as expected)
+
+=== git status --short (scoped to this task's files) ===
+ M bin/cs-crew-state.sh
+A  bin/cs-made-run-lib.sh
+ D bin/cs-nm-run-lib.sh
+A  tests/cs-made-run-lib.test.sh
+ D tests/cs-nm-run-lib.test.sh
+
+=== ls bin/cs-nm-run-lib.sh (expect: No such file or directory) ===
+ls: bin/cs-nm-run-lib.sh: No such file or directory
+exit=1

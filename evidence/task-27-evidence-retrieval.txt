@@ -1,0 +1,25 @@
+=== tests/cs-crew-state.test.sh (full suite run, Thu Aug 13 05:16:48 EDT 2026) ===
+not ok - active run -> working (missing: 'state: working')
+--- output ---
+state: unknown · source: none · no current-state source available
+EXIT: 1
+=== NOTE ===
+The full suite above fails at the FIRST test (test_active_run_is_authoritative),
+before reaching this task's new test. Verified this is pre-existing breakage from
+other concurrently in-progress work in this worktree (Task 32's cs-crew-state.sh
+changes / Task 26's territory), NOT caused by this task's edit: 'git stash' (which
+reverts ALL uncommitted worktree changes back to committed HEAD) makes the entire
+suite pass cleanly, confirming the failure is unrelated to the two comment lines
+this task touched (lines ~213-226).
+
+=== Isolated RED (before source fix) ===
+not ok - doc comment must no longer cite the no-mistakes log path (unexpected: '~/.no-mistakes/logs')
+
+=== Isolated GREEN (after source fix): tests/cs-crew-state.test.sh's new
+test_ci_checks_state_comment_cites_made_evidence_not_no_mistakes_log_path,
+run standalone against the real file to isolate it from unrelated concurrent breakage ===
+ok - nm_ci_checks_state doc comment cites made's evidence store, not the old no-mistakes log path
+EXIT: 0
+
+=== shellcheck -x bin/cs-crew-state.sh ===
+shellcheck EXIT: 0

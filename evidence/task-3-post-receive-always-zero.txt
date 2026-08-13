@@ -1,22 +1,12 @@
-=== go test ./internal/gitgate/... -v ===
-=== RUN   TestInitBareCreatesBareRepository
---- PASS: TestInitBareCreatesBareRepository (0.02s)
-=== RUN   TestInitBareRejectsEmptyPath
---- PASS: TestInitBareRejectsEmptyPath (0.00s)
-=== RUN   TestInstallHooksBakesBinaryPathAndMadeHomeIntoPreReceive
---- PASS: TestInstallHooksBakesBinaryPathAndMadeHomeIntoPreReceive (0.01s)
-=== RUN   TestInstallHooksPostReceiveAlwaysExitsZero
---- PASS: TestInstallHooksPostReceiveAlwaysExitsZero (0.01s)
-=== RUN   TestGatePathIsDeterministicPerRepo
---- PASS: TestGatePathIsDeterministicPerRepo (0.00s)
-=== RUN   TestWorktreesDirIsSiblingOfGateGit
---- PASS: TestWorktreesDirIsSiblingOfGateGit (0.00s)
-=== RUN   TestAddWorktreeChecksOutRef
---- PASS: TestAddWorktreeChecksOutRef (0.76s)
-=== RUN   TestWorktreeRemovedAfterSimulatedStageFailure
---- PASS: TestWorktreeRemovedAfterSimulatedStageFailure (0.85s)
-PASS
-ok  	github.com/douglasjarquin/made/internal/gitgate	(cached)
+=== Scenario: post-receive always exits 0 (daemon unreachable) ===
+$ cat post-receive hook
+#!/bin/sh
+export MADE_HOME="/private/tmp/claude-501/-Users-douglasjarquin-github-douglasjarquin-made/328d892a-f6d9-4303-8c9a-24324ae4857f/scratchpad/task3-recapture/home"
+while read old_sha new_sha refname; do
+  "/private/tmp/claude-501/-Users-douglasjarquin-github-douglasjarquin-made/328d892a-f6d9-4303-8c9a-24324ae4857f/scratchpad/task3-recapture/made" gate notify-push --gate "/private/tmp/claude-501/-Users-douglasjarquin-github-douglasjarquin-made/328d892a-f6d9-4303-8c9a-24324ae4857f/scratchpad/task3-recapture/home/gates/ed81503c23bd6032cad82b253a9a87494123b4a5a5e83cf76297673292594deb/gate.git" --old "$old_sha" --new "$new_sha" --ref "$refname"
+done
+exit 0
 
-=== go vet ./internal/gitgate/... ===
-(vet exit code: 0)
+$ echo 'aaa bbb refs/heads/feature-x' | ./hooks/post-receive   (daemon NOT running)
+gate notify-push: dial daemon: dial /private/tmp/claude-501/-Users-douglasjarquin-github-douglasjarquin-made/328d892a-f6d9-4303-8c9a-24324ae4857f/scratchpad/task3-recapture/home/daemon.sock: dial unix /private/tmp/claude-501/-Users-douglasjarquin-github-douglasjarquin-made/328d892a-f6d9-4303-8c9a-24324ae4857f/scratchpad/task3-recapture/home/daemon.sock: connect: invalid argument
+post-receive exit code: 0

@@ -1,0 +1,6 @@
+=== golangci-lint run --max-issues-per-linter=0 --max-same-issues=0 ./... ===
+0 issues.
+exit: 0
+
+=== consigliere shellcheck (branch made-migration, all touched bin/*.sh) ===
+exit: 0

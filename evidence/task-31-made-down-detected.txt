@@ -1,0 +1,73 @@
+Task 31 - init/doctor + MADE_DOWN probe migration
+====================================================
+
+Scope: bin/cs-home-seed.sh's initialize_no_mistakes_project() init/doctor
+shellout (originally lines 482/483/486/487) and a new MADE_DOWN daemon-health
+probe in bin/cs-bootstrap.sh, mirroring the existing HERDR_DOWN probe.
+
+--------------------------------------------------------------------
+1. QA Scenario: MADE_DOWN detected during bootstrap
+   (bin/cs-bootstrap.sh run directly, hermetic PATH, fake made
+   answering 'made status: daemon not reachable: ...' as the real Go
+   binary does in cmd/made/status.go when the daemon socket is down)
+--------------------------------------------------------------------
+$ MADE_TEST_MODE=down PATH=<hermetic> CS_BOOTSTRAP_DETECT_ONLY=1 bin/cs-bootstrap.sh
+MISSING: herdr claude jq gh gh-axi - install before dispatching; consigliere cannot operate without these. bin/cs-doctor.sh reports versions and install suggestions.
+BOOTSTRAP_INFO: optional tool codex not installed.
+BOOTSTRAP_INFO: optional tool tasks-axi not installed.
+BOOTSTRAP_INFO: optional tool lavish-axi not installed.
+BOOTSTRAP_INFO: optional tool chrome-devtools-axi not installed.
+BOOTSTRAP_INFO: optional tool quota-axi not installed.
+TANGLE: primary checkout on feature branch 'made-migration' (expected 'main'); the work is safe on that ref - read-only session must leave restore work to the session holding the fleet lock
+exit: 0
+
+--------------------------------------------------------------------
+2. Control: a healthy-but-idle made daemon ('no runs found') must
+   NOT be mistaken for MADE_DOWN (this is why the probe greps stderr
+   for made's own 'daemon not reachable' text instead of treating any
+   nonzero exit as down, unlike the simpler HERDR_DOWN check)
+--------------------------------------------------------------------
+$ PATH=<hermetic, made up but idle> CS_BOOTSTRAP_DETECT_ONLY=1 bin/cs-bootstrap.sh
+MISSING: herdr claude jq gh gh-axi - install before dispatching; consigliere cannot operate without these. bin/cs-doctor.sh reports versions and install suggestions.
+BOOTSTRAP_INFO: optional tool codex not installed.
+BOOTSTRAP_INFO: optional tool tasks-axi not installed.
+BOOTSTRAP_INFO: optional tool lavish-axi not installed.
+BOOTSTRAP_INFO: optional tool chrome-devtools-axi not installed.
+BOOTSTRAP_INFO: optional tool quota-axi not installed.
+TANGLE: primary checkout on feature branch 'made-migration' (expected 'main'); the work is safe on that ref - read-only session must leave restore work to the session holding the fleet lock
+exit: 0
+
+--------------------------------------------------------------------
+3. Unit test: tests/cs-bootstrap.test.sh (MADE_DOWN section, full run)
+--------------------------------------------------------------------
+ok - gh-axi floor: below fires, at-floor is silent
+ok - tasks-axi floor: below fires, at-floor is silent
+ok - lavish-axi floor: below fires, at-floor is silent
+ok - quota-axi floor: below fires, at-floor is silent
+ok - gh-axi unparseable build: diagnostic fires
+ok - tasks-axi unparseable build: diagnostic fires
+ok - lavish-axi unparseable build: diagnostic fires
+ok - quota-axi unparseable build: diagnostic fires
+ok - one clean release, bare or behind a tool-name prefix, is comparable
+ok - a failing --version never reports as an above-floor number
+ok - gh-axi absent: reported as absent, not as an out-of-date build
+ok - quota-axi absent: reported as absent, not as an out-of-date build
+ok - a version-reporting fake suite is never reported as out of date
+ok - CS_BOOTSTRAP_NETWORK skip and only are a strict partition of the unsplit run
+ok - an unrecognized CS_BOOTSTRAP_NETWORK falls back to the full run
+ok - a deferred worker sweeps only while state/.lock still names the session that asked
+ok - MADE_DOWN fires when the made daemon is unreachable
+ok - a healthy made daemon triggers no MADE_DOWN
+ok - a healthy idle made daemon (no runs found) triggers no MADE_DOWN
+ok - cs-bootstrap axi version floors and network phase split
+
+--------------------------------------------------------------------
+4. RED confirmation: same test against bin/cs-bootstrap.sh with the
+   MADE_DOWN probe reverted (git stash of that file alone)
+--------------------------------------------------------------------
+not ok - an unreachable made daemon reports MADE_DOWN clearly (no line matching /^MADE_DOWN: cannot reach the made daemon/)
+
+--------------------------------------------------------------------
+5. shellcheck -x bin/cs-home-seed.sh bin/cs-bootstrap.sh
+--------------------------------------------------------------------
+shellcheck exit: 0

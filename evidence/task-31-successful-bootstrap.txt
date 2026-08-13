@@ -1,0 +1,102 @@
+Task 31 - init/doctor + MADE_DOWN probe migration
+====================================================
+
+--------------------------------------------------------------------
+1. QA Scenario: successful bootstrap with made up
+   ('made gate init'/'made doctor' succeed as part of bootstrap, no
+   MADE_DOWN triggered)
+--------------------------------------------------------------------
+1a. bin/cs-bootstrap.sh's MADE_DOWN probe, made daemon reachable:
+$ MADE_TEST_MODE=up PATH=<hermetic> CS_BOOTSTRAP_DETECT_ONLY=1 bin/cs-bootstrap.sh
+MISSING: herdr claude jq gh gh-axi - install before dispatching; consigliere cannot operate without these. bin/cs-doctor.sh reports versions and install suggestions.
+BOOTSTRAP_INFO: optional tool codex not installed.
+BOOTSTRAP_INFO: optional tool tasks-axi not installed.
+BOOTSTRAP_INFO: optional tool lavish-axi not installed.
+BOOTSTRAP_INFO: optional tool chrome-devtools-axi not installed.
+BOOTSTRAP_INFO: optional tool quota-axi not installed.
+TANGLE: primary checkout on feature branch 'made-migration' (expected 'main'); the work is safe on that ref - read-only session must leave restore work to the session holding the fleet lock
+exit: 0
+
+1b. bin/cs-home-seed.sh seeding a brand-new made-mode project: the
+    init/doctor shellout ( cd $dst && cs_made_gate_init && cs_made_doctor )
+    runs 'made gate init' and 'made doctor' for real, through the shim,
+    and a successful run wires the made remote onto the fresh clone.
+$ PATH=<hermetic + fake made> bin/cs-home-seed.sh zeta-capo zeta
+home=/private/tmp/task31-demo/capos/zeta-capo
+exit: 0
+$ git -C $CAPO/projects/zeta remote get-url made
+/tmp/task31-demo/zeta-made.git
+
+--------------------------------------------------------------------
+2. Unit tests: tests/cs-home-seed.test.sh (full run) and
+   tests/cs-bootstrap.test.sh (full run)
+--------------------------------------------------------------------
+--- tests/cs-home-seed.test.sh ---
+ok - happy-path seed provisions a marked detached-worktree home
+ok - re-seed of the same id is idempotent (registry round-trip)
+ok - registry validate refuses duplicate ids
+ok - an EOF-truncated registry still refuses a duplicate home and an id rebind
+ok - registry validate refuses a malformed row instead of skipping it
+ok - transactional seed rolls back home, clones, brief, and registry on failure
+ok - missing charter refuses loudly with nothing created
+ok - --no-projects and a project list are mutually exclusive
+ok - sweep fast-forwards a registered capo home (silent when current)
+ok - sweep never disturbs a dirty capo home
+ok - liveness sweep respawns a confidently dead capo
+ok - liveness sweep leaves a live capo alone
+ok - liveness sweep never acts on an inconclusive reading
+ok - liveness sweep preserves the meta record when respawn fails
+ok - sweep stays silent for a registered capo that has no live record yet
+ok - sweep reports a live record that has no endpoint
+ok - sweep retrofits an absent host/activation.conf (idempotently)
+ok - sweep never overwrites a present host/activation.conf
+ok - sweep preserves a dangling host/activation.conf symlink
+ok - sweep rejects a symlinked host directory
+ok - a preexisting made remote satisfies no-mistakes-mode initialization
+ok - a legacy no-mistakes remote no longer satisfies made-mode initialization
+ok - made absent: initializing a brand-new made-mode project refuses cleanly
+ok - made present: gate init and doctor wire the made remote through the shim
+ok - a failing made doctor surfaces the initialize-failed error
+ok - cs-home-seed provisioning, rollback, and sweep behavior
+
+--- tests/cs-bootstrap.test.sh ---
+ok - gh-axi floor: below fires, at-floor is silent
+ok - tasks-axi floor: below fires, at-floor is silent
+ok - lavish-axi floor: below fires, at-floor is silent
+ok - quota-axi floor: below fires, at-floor is silent
+ok - gh-axi unparseable build: diagnostic fires
+ok - tasks-axi unparseable build: diagnostic fires
+ok - lavish-axi unparseable build: diagnostic fires
+ok - quota-axi unparseable build: diagnostic fires
+ok - one clean release, bare or behind a tool-name prefix, is comparable
+ok - a failing --version never reports as an above-floor number
+ok - gh-axi absent: reported as absent, not as an out-of-date build
+ok - quota-axi absent: reported as absent, not as an out-of-date build
+ok - a version-reporting fake suite is never reported as out of date
+ok - CS_BOOTSTRAP_NETWORK skip and only are a strict partition of the unsplit run
+ok - an unrecognized CS_BOOTSTRAP_NETWORK falls back to the full run
+ok - a deferred worker sweeps only while state/.lock still names the session that asked
+ok - MADE_DOWN fires when the made daemon is unreachable
+ok - a healthy made daemon triggers no MADE_DOWN
+ok - a healthy idle made daemon (no runs found) triggers no MADE_DOWN
+ok - cs-bootstrap axi version floors and network phase split
+
+--------------------------------------------------------------------
+3. RED confirmation: tests/cs-home-seed.test.sh's new init/doctor
+   cases (12/13/13a) against bin/cs-home-seed.sh with ONLY this
+   task's init/doctor hunk reverted (Task 25's already-landed
+   made-remote-check change is left in place)
+--------------------------------------------------------------------
+not ok - seeding a made-mode project without made on PATH must fail
+
+--------------------------------------------------------------------
+4. shellcheck -x bin/cs-home-seed.sh bin/cs-bootstrap.sh
+--------------------------------------------------------------------
+shellcheck exit: 0
+
+--------------------------------------------------------------------
+5. grep -n 'no-mistakes' bin/cs-home-seed.sh bin/cs-bootstrap.sh
+   (only Task 29's mode-semantics territory should remain)
+--------------------------------------------------------------------
+bin/cs-home-seed.sh:445:    echo "error: project $project is local-only; capo routes support only no-mistakes and direct-PR projects" >&2
+bin/cs-home-seed.sh:475:  [ "$mode" = no-mistakes ] || return 0
