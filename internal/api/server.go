@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"syscall"
 	"sync"
+	"syscall"
 )
 
 type HandlerFunc func(ctx context.Context, params json.RawMessage) (any, error)

@@ -22,7 +22,7 @@ func (s *InRepoStore) Location(runID string) string {
 	return filepath.Join(dir, runID)
 }
 
-func (s *InRepoStore) WriteEvidence(runID string, files map[string][]byte) error {
+func (s *InRepoStore) WriteEvidence(runID string, files map[string][]byte) (err error) {
 	if err := validateEvidenceInput(runID, files); err != nil {
 		return err
 	}
@@ -58,7 +58,11 @@ func (s *InRepoStore) WriteEvidence(runID string, files map[string][]byte) error
 	if err != nil {
 		return fmt.Errorf("evidence: open repository: %w", err)
 	}
-	defer unix.Close(rootFD)
+	defer func() {
+		if closeErr := unix.Close(rootFD); closeErr != nil && err == nil {
+			err = fmt.Errorf("evidence: close repository: %w", closeErr)
+		}
+	}()
 	runFD, opened, err := openEvidenceDirectory(rootFD, append(dirParts, runParts...))
 	if err != nil {
 		return fmt.Errorf("evidence: open run directory: %w", err)
