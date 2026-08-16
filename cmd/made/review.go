@@ -58,8 +58,34 @@ func reviewDecideHandler(store *reviewDecisions) api.HandlerFunc {
 		if p.RunID == "" || p.Stage == "" {
 			return nil, fmt.Errorf("review.decide: run_id and stage are required")
 		}
+		if !store.HasRun(p.RunID) {
+			return nil, fmt.Errorf("review.decide: exact run_id %q was not found", p.RunID)
+		}
 		if p.Decision != ReviewApproved && p.Decision != ReviewRejected {
 			return nil, fmt.Errorf("review.decide: decision must be %q or %q", ReviewApproved, ReviewRejected)
+		}
+		store.Set(p.RunID, p.Stage, p.Decision)
+		return reviewDecideResult{OK: true}, nil
+	}
+}
+
+func reviewDecideRunHandler(rm *daemon.RunManager, store *reviewDecisions) api.HandlerFunc {
+	return func(ctx context.Context, params json.RawMessage) (any, error) {
+		var p reviewDecideParams
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, fmt.Errorf("review.decide: invalid params: %w", err)
+		}
+		if p.RunID == "" || p.Stage == "" {
+			return nil, fmt.Errorf("review.decide: run_id and stage are required")
+		}
+		if p.Decision != ReviewApproved && p.Decision != ReviewRejected {
+			return nil, fmt.Errorf("review.decide: decision must be %q or %q", ReviewApproved, ReviewRejected)
+		}
+		if _, ok := rm.Snapshot(p.RunID); !ok {
+			return nil, fmt.Errorf("review.decide: exact run_id %q was not found", p.RunID)
+		}
+		if err := rm.SetDecision(p.RunID, p.Stage, p.Decision); err != nil {
+			return nil, err
 		}
 		store.Set(p.RunID, p.Stage, p.Decision)
 		return reviewDecideResult{OK: true}, nil
@@ -142,6 +168,37 @@ func runReviewCommand(args []string, stdin io.Reader, stdout, stderr *os.File) i
 	}
 	_, _ = fmt.Fprintln(stdout, "made review: all findings approved; pipeline resumed")
 	return 0
+}
+
+func runReviewDecideCommand(args []string, stdout, stderr *os.File) int {
+	fs := flag.NewFlagSet("made review decide", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	jsonOutput := fs.Bool("json", false, "output JSON")
+	stage := fs.String("stage", "", "stage name")
+	decision := fs.String("decision", "", "approved or rejected")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if !*jsonOutput || fs.NArg() != 1 || *stage == "" || (*decision != ReviewApproved && *decision != ReviewRejected) {
+		_, _ = fmt.Fprintln(stderr, "usage: made review decide --json --stage <stage> --decision <approved|rejected> <run-id>")
+		return 2
+	}
+	home, err := madeHome()
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "made review decide:", err)
+		return 1
+	}
+	client, err := api.Dial(api.SocketPath(home))
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "made review decide: daemon not reachable:", err)
+		return 1
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.CallInto("review.decide", reviewDecideParams{RunID: fs.Arg(0), Stage: *stage, Decision: *decision}, nil); err != nil {
+		_, _ = fmt.Fprintln(stderr, "made review decide:", err)
+		return 1
+	}
+	return writeJSON(stdout, map[string]any{"schema_version": 1, "protocol_version": api.Version, "run_id": fs.Arg(0), "stage": *stage, "decision": *decision}, stderr, "made review decide")
 }
 
 func readDecision(scanner *bufio.Scanner) (string, error) {

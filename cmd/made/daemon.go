@@ -39,7 +39,7 @@ func runDaemonCommand(args []string, stdout, stderr *os.File) int {
 	case "start":
 		return daemonStart(args[1:], home, lockPath, stdout, stderr)
 	case "stop":
-		return daemonStop(lockPath, stdout, stderr)
+		return daemonStop(api.SocketPath(home), stdout, stderr)
 	case "status":
 		return daemonStatus(lockPath, stdout, stderr)
 	default:
@@ -92,14 +92,45 @@ func daemonStart(args []string, home, lockPath string, stdout, stderr *os.File) 
 // The returned channel receives daemon.Run's final error exactly once, after
 // the socket server has also been shut down.
 func startDaemon(ctx context.Context, home, lockPath string, idle time.Duration, onReady func(pid int)) (*daemon.RunManager, <-chan error) {
-	rm := daemon.NewRunManager()
+	if err := os.MkdirAll(home, 0o700); err != nil {
+		done := make(chan error, 1)
+		done <- fmt.Errorf("create made home: %w", err)
+		return daemon.NewRunManager(), done
+	}
+	spool, err := daemon.OpenGateSpool(filepath.Join(home, "gate.spool"))
+	if err != nil {
+		done := make(chan error, 1)
+		done <- err
+		return daemon.NewRunManager(), done
+	}
+	rm, err := daemon.NewPersistentRunManager(filepath.Join(home, "runs.wal"))
+	if err != nil {
+		done := make(chan error, 1)
+		done <- err
+		return daemon.NewRunManager(), done
+	}
+	ownedLock, err := daemon.AcquireLock(lockPath)
+	if err != nil {
+		done := make(chan error, 1)
+		done <- err
+		return rm, done
+	}
+	socketPath := api.SocketPath(home)
+	if err := api.PrepareSocket(socketPath); err != nil {
+		_ = ownedLock.Release()
+		done := make(chan error, 1)
+		done <- err
+		return rm, done
+	}
 	reviewStore := daemon.NewReviewDecisions()
-	srv := api.NewServer(api.SocketPath(home))
-	registerDaemonHandlers(srv, rm, reviewStore)
+	runCtx, cancelRun := context.WithCancel(ctx)
+	srv := api.NewServer(socketPath)
+	registerDaemonHandlers(srv, rm, reviewStore, spool, cancelRun)
 
 	done := make(chan error, 1)
 
 	if err := srv.Listen(); err != nil {
+		_ = ownedLock.Release()
 		done <- fmt.Errorf("listen on socket: %w", err)
 		return rm, done
 	}
@@ -109,11 +140,13 @@ func startDaemon(ctx context.Context, home, lockPath string, idle time.Duration,
 	go func() { serveErr <- srv.Serve(serveCtx) }()
 
 	go func() {
-		runErr := daemon.Run(ctx, daemon.Options{
+		runErr := daemon.Run(runCtx, daemon.Options{
 			LockPath:    lockPath,
+			Lock:        ownedLock,
 			IdleTimeout: idle,
 			OnReady:     onReady,
 			ActivityCh:  rm.ActivitySignal(),
+			ActiveFunc:  rm.HasActive,
 		})
 		cancelInFlightRuns(rm, shutdownCancelTimeout)
 		cancelServe()
@@ -155,17 +188,22 @@ func cancelInFlightRuns(rm *daemon.RunManager, timeout time.Duration) {
 }
 
 func isTerminalRunStatus(s daemon.RunStatus) bool {
-	return s == daemon.RunCompleted || s == daemon.RunFailed
+	return s == daemon.RunSucceeded || s == daemon.RunFailed || s == daemon.RunCanceled || s == daemon.RunSuperseded
 }
 
 const debugHandlersEnv = "MADE_DEBUG_HANDLERS"
 
-func registerDaemonHandlers(srv *api.Server, rm *daemon.RunManager, store *daemon.ReviewDecisions) {
+func registerDaemonHandlers(srv *api.Server, rm *daemon.RunManager, store *daemon.ReviewDecisions, spool *daemon.GateSpool, cancel context.CancelFunc) {
 	srv.Handle("status", statusHandler(rm))
-	srv.Handle("review.decide", reviewDecideHandler(store))
+	srv.Handle("run.status", runStatusHandler(rm))
+	srv.Handle("run.submit", runSubmitHandler(rm))
+	srv.Handle("run.list", runListHandler(rm))
+	srv.Handle("run.cancel", runCancelHandler(rm))
+	srv.Handle("review.decide", reviewDecideRunHandler(rm, store))
 	srv.Handle("review.decision", reviewDecisionHandler(store))
+	srv.Handle("daemon.shutdown", daemonShutdownHandler(rm, spool, cancel))
 	srv.Handle("gate.admitPush", gateAdmitPushHandler())
-	srv.Handle("gate.notifyPush", gateNotifyPushHandler(rm, store))
+	srv.Handle("gate.notifyPush", gateNotifyPushHandler(rm, store, spool))
 	if os.Getenv(debugHandlersEnv) == "1" {
 		srv.Handle("debug.submitCancellableRun", debugSubmitCancellableRunHandler(rm))
 	}
@@ -251,7 +289,7 @@ type gateNotifyPushResult struct {
 // still-queued run for the same branch before submitting this push's own
 // run, so a rapid second push always wins over a first one that hasn't
 // started yet - never over one already running.
-func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.ReviewDecisions) api.HandlerFunc {
+func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.ReviewDecisions, spool *daemon.GateSpool) api.HandlerFunc {
 	return func(ctx context.Context, params json.RawMessage) (any, error) {
 		var p gateNotifyPushParams
 		if err := json.Unmarshal(params, &p); err != nil {
@@ -267,6 +305,10 @@ func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.Review
 		if err != nil {
 			return nil, fmt.Errorf("gate.notifyPush: resolve default branch: %w", err)
 		}
+		refspec := fmt.Sprintf("%s:refs/heads/%s", defaultBranch, defaultBranch)
+		if err := runGit(branchCtx, p.GatePath, "fetch", "origin", refspec); err != nil {
+			return nil, fmt.Errorf("gate.notifyPush: refresh default branch %s: %w", defaultBranch, err)
+		}
 
 		decision := gitgate.ClassifyRef(p.Ref, defaultBranch, p.OldSHA, p.NewSHA)
 		if !decision.Accept {
@@ -278,20 +320,33 @@ func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.Review
 
 		branch := strings.TrimPrefix(p.Ref, "refs/heads/")
 		repo := gateRepoIdentifier(p.GatePath)
-		rm.SupersedeQueued(repo, branch)
 
 		gatePath := p.GatePath
 		worktreesDir := gitgate.WorktreesDir(gatePath)
 		newSHA := p.NewSHA
 		runID := rm.NewRunID()
+		submission, created, err := spool.Enqueue(daemon.GateSubmission{Gate: p.GatePath, Ref: p.Ref, SHA: p.NewSHA, RunID: runID})
+		if err != nil {
+			return nil, fmt.Errorf("gate.notifyPush: enqueue submission: %w", err)
+		}
+		if !created {
+			return gateNotifyPushResult{RunID: submission.RunID}, nil
+		}
+		rm.SupersedeQueued(repo, branch)
 
 		work := func(workCtx context.Context, emit func(daemon.Event)) error {
 			return orchestrator.Run(workCtx, gatePath, defaultBranch, worktreesDir, runID, newSHA,
 				orchestrator.NewWorkFunc(rm, reviewDecisions, emit, runID, defaultBranch, branch, orchestrator.Options{}))
 		}
 
-		if _, err := rm.Submit(runID, repo, branch, work); err != nil {
+		if _, err := rm.SubmitWithMetadata(runID, repo, branch, p.NewSHA, "", work); err != nil {
 			return nil, fmt.Errorf("gate.notifyPush: submit run: %w", err)
+		}
+		if err := rm.AppendSubmissionEvent(runID, daemon.SubmissionEvent{Gate: p.GatePath, Ref: p.Ref, InputSHA: p.NewSHA, Kind: "push"}); err != nil {
+			return nil, fmt.Errorf("gate.notifyPush: persist submission event: %w", err)
+		}
+		if err := spool.Drain(submission); err != nil {
+			return nil, fmt.Errorf("gate.notifyPush: drain submission: %w", err)
 		}
 
 		return gateNotifyPushResult{RunID: runID}, nil
@@ -326,13 +381,29 @@ func debugSubmitCancellableRunHandler(rm *daemon.RunManager) api.HandlerFunc {
 	}
 }
 
-func daemonStop(lockPath string, stdout, stderr *os.File) int {
-	if err := daemon.Stop(lockPath, 10*time.Second); err != nil {
+func daemonStop(socketPath string, stdout, stderr *os.File) int {
+	client, err := api.Dial(socketPath)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "made daemon: dial shutdown socket:", err)
+		return 1
+	}
+	defer func() { _ = client.Close() }()
+	if _, err := client.Call("daemon.shutdown", nil); err != nil {
 		_, _ = fmt.Fprintln(stderr, "made daemon:", err)
 		return 1
 	}
-	_, _ = fmt.Fprintln(stdout, "made daemon: stopped")
-	return 0
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		probe, probeErr := api.Dial(socketPath)
+		if probeErr != nil {
+			_, _ = fmt.Fprintln(stdout, "made daemon: stopped")
+			return 0
+		}
+		_ = probe.Close()
+		time.Sleep(20 * time.Millisecond)
+	}
+	_, _ = fmt.Fprintln(stderr, "made daemon: shutdown timed out")
+	return 1
 }
 
 func daemonStatus(lockPath string, stdout, stderr *os.File) int {

@@ -39,8 +39,10 @@ func (s *Server) Handle(method string, h HandlerFunc) {
 // is made's entire auth model for this socket, matching herdr's own
 // filesystem-permission-only model, so there is no separate credential check.
 func (s *Server) Listen() error {
-	if err := os.RemoveAll(s.socketPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("remove stale socket %s: %w", s.socketPath, err)
+	if info, err := os.Lstat(s.socketPath); err == nil {
+		return fmt.Errorf("api: socket path %s already exists as %s", s.socketPath, info.Mode())
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("api: inspect socket path %s: %w", s.socketPath, err)
 	}
 
 	ln, err := net.Listen("unix", s.socketPath)
@@ -53,6 +55,26 @@ func (s *Server) Listen() error {
 	}
 
 	s.ln = ln
+	return nil
+}
+
+func PrepareSocket(socketPath string) error {
+	info, err := os.Lstat(socketPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("api: inspect stale socket %s: %w", socketPath, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || info.IsDir() {
+		return fmt.Errorf("api: refusing non-owned socket path %s with mode %s", socketPath, info.Mode())
+	}
+	if info.Mode()&os.ModeSocket == 0 {
+		return fmt.Errorf("api: refusing regular socket path %s", socketPath)
+	}
+	if err := os.Remove(socketPath); err != nil {
+		return fmt.Errorf("api: remove stale owner socket %s: %w", socketPath, err)
+	}
 	return nil
 }
 
@@ -85,7 +107,9 @@ func (s *Server) Close() error {
 		return nil
 	}
 	err := s.ln.Close()
-	_ = os.Remove(s.socketPath)
+	if info, statErr := os.Lstat(s.socketPath); statErr == nil && info.Mode()&os.ModeSocket != 0 {
+		_ = os.Remove(s.socketPath)
+	}
 	return err
 }
 

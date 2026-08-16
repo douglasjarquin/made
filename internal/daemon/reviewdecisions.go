@@ -23,13 +23,28 @@ type ReviewDecisions struct {
 	mu      sync.Mutex
 	entries map[reviewKey]string
 	waiters map[reviewKey][]chan string
+	runs    map[string]struct{}
 }
 
 func NewReviewDecisions() *ReviewDecisions {
 	return &ReviewDecisions{
 		entries: make(map[reviewKey]string),
 		waiters: make(map[reviewKey][]chan string),
+		runs:    make(map[string]struct{}),
 	}
+}
+
+func (d *ReviewDecisions) RegisterRun(runID string) {
+	d.mu.Lock()
+	d.runs[runID] = struct{}{}
+	d.mu.Unlock()
+}
+
+func (d *ReviewDecisions) HasRun(runID string) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	_, ok := d.runs[runID]
+	return ok
 }
 
 // Set records a decision for (runID, stage) and wakes any goroutine blocked

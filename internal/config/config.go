@@ -1,8 +1,11 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/douglasjarquin/made/internal/agent"
 	"gopkg.in/yaml.v3"
@@ -11,16 +14,30 @@ import (
 const defaultCIRerunBudget = 2
 
 type Config struct {
-	Document               Document `yaml:"document"`
-	Review                 Review   `yaml:"review"`
-	DisableProjectSettings bool     `yaml:"disable_project_settings"`
-	NoCI                   bool     `yaml:"no_ci"`
-	CI                     CI       `yaml:"ci"`
-	Test                   Test     `yaml:"test"`
-	Commands               Commands `yaml:"commands"`
-	Agent                  string   `yaml:"agent"`
-	Agents                 []string `yaml:"agents"`
-	AllowRepoCommands      bool     `yaml:"allow_repo_commands"`
+	Version                int              `yaml:"version"`
+	Document               Document         `yaml:"document"`
+	Review                 Review           `yaml:"review"`
+	DisableProjectSettings bool             `yaml:"disable_project_settings"`
+	NoCI                   bool             `yaml:"no_ci"`
+	CI                     CI               `yaml:"ci"`
+	Test                   Test             `yaml:"test"`
+	Commands               Commands         `yaml:"commands"`
+	Agent                  string           `yaml:"agent"`
+	Agents                 []string         `yaml:"agents"`
+	AllowRepoCommands      bool             `yaml:"allow_repo_commands"`
+	Stages                 map[string]Stage `yaml:"stages"`
+}
+
+type Stage struct {
+	Enabled *bool `yaml:"enabled"`
+}
+
+func (c Config) StageResult(name string) string {
+	stage, ok := c.Stages[name]
+	if ok && stage.Enabled != nil && !*stage.Enabled {
+		return "skipped"
+	}
+	return "pending"
 }
 
 type Document struct {
@@ -72,12 +89,14 @@ func LoadEffectiveConfig(trustedPath, pushedPath string) (Config, error) {
 	}
 
 	effective := Config{
+		Version:                trusted.Version,
 		Document:               trusted.Document,
 		Review:                 trusted.Review,
 		DisableProjectSettings: trusted.DisableProjectSettings,
 		NoCI:                   trusted.NoCI,
 		CI:                     trusted.CI,
 		AllowRepoCommands:      trusted.AllowRepoCommands,
+		Stages:                 trusted.Stages,
 	}
 	effective.Test.Evidence = trusted.Test.Evidence
 
@@ -142,6 +161,24 @@ func loadConfigFile(path string) (cfg Config, exists bool, err error) {
 		return Config{}, false, err
 	}
 
+	if filepath.Base(path) == ".made.yml" {
+		decoder := yaml.NewDecoder(bytes.NewReader(data))
+		decoder.KnownFields(true)
+		if err := decoder.Decode(&cfg); err != nil {
+			return Config{}, true, err
+		}
+		var extra any
+		if err := decoder.Decode(&extra); err != io.EOF {
+			if err == nil {
+				return Config{}, true, fmt.Errorf("versioned .made.yml must contain one document")
+			}
+			return Config{}, true, err
+		}
+		if cfg.Version != 1 {
+			return Config{}, true, fmt.Errorf("versioned .made.yml requires version: 1, got %d", cfg.Version)
+		}
+		return cfg, true, nil
+	}
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return Config{}, true, err
 	}

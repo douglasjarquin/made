@@ -41,6 +41,12 @@ func Run(worktreePath, defaultBranch string) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("rebase: list conflicting files after failed rebase onto %s: %w", defaultBranch, err)
 	}
+	if len(files) == 0 {
+		if err := abortRebase(worktreePath); err != nil {
+			return Result{}, fmt.Errorf("rebase: failed without unmerged paths and abort failed: %w", err)
+		}
+		return Result{}, fmt.Errorf("rebase: git rebase %s failed without unmerged paths", defaultBranch)
+	}
 
 	// A halted stage must never leave the worktree mid-rebase, so whatever
 	// runs next (a retry, another stage) always starts from a clean state.

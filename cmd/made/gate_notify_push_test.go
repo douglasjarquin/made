@@ -260,8 +260,8 @@ waitLoop:
 	if !ok {
 		t.Fatal("expected the first (superseded) run to remain tracked")
 	}
-	if final1.Status != daemon.RunFailed || !errors.Is(final1.Err, daemon.ErrRunSuperseded) {
-		t.Fatalf("expected first run superseded (Failed/ErrRunSuperseded), got status=%v err=%v", final1.Status, final1.Err)
+	if final1.Status != daemon.RunSuperseded || !errors.Is(final1.Err, daemon.ErrRunSuperseded) {
+		t.Fatalf("expected first run superseded, got status=%v err=%v", final1.Status, final1.Err)
 	}
 	if !final1.StartedAt.IsZero() {
 		t.Fatal("superseded run must never have started")

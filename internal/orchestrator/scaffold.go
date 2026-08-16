@@ -114,6 +114,9 @@ func Run(ctx context.Context, gatePath, defaultBranch, worktreesDir, runID, push
 }
 
 func resolveConfig(ctx context.Context, gatePath, defaultBranch, worktreePath string) (config.Config, error) {
+	if err := refreshDefaultBranch(ctx, gatePath, defaultBranch); err != nil {
+		return config.Config{}, err
+	}
 	trustedPath, cleanup, err := extractTrustedConfig(ctx, gatePath, defaultBranch)
 	if err != nil {
 		return config.Config{}, err
@@ -134,6 +137,25 @@ func resolveConfig(ctx context.Context, gatePath, defaultBranch, worktreePath st
 	return cfg, nil
 }
 
+func refreshDefaultBranch(ctx context.Context, gatePath, defaultBranch string) error {
+	remote, err := execpkg.Run(ctx, execpkg.Command{Name: "git", Args: []string{"remote", "get-url", "origin"}, Dir: gatePath})
+	if err != nil {
+		return fmt.Errorf("orchestrator: inspect origin remote: %w", err)
+	}
+	if remote.ExitCode != 0 {
+		return nil
+	}
+	refspec := fmt.Sprintf("%s:refs/heads/%s", defaultBranch, defaultBranch)
+	fetch, err := execpkg.Run(ctx, execpkg.Command{Name: "git", Args: []string{"fetch", "origin", refspec}, Dir: gatePath})
+	if err != nil {
+		return fmt.Errorf("orchestrator: refresh default branch %s: %w", defaultBranch, err)
+	}
+	if fetch.ExitCode != 0 {
+		return fmt.Errorf("orchestrator: refresh default branch %s failed: %s", defaultBranch, string(fetch.Stderr))
+	}
+	return nil
+}
+
 func extractTrustedConfig(ctx context.Context, gatePath, defaultBranch string) (path string, cleanup func(), err error) {
 	res, err := execpkg.Run(ctx, execpkg.Command{
 		Name: "git",
@@ -151,7 +173,7 @@ func extractTrustedConfig(ctx context.Context, gatePath, defaultBranch string) (
 		return "", nil, nil
 	}
 
-	f, err := os.CreateTemp("", "made-trusted-config-*.yml")
+	f, err := os.CreateTemp("", "made-trusted-config-*.made.yml")
 	if err != nil {
 		return "", nil, fmt.Errorf("orchestrator: create temp file for trusted config: %w", err)
 	}

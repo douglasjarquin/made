@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -25,7 +26,10 @@ type Options struct {
 type Result struct {
 	OK              bool
 	Message         string
+	Findings        []agent.Finding
 	AutoFixed       []string
+	PreFixSHAs      []string
+	PostFixSHAs     []string
 	PendingFindings []agent.Finding
 }
 
@@ -45,17 +49,21 @@ func Run(ctx context.Context, worktreePath string, agentKind agent.Kind, opts Op
 	}
 
 	var autoFixed []string
+	var preFixSHAs []string
+	var postFixSHAs []string
 	var pending []agent.Finding
 	var blockingMessages []string
 
 	for _, finding := range findings.Findings {
 		switch finding.Kind {
 		case agent.FindingAutoFixable:
-			sha, applyErr := applyAutoFix(worktreePath, finding)
+			preSHA, postSHA, applyErr := applyAutoFix(worktreePath, finding)
 			if applyErr != nil {
 				return Result{}, fmt.Errorf("review: apply auto-fix %q: %w", finding.Description, applyErr)
 			}
-			autoFixed = append(autoFixed, sha)
+			autoFixed = append(autoFixed, postSHA)
+			preFixSHAs = append(preFixSHAs, preSHA)
+			postFixSHAs = append(postFixSHAs, postSHA)
 		case agent.FindingBlocking:
 			blockingMessages = append(blockingMessages, finding.Description)
 			pending = append(pending, finding)
@@ -68,7 +76,10 @@ func Run(ctx context.Context, worktreePath string, agentKind agent.Kind, opts Op
 		return Result{
 			OK:              false,
 			Message:         fmt.Sprintf("review halted by blocking finding(s): %s", strings.Join(blockingMessages, "; ")),
+			Findings:        findings.Findings,
 			AutoFixed:       autoFixed,
+			PreFixSHAs:      preFixSHAs,
+			PostFixSHAs:     postFixSHAs,
 			PendingFindings: pending,
 		}, nil
 	}
@@ -76,25 +87,71 @@ func Run(ctx context.Context, worktreePath string, agentKind agent.Kind, opts Op
 	return Result{
 		OK:              true,
 		Message:         fmt.Sprintf("review passed: %d auto-fix(es) applied, %d finding(s) await human approval", len(autoFixed), len(pending)),
+		Findings:        findings.Findings,
 		AutoFixed:       autoFixed,
+		PreFixSHAs:      preFixSHAs,
+		PostFixSHAs:     postFixSHAs,
 		PendingFindings: pending,
 	}, nil
 }
 
-func applyAutoFix(worktreePath string, finding agent.Finding) (string, error) {
+func applyAutoFix(worktreePath string, finding agent.Finding) (string, string, error) {
 	if strings.TrimSpace(finding.Patch) == "" {
-		return "", fmt.Errorf("auto-fixable finding has no patch")
+		return "", "", fmt.Errorf("auto-fixable finding has no patch")
+	}
+	if err := requireCleanWorktree(worktreePath); err != nil {
+		return "", "", err
+	}
+	preSHA, err := gitOutput(worktreePath, "rev-parse", "HEAD")
+	if err != nil {
+		return "", "", fmt.Errorf("record pre-fix SHA: %w", err)
+	}
+	paths, err := patchPaths(finding.Patch)
+	if err != nil {
+		return "", "", err
+	}
+	allowed := make(map[string]struct{}, len(finding.Paths))
+	for _, path := range finding.Paths {
+		clean, err := cleanReturnedPath(path)
+		if err != nil {
+			return "", "", err
+		}
+		allowed[clean] = struct{}{}
+	}
+	if len(allowed) == 0 {
+		for _, path := range paths {
+			allowed[path] = struct{}{}
+		}
+	}
+	for _, path := range paths {
+		if _, ok := allowed[path]; !ok {
+			return "", "", fmt.Errorf("auto-fix patch changes path %q outside returned paths", path)
+		}
 	}
 
 	applyCmd := exec.Command("git", "-C", worktreePath, "apply", "--whitespace=fix", "-")
 	applyCmd.Stdin = strings.NewReader(finding.Patch)
 	if out, err := applyCmd.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("git apply: %w: %s", err, strings.TrimSpace(string(out)))
+		return "", "", fmt.Errorf("git apply: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 
-	addCmd := exec.Command("git", "-C", worktreePath, "add", "-A")
+	status, err := gitOutput(worktreePath, "status", "--porcelain", "--untracked-files=all")
+	if err != nil {
+		return "", "", fmt.Errorf("inspect post-fix paths: %w", err)
+	}
+	changed := statusPaths(status)
+	for _, path := range changed {
+		if _, ok := allowed[path]; !ok {
+			return "", "", fmt.Errorf("auto-fix changed forbidden or unreturned path %q", path)
+		}
+	}
+	addArgs := []string{"-C", worktreePath, "add", "--"}
+	for path := range allowed {
+		addArgs = append(addArgs, path)
+	}
+	addCmd := exec.Command("git", addArgs...)
 	if out, err := addCmd.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("git add -A: %w: %s", err, strings.TrimSpace(string(out)))
+		return "", "", fmt.Errorf("git add returned paths: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 
 	message := finding.Description
@@ -104,14 +161,83 @@ func applyAutoFix(worktreePath string, finding agent.Finding) (string, error) {
 	commitCmd := exec.Command("git", "-C", worktreePath,
 		"-c", "user.name=made-review",
 		"-c", "user.email=made-review@local",
+		"-c", "commit.gpgsign=false",
 		"commit", "-m", message)
 	if out, err := commitCmd.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("git commit: %w: %s", err, strings.TrimSpace(string(out)))
+		return "", "", fmt.Errorf("git commit: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 
-	shaOut, err := exec.Command("git", "-C", worktreePath, "rev-parse", "HEAD").Output()
+	shaOut, err := gitOutput(worktreePath, "rev-parse", "HEAD")
 	if err != nil {
-		return "", fmt.Errorf("git rev-parse HEAD: %w", err)
+		return "", "", fmt.Errorf("git rev-parse HEAD: %w", err)
 	}
-	return strings.TrimSpace(string(shaOut)), nil
+	if _, err := gitOutput(worktreePath, "diff", "--check", preSHA, shaOut); err != nil {
+		return "", "", fmt.Errorf("rerun review validation: %w", err)
+	}
+	return preSHA, shaOut, nil
+}
+
+func requireCleanWorktree(worktreePath string) error {
+	status, err := gitOutput(worktreePath, "status", "--porcelain", "--untracked-files=all")
+	if err != nil {
+		return fmt.Errorf("inspect clean worktree: %w", err)
+	}
+	if strings.TrimSpace(status) != "" {
+		return fmt.Errorf("auto-fix requires a clean worktree")
+	}
+	return nil
+}
+
+func gitOutput(worktreePath string, args ...string) (string, error) {
+	output, err := exec.Command("git", append([]string{"-C", worktreePath}, args...)...).Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+func patchPaths(patch string) ([]string, error) {
+	seen := make(map[string]struct{})
+	for _, line := range strings.Split(patch, "\n") {
+		if !strings.HasPrefix(line, "+++ b/") {
+			continue
+		}
+		path, err := cleanReturnedPath(strings.TrimPrefix(line, "+++ b/"))
+		if err != nil {
+			return nil, err
+		}
+		seen[path] = struct{}{}
+	}
+	if len(seen) == 0 {
+		return nil, fmt.Errorf("auto-fix patch contains no returned paths")
+	}
+	paths := make([]string, 0, len(seen))
+	for path := range seen {
+		paths = append(paths, path)
+	}
+	return paths, nil
+}
+
+func cleanReturnedPath(path string) (string, error) {
+	clean := filepath.Clean(path)
+	if clean == "." || filepath.IsAbs(path) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) || clean == ".git" || strings.HasPrefix(clean, ".git"+string(filepath.Separator)) {
+		return "", fmt.Errorf("auto-fix returned forbidden path %q", path)
+	}
+	return filepath.ToSlash(clean), nil
+}
+
+func statusPaths(status string) []string {
+	var paths []string
+	for _, line := range strings.Split(status, "\n") {
+		line = strings.TrimSpace(line)
+		if len(line) < 4 {
+			continue
+		}
+		path := strings.TrimSpace(line[2:])
+		if strings.Contains(path, " -> ") {
+			path = strings.TrimSpace(strings.SplitN(path, " -> ", 2)[1])
+		}
+		paths = append(paths, filepath.ToSlash(path))
+	}
+	return paths
 }

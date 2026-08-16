@@ -33,8 +33,8 @@ func (s *OrphanBranchStore) Location(runID string) string {
 // commit-tree is what gives the branch no shared history with the default
 // branch.
 func (s *OrphanBranchStore) WriteEvidence(runID string, files map[string][]byte) error {
-	if runID == "" {
-		return fmt.Errorf("evidence: runID must not be empty")
+	if err := validateEvidenceInput(runID, files); err != nil {
+		return err
 	}
 	branch := s.Branch
 	if branch == "" {
@@ -64,7 +64,7 @@ func (s *OrphanBranchStore) WriteEvidence(runID string, files map[string][]byte)
 	sort.Strings(names)
 
 	for _, name := range names {
-		blobSHA, err := s.runGit(indexEnv, files[name], "hash-object", "-w", "--stdin")
+		blobSHA, err := s.runGit(indexEnv, Redact(files[name]), "hash-object", "-w", "--stdin")
 		if err != nil {
 			return fmt.Errorf("evidence: hash evidence file %q: %w", name, err)
 		}

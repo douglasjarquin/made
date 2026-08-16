@@ -19,7 +19,7 @@ func TestSetupResolvesTrustedConfigWhenPresentOnDefaultBranch(t *testing.T) {
 
 	src := filepath.Join(dir, "src")
 	initSourceRepo(t, src)
-	writeFile(t, src, ".made.yml", "no_ci: true\nallow_repo_commands: true\ncommands:\n  test: \"go test ./...\"\n")
+	writeFile(t, src, ".made.yml", "version: 1\nno_ci: true\nallow_repo_commands: true\ncommands:\n  test: \"go test ./...\"\n")
 	commit(t, src, "add made.yml")
 	sha := pushBranch(t, src, barePath, "main")
 

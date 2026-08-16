@@ -242,7 +242,7 @@ func TestRunManager_CancelStopsRunningWorkFunc(t *testing.T) {
 		t.Fatal("WorkFunc did not unblock within 1s of Cancel")
 	}
 
-	final := waitForStatus(t, rm, id, RunFailed, 2*time.Second)
+	final := waitForStatus(t, rm, id, RunCanceled, 2*time.Second)
 	if final.Err == nil || !errors.Is(final.Err, context.Canceled) {
 		t.Fatalf("expected final error to wrap context.Canceled, got %v", final.Err)
 	}
@@ -306,8 +306,8 @@ func TestRunManager_SupersedeQueuedDropsOnlyStillQueuedJobForBranch(t *testing.T
 	if !ok {
 		t.Fatal("expected superseded run to remain tracked, not deleted")
 	}
-	if final1.Status != RunFailed {
-		t.Fatalf("expected superseded run status RunFailed, got %v", final1.Status)
+	if final1.Status != RunSuperseded {
+		t.Fatalf("expected superseded run status RunSuperseded, got %v", final1.Status)
 	}
 	if !errors.Is(final1.Err, ErrRunSuperseded) {
 		t.Fatalf("expected superseded run's error to wrap ErrRunSuperseded, got %v", final1.Err)

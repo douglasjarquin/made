@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"sync"
@@ -12,24 +13,39 @@ import (
 type RunStatus string
 
 const (
-	RunQueued    RunStatus = "queued"
-	RunRunning   RunStatus = "running"
-	RunCompleted RunStatus = "completed"
-	RunFailed    RunStatus = "failed"
+	RunQueued         RunStatus = "queued"
+	RunRunning        RunStatus = "running"
+	RunAwaitingReview RunStatus = "awaiting_review"
+	RunAwaitingMerge  RunStatus = "awaiting_merge"
+	RunSucceeded      RunStatus = "succeeded"
+	RunCompleted      RunStatus = RunSucceeded
+	RunFailed         RunStatus = "failed"
+	RunCanceled       RunStatus = "canceled"
+	RunSuperseded     RunStatus = "superseded"
 )
 
 type RunSnapshot struct {
-	ID              string
-	Repo            string
-	Branch          string
-	Status          RunStatus
-	QueuedAt        time.Time
-	StartedAt       time.Time
-	EndedAt         time.Time
-	Err             error
-	Message         string
-	Stages          []StageResult
-	PendingFindings []AskUserFinding
+	ID                string
+	Repo              string
+	Branch            string
+	InputSHA          string
+	OutputSHA         string
+	Status            RunStatus
+	QueuedAt          time.Time
+	StartedAt         time.Time
+	EndedAt           time.Time
+	ExecutionFinished bool
+	Err               error
+	Errors            []string
+	Message           string
+	Findings          []RunFinding
+	Decisions         map[string]string
+	PRURL             string
+	SupersededBy      string
+	CancelRequested   bool
+	SubmissionEvents  []SubmissionEvent
+	Stages            []StageResult
+	PendingFindings   []AskUserFinding
 
 	// finalized is set by Finish and read by execute: it lets a WorkFunc
 	// declare a run's definitive terminal-or-not Status/Message itself,
@@ -54,7 +70,7 @@ type run struct {
 func (r *run) snapshot() RunSnapshot {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.snap
+	return cloneSnapshot(r.snap)
 }
 
 func (r *run) update(fn func(*RunSnapshot)) {
@@ -79,21 +95,48 @@ type repoQueue struct {
 // worktree per bare repo at a time, so a second push against a repo already
 // running must queue behind it rather than run concurrently or be rejected.
 type RunManager struct {
-	mailbox  *Mailbox
-	activity chan struct{}
+	mailbox   *Mailbox
+	activity  chan struct{}
+	store     *RunStore
+	persistMu sync.Mutex
 
-	mu      sync.Mutex
-	repos   map[string]*repoQueue
-	runs    map[string]*run
-	counter uint64
+	mu    sync.Mutex
+	repos map[string]*repoQueue
+	runs  map[string]*run
 }
 
 func NewRunManager() *RunManager {
-	return &RunManager{
+	return newRunManager(nil, nil)
+}
+
+func NewPersistentRunManager(path string) (*RunManager, error) {
+	store, snapshots, err := OpenRunStore(path)
+	if err != nil {
+		return nil, err
+	}
+	return newRunManager(store, snapshots), nil
+}
+
+func newRunManager(store *RunStore, snapshots map[string]RunSnapshot) *RunManager {
+	rm := &RunManager{
 		mailbox:  NewMailbox(),
 		activity: make(chan struct{}, 1),
 		repos:    make(map[string]*repoQueue),
 		runs:     make(map[string]*run),
+		store:    store,
+	}
+	for id, snapshot := range snapshots {
+		ctx, cancel := context.WithCancel(context.Background())
+		rm.runs[id] = &run{ctx: ctx, cancel: cancel, snap: cloneSnapshot(snapshot)}
+	}
+	return rm
+}
+
+func (rm *RunManager) persist(r *run) {
+	if rm.store != nil {
+		rm.persistMu.Lock()
+		defer rm.persistMu.Unlock()
+		_ = rm.store.Append(r.snapshot())
 	}
 }
 
@@ -112,21 +155,41 @@ func (rm *RunManager) signalActivity() {
 }
 
 func (rm *RunManager) NewRunID() string {
-	n := atomic.AddUint64(&rm.counter, 1)
-	return fmt.Sprintf("run-%d", n)
+	var id [16]byte
+	if _, err := rand.Read(id[:]); err != nil {
+		counter := atomic.AddUint64(&fallbackRunIDCounter, 1)
+		for i := range id {
+			id[i] = byte(counter >> (uint(i%8) * 8))
+		}
+	}
+	id[6] = (id[6] & 0x0f) | 0x40
+	id[8] = (id[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x", id[0:4], id[4:6], id[6:8], id[8:10], id[10:16])
 }
 
+var fallbackRunIDCounter uint64
+
 func (rm *RunManager) Submit(id, repo, branch string, work WorkFunc) (RunSnapshot, error) {
+	return rm.SubmitWithMetadata(id, repo, branch, "", "", work)
+}
+
+func (rm *RunManager) SubmitWithMetadata(id, repo, branch, inputSHA, outputSHA string, work WorkFunc) (RunSnapshot, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &run{
 		ctx:    ctx,
 		cancel: cancel,
 		snap: RunSnapshot{
-			ID:       id,
-			Repo:     repo,
-			Branch:   branch,
-			Status:   RunQueued,
-			QueuedAt: time.Now(),
+			ID:               id,
+			Repo:             repo,
+			Branch:           branch,
+			InputSHA:         inputSHA,
+			OutputSHA:        outputSHA,
+			Status:           RunQueued,
+			QueuedAt:         time.Now(),
+			Errors:           []string{},
+			Findings:         []RunFinding{},
+			Decisions:        make(map[string]string),
+			SubmissionEvents: []SubmissionEvent{},
 		},
 	}
 
@@ -142,6 +205,7 @@ func (rm *RunManager) Submit(id, repo, branch string, work WorkFunc) (RunSnapsho
 		rm.repos[repo] = rq
 	}
 	rm.mu.Unlock()
+	rm.persist(r)
 
 	rq.mu.Lock()
 	rq.pending = append(rq.pending, &queuedJob{run: r, work: work})
@@ -179,6 +243,7 @@ func (rm *RunManager) execute(r *run, work WorkFunc) {
 		s.Status = RunRunning
 		s.StartedAt = started
 	})
+	rm.persist(r)
 	rm.mailbox.Publish(Event{RunID: id, Kind: EventRunStarted, Time: started})
 	rm.signalActivity()
 
@@ -197,16 +262,24 @@ func (rm *RunManager) execute(r *run, work WorkFunc) {
 	ended := time.Now()
 	r.update(func(s *RunSnapshot) {
 		s.EndedAt = ended
+		s.ExecutionFinished = true
 		if s.finalized {
 			return
 		}
 		s.Err = err
-		if err != nil {
+		if errors.Is(err, context.Canceled) || s.CancelRequested {
+			s.Status = RunCanceled
+			if err != nil {
+				s.Errors = append(s.Errors, err.Error())
+			}
+		} else if err != nil {
 			s.Status = RunFailed
+			s.Errors = append(s.Errors, err.Error())
 		} else {
-			s.Status = RunCompleted
+			s.Status = RunSucceeded
 		}
 	})
+	rm.persist(r)
 
 	finalKind := EventRunCompleted
 	if err != nil {
@@ -233,7 +306,7 @@ func (rm *RunManager) List() []RunSnapshot {
 
 	snaps := make([]RunSnapshot, len(runs))
 	for i, r := range runs {
-		snaps[i] = r.snapshot()
+		snaps[i] = cloneSnapshot(r.snapshot())
 	}
 	return snaps
 }
@@ -252,15 +325,32 @@ func (rm *RunManager) Cancel(id string) error {
 	if !ok {
 		return fmt.Errorf("daemon: no run %q", id)
 	}
-	if isTerminalRunStatus(r.snapshot().Status) {
-		return fmt.Errorf("daemon: run %q is already %s", id, r.snapshot().Status)
+	snapshot := r.snapshot()
+	if snapshot.Status == RunCanceled || snapshot.CancelRequested {
+		return nil
+	}
+	if isTerminalRunStatus(snapshot.Status) {
+		return fmt.Errorf("daemon: run %q is already %s", id, snapshot.Status)
+	}
+	r.update(func(s *RunSnapshot) { s.CancelRequested = true })
+	rm.persist(r)
+	if snapshot.Status == RunAwaitingMerge || snapshot.Status == RunAwaitingReview {
+		r.update(func(s *RunSnapshot) {
+			s.Status = RunCanceled
+			s.ExecutionFinished = true
+			s.EndedAt = time.Now()
+			s.Err = context.Canceled
+			s.Errors = append(s.Errors, context.Canceled.Error())
+		})
+		rm.persist(r)
+		return nil
 	}
 	r.cancel()
 	return nil
 }
 
 func isTerminalRunStatus(s RunStatus) bool {
-	return s == RunCompleted || s == RunFailed
+	return s == RunSucceeded || s == RunFailed || s == RunCanceled || s == RunSuperseded
 }
 
 // Finish lets a WorkFunc declare a run's definitive Status and a
@@ -278,6 +368,7 @@ func (rm *RunManager) Finish(id string, status RunStatus, message string) error 
 		s.Message = message
 		s.finalized = true
 	})
+	rm.persist(r)
 	return nil
 }
 
@@ -315,10 +406,13 @@ func (rm *RunManager) SupersedeQueued(repo, branch string) {
 	now := time.Now()
 	for _, j := range dropped {
 		j.run.update(func(s *RunSnapshot) {
-			s.Status = RunFailed
+			s.Status = RunSuperseded
 			s.Err = ErrRunSuperseded
+			s.Errors = append(s.Errors, ErrRunSuperseded.Error())
 			s.EndedAt = now
+			s.ExecutionFinished = true
 		})
+		rm.persist(j.run)
 		rm.mailbox.Publish(Event{RunID: j.run.snapshot().ID, Kind: EventRunFailed, Time: now, Err: ErrRunSuperseded})
 		rm.signalActivity()
 	}

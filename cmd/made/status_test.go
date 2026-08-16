@@ -56,7 +56,7 @@ func TestStatusJSON_SchemaValidity(t *testing.T) {
 		}
 	}
 
-	out, errOut, code := runCapture(t, []string{"status", "--json"})
+	out, errOut, code := runCapture(t, []string{"run", "status", "--json", "run-test-1"})
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0; stdout=%s stderr=%s", code, out, errOut)
 	}
@@ -79,7 +79,7 @@ func TestStatusJSON_SchemaValidity(t *testing.T) {
 		t.Errorf("Branch = %q, want %q", report.Branch, "feature-x")
 	}
 	switch report.State {
-	case "queued", "running", "completed", "failed":
+	case "queued", "running", "awaiting_review", "awaiting_merge", "succeeded", "failed", "canceled", "superseded":
 	default:
 		t.Errorf("State = %q, not one of the documented run states", report.State)
 	}
@@ -156,7 +156,7 @@ func TestStatusJSON_ReflectsRealStageUpdate(t *testing.T) {
 		t.Fatalf("UpdatePendingFindings: %v", err)
 	}
 
-	out, errOut, code := runCapture(t, []string{"status", "--json", "run-real-stage-1"})
+	out, errOut, code := runCapture(t, []string{"run", "status", "--json", "run-real-stage-1"})
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0; stdout=%s stderr=%s", code, out, errOut)
 	}
@@ -207,7 +207,7 @@ func TestStatus_NoRunsReportsError(t *testing.T) {
 		}
 	})
 
-	_, _, code := runCapture(t, []string{"status", "--json"})
+	_, _, code := runCapture(t, []string{"run", "status", "--json", "missing"})
 	if code == 0 {
 		t.Fatal("expected non-zero exit when no runs have been submitted")
 	}

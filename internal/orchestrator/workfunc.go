@@ -33,6 +33,7 @@ const (
 	stageNameCI       = "ci"
 
 	ciStageTimeout = 30 * time.Minute
+	stageTimeout   = 30 * time.Minute
 	ciPollInterval = 10 * time.Second
 
 	pushRemoteName = "origin"
@@ -95,32 +96,38 @@ type chain struct {
 }
 
 func (c *chain) run() error {
-	if err := c.intentStage(); err != nil {
+	if err := c.runStage(stageNameIntent, c.intentStage); err != nil {
 		return err
 	}
-	if err := c.rebaseStage(); err != nil {
+	if err := c.runStage(stageNameRebase, c.rebaseStage); err != nil {
 		return err
 	}
-	if err := c.reviewStage(); err != nil {
+	if err := c.runStage(stageNameReview, c.reviewStage); err != nil {
 		return err
 	}
-	if err := c.testStage(); err != nil {
+	if err := c.runStage(stageNameTest, c.testStage); err != nil {
 		return err
 	}
-	if err := c.documentStage(); err != nil {
+	if err := c.runStage(stageNameDocument, c.documentStage); err != nil {
 		return err
 	}
-	if err := c.lintStage(); err != nil {
+	if err := c.runStage(stageNameLint, c.lintStage); err != nil {
 		return err
 	}
-	if err := c.pushStage(); err != nil {
+	if err := c.runStage(stageNamePush, c.pushStage); err != nil {
 		return err
 	}
-	prResult, err := c.prStage()
+	var prResult pr.Result
+	var err error
+	if c.rc.Config.StageResult(stageNamePR) == "skipped" {
+		c.finish(stageNamePR, "skipped", "stage disabled")
+	} else {
+		prResult, err = c.prStage()
+	}
 	if err != nil {
 		return err
 	}
-	if err := c.ciStage(prResult.PRURL); err != nil {
+	if err := c.runCIStage(prResult.PRURL); err != nil {
 		return err
 	}
 
@@ -129,7 +136,29 @@ func (c *chain) run() error {
 	// final status stays RunRunning rather than RunCompleted, with the PR
 	// URL surfaced in the message instead of a terminal "done" state.
 	message := fmt.Sprintf("all stages passed, PR open, awaiting merge: %s", prResult.PRURL)
-	return c.rm.Finish(c.runID, daemon.RunRunning, message)
+	return c.rm.Finish(c.runID, daemon.RunAwaitingMerge, message)
+}
+
+func (c *chain) runStage(name string, stage func() error) error {
+	if c.rc.Config.StageResult(name) == "skipped" {
+		c.finish(name, "skipped", "stage disabled")
+		return nil
+	}
+	stageCtx, cancel := context.WithTimeout(c.ctx, stageTimeout)
+	previous := c.ctx
+	c.ctx = stageCtx
+	err := stage()
+	c.ctx = previous
+	cancel()
+	return err
+}
+
+func (c *chain) runCIStage(prURL string) error {
+	if c.rc.Config.StageResult(stageNameCI) == "skipped" || prURL == "" {
+		c.finish(stageNameCI, "skipped", "stage disabled")
+		return nil
+	}
+	return c.ciStage(prURL)
 }
 
 func (c *chain) start(stage string) {
@@ -200,6 +229,20 @@ func (c *chain) reviewStage() error {
 	if err != nil {
 		return err
 	}
+	durableFindings := make([]daemon.RunFinding, 0, len(result.Findings))
+	autoFixIndex := 0
+	for _, finding := range result.Findings {
+		record := daemon.RunFinding{Stage: stageNameReview, Kind: string(finding.Kind), Message: finding.Description, Paths: append([]string(nil), finding.Paths...)}
+		if finding.Kind == agent.FindingAutoFixable && autoFixIndex < len(result.PreFixSHAs) {
+			record.PreFixSHA = result.PreFixSHAs[autoFixIndex]
+			record.PostFixSHA = result.PostFixSHAs[autoFixIndex]
+			autoFixIndex++
+		}
+		durableFindings = append(durableFindings, record)
+	}
+	if err := c.rm.AddFindings(c.runID, durableFindings); err != nil {
+		return err
+	}
 	if !result.OK {
 		c.finish(stageNameReview, stageResultFail, result.Message)
 		return c.stageFailure(stageNameReview, result.Message)
@@ -233,6 +276,13 @@ func (c *chain) documentStage() error {
 	c.start(stageNameDocument)
 	result, err := document.Run(c.rc.Worktree.Path, c.defaultBranch, deriveDocumentRules(c.rc.Config))
 	if err != nil {
+		return err
+	}
+	durableFindings := make([]daemon.RunFinding, 0, len(result.Findings))
+	for _, finding := range result.Findings {
+		durableFindings = append(durableFindings, daemon.RunFinding{Stage: stageNameDocument, Kind: string(finding.Kind), Message: finding.Description, Paths: append([]string(nil), finding.Paths...)})
+	}
+	if err := c.rm.AddFindings(c.runID, durableFindings); err != nil {
 		return err
 	}
 	if !result.OK {
@@ -299,6 +349,9 @@ func (c *chain) prStage() (pr.Result, error) {
 	if !result.OK {
 		c.finish(stageNamePR, stageResultFail, result.Message)
 		return pr.Result{}, c.stageFailure(stageNamePR, result.Message)
+	}
+	if err := c.rm.SetPRURL(c.runID, result.PRURL); err != nil {
+		return pr.Result{}, err
 	}
 	c.finish(stageNamePR, stageResultPass, result.Message)
 	return result, nil

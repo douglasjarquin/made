@@ -26,6 +26,7 @@ func startReviewTestServer(t *testing.T, fixture StatusReport) string {
 		return fixture, nil
 	})
 	store := newReviewDecisions()
+	store.RegisterRun(fixture.RunID)
 	srv.Handle("review.decide", reviewDecideHandler(store))
 	srv.Handle("review.decision", reviewDecisionHandler(store))
 

@@ -15,6 +15,7 @@ type Command struct {
 	Args    []string
 	Dir     string
 	Env     []string
+	Stdin   []byte
 	Timeout time.Duration
 }
 
@@ -39,6 +40,9 @@ func Run(ctx context.Context, cmd Command) (*Result, error) {
 	var stdout, stderr bytes.Buffer
 	c.Stdout = &stdout
 	c.Stderr = &stderr
+	if cmd.Stdin != nil {
+		c.Stdin = bytes.NewReader(cmd.Stdin)
+	}
 
 	if err := c.Start(); err != nil {
 		return nil, fmt.Errorf("start %s: %w", cmd.Name, err)
