@@ -309,6 +309,42 @@ func TestGateNotifyPushCLI_AlwaysExitsZeroEvenWhenDaemonUnreachable(t *testing.T
 	}
 }
 
+func TestGateNotifyPushCLI_DurablyQueuesWhenDaemonUnreachable(t *testing.T) {
+	home := shortTempDir(t)
+	t.Setenv("MADE_HOME", home)
+	gatePath := filepath.Join(home, "gates", "repo", "gate.git")
+	args := []string{
+		"gate", "notify-push",
+		"--gate", gatePath,
+		"--old", gitZeroSHA,
+		"--new", strings.Repeat("c", 40),
+		"--ref", "refs/heads/feature-x",
+	}
+	if _, _, code := runCapture(t, args); code != 0 {
+		t.Fatalf("offline gate notify-push exit code = %d, want 0", code)
+	}
+	spool, err := daemon.OpenGateSpool(filepath.Join(home, "gate.spool"))
+	if err != nil {
+		t.Fatalf("OpenGateSpool: %v", err)
+	}
+	pending := spool.Pending()
+	if len(pending) != 1 || pending[0].Gate != gatePath || pending[0].Ref != "refs/heads/feature-x" || pending[0].SHA != strings.Repeat("c", 40) || pending[0].RunID == "" {
+		t.Fatalf("offline submission spool = %+v, want one complete durable identity", pending)
+	}
+	firstRunID := pending[0].RunID
+	if _, _, code := runCapture(t, args); code != 0 {
+		t.Fatalf("duplicate offline gate notify-push exit code = %d, want 0", code)
+	}
+	reopened, err := daemon.OpenGateSpool(filepath.Join(home, "gate.spool"))
+	if err != nil {
+		t.Fatalf("reopen GateSpool: %v", err)
+	}
+	pending = reopened.Pending()
+	if len(pending) != 1 || pending[0].RunID != firstRunID {
+		t.Fatalf("duplicate offline submission spool = %+v, want original idempotent record", pending)
+	}
+}
+
 func TestGateNotifyPushCLI_NormalPushExitsZero(t *testing.T) {
 	home := shortTempDir(t)
 	t.Setenv("MADE_HOME", home)

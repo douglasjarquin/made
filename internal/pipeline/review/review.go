@@ -199,15 +199,30 @@ func gitOutput(worktreePath string, args ...string) (string, error) {
 
 func patchPaths(patch string) ([]string, error) {
 	seen := make(map[string]struct{})
+	var oldPath string
 	for _, line := range strings.Split(patch, "\n") {
-		if !strings.HasPrefix(line, "+++ b/") {
+		if strings.HasPrefix(line, "--- ") {
+			var err error
+			oldPath, err = patchHeaderPath(strings.TrimPrefix(line, "--- "))
+			if err != nil {
+				return nil, err
+			}
 			continue
 		}
-		path, err := cleanReturnedPath(strings.TrimPrefix(line, "+++ b/"))
+		if !strings.HasPrefix(line, "+++ ") {
+			continue
+		}
+		newPath, err := patchHeaderPath(strings.TrimPrefix(line, "+++ "))
 		if err != nil {
 			return nil, err
 		}
-		seen[path] = struct{}{}
+		if oldPath != "" {
+			seen[oldPath] = struct{}{}
+		}
+		if newPath != "" {
+			seen[newPath] = struct{}{}
+		}
+		oldPath = ""
 	}
 	if len(seen) == 0 {
 		return nil, fmt.Errorf("auto-fix patch contains no returned paths")
@@ -217,6 +232,21 @@ func patchPaths(patch string) ([]string, error) {
 		paths = append(paths, path)
 	}
 	return paths, nil
+}
+
+func patchHeaderPath(path string) (string, error) {
+	fields := strings.Fields(path)
+	if len(fields) == 0 {
+		return "", fmt.Errorf("auto-fix patch contains an empty file header")
+	}
+	path = fields[0]
+	if path == "/dev/null" {
+		return "", nil
+	}
+	if strings.HasPrefix(path, "a/") || strings.HasPrefix(path, "b/") {
+		path = path[2:]
+	}
+	return cleanReturnedPath(path)
 }
 
 func cleanReturnedPath(path string) (string, error) {

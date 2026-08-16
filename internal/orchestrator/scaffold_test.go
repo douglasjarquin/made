@@ -16,6 +16,7 @@ func TestSetupResolvesTrustedConfigWhenPresentOnDefaultBranch(t *testing.T) {
 	if err := gitgate.InitBare(barePath); err != nil {
 		t.Fatalf("InitBare: %v", err)
 	}
+	runGit(t, barePath, "remote", "add", "origin", barePath)
 
 	src := filepath.Join(dir, "src")
 	initSourceRepo(t, src)
@@ -47,6 +48,7 @@ func TestSetupResolvesEmptyTrustedConfigWhenMadeYmlMissingFromDefaultBranch(t *t
 	if err := gitgate.InitBare(barePath); err != nil {
 		t.Fatalf("InitBare: %v", err)
 	}
+	runGit(t, barePath, "remote", "add", "origin", barePath)
 
 	src := filepath.Join(dir, "src")
 	initSourceRepo(t, src)
@@ -70,6 +72,7 @@ func TestSetupResolvesEmptyTrustedConfigWhenDefaultBranchNeverFetched(t *testing
 	if err := gitgate.InitBare(barePath); err != nil {
 		t.Fatalf("InitBare: %v", err)
 	}
+	runGit(t, barePath, "remote", "add", "origin", barePath)
 
 	src := filepath.Join(dir, "src")
 	initSourceRepo(t, src)
@@ -93,6 +96,7 @@ func TestSetupCutsWorktreeAtExactPushedSHANotBranchTip(t *testing.T) {
 	if err := gitgate.InitBare(barePath); err != nil {
 		t.Fatalf("InitBare: %v", err)
 	}
+	runGit(t, barePath, "remote", "add", "origin", barePath)
 
 	src := filepath.Join(dir, "src")
 	initSourceRepo(t, src)
@@ -134,6 +138,7 @@ func TestSetupRecoversFromMidSetupPanicAndCleansUp(t *testing.T) {
 	if err := gitgate.InitBare(barePath); err != nil {
 		t.Fatalf("InitBare: %v", err)
 	}
+	runGit(t, barePath, "remote", "add", "origin", barePath)
 
 	src := filepath.Join(dir, "src")
 	initSourceRepo(t, src)
@@ -168,6 +173,7 @@ func TestRunWrapsSetupWorkAndCleanupWithPanicRecovery(t *testing.T) {
 	if err := gitgate.InitBare(barePath); err != nil {
 		t.Fatalf("InitBare: %v", err)
 	}
+	runGit(t, barePath, "remote", "add", "origin", barePath)
 
 	src := filepath.Join(dir, "src")
 	initSourceRepo(t, src)

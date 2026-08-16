@@ -164,6 +164,18 @@ func TestRunManager_NewRunIDIsRestartSafeUUID(t *testing.T) {
 	}
 }
 
+func TestRunManager_BeginShutdownClosesSubmissionAdmission(t *testing.T) {
+	rm := NewRunManager()
+	if err := rm.BeginShutdown(); err != nil {
+		t.Fatalf("BeginShutdown: %v", err)
+	}
+	if _, err := rm.Submit(rm.NewRunID(), "repo", "branch", func(context.Context, func(Event)) error {
+		return nil
+	}); !errors.Is(err, ErrRunSubmissionClosed) {
+		t.Fatalf("Submit after BeginShutdown error = %v, want ErrRunSubmissionClosed", err)
+	}
+}
+
 func TestRun_DoesNotIdleStopWithAwaitingMergeRun(t *testing.T) {
 	lockPath := filepath.Join(t.TempDir(), "daemon.lock")
 	rm := NewRunManager()

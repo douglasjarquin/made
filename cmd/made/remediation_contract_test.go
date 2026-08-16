@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/douglasjarquin/made/internal/api"
 	"github.com/douglasjarquin/made/internal/daemon"
 )
 
@@ -119,6 +120,25 @@ func TestRunSubmit_RejectsInvalidOutputSHA(t *testing.T) {
 	}
 }
 
+func TestRunSubmit_DoesNotLeaveMissingExecutionWorkActive(t *testing.T) {
+	rm := daemon.NewRunManager()
+	result, err := runSubmitHandler(rm)(context.Background(), []byte(`{"repo":"/repo","branch":"feature","input_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`))
+	if err != nil {
+		t.Fatalf("run.submit: %v", err)
+	}
+	report := result.(runActionReport)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		snapshot, ok := rm.Snapshot(report.RunID)
+		if ok && snapshot.Status == daemon.RunFailed && snapshot.ExecutionFinished {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	snapshot, _ := rm.Snapshot(report.RunID)
+	t.Fatalf("run.submit left an unexecutable run active: %+v", snapshot)
+}
+
 func TestStatusHandler_RequiresExactRunID(t *testing.T) {
 	rm := daemon.NewRunManager()
 	started := make(chan struct{})
@@ -169,6 +189,23 @@ func TestReviewDecide_RejectsUnknownExactRunID(t *testing.T) {
 	_, err := reviewDecideRunHandler(daemon.NewRunManager(), store)(context.Background(), []byte(`{"run_id":"missing","stage":"review","decision":"approved"}`))
 	if err == nil {
 		t.Fatal("review.decide accepted a decision for an unknown exact run ID")
+	}
+}
+
+func TestReviewDecide_ReturnsVersionedStructuredResult(t *testing.T) {
+	rm := daemon.NewRunManager()
+	store := daemon.NewReviewDecisions()
+	id := rm.NewRunID()
+	if _, err := rm.Submit(id, "repo", "branch", func(context.Context, func(daemon.Event)) error { return nil }); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	result, err := reviewDecideRunHandler(rm, store)(context.Background(), []byte(`{"run_id":"`+id+`","stage":"review","decision":"approved"}`))
+	if err != nil {
+		t.Fatalf("review.decide: %v", err)
+	}
+	report, ok := result.(reviewDecisionReport)
+	if !ok || report.SchemaVersion != 1 || report.ProtocolVersion != api.Version || report.RunID != id || report.Decision != ReviewApproved {
+		t.Fatalf("review.decide result = %#v, want versioned exact decision", result)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/douglasjarquin/made/internal/agent"
 	"gopkg.in/yaml.v3"
@@ -33,6 +34,9 @@ type Stage struct {
 }
 
 func (c Config) StageResult(name string) string {
+	if name == "ci" && c.NoCI {
+		return "skipped"
+	}
 	stage, ok := c.Stages[name]
 	if ok && stage.Enabled != nil && !*stage.Enabled {
 		return "skipped"
@@ -161,7 +165,7 @@ func loadConfigFile(path string) (cfg Config, exists bool, err error) {
 		return Config{}, false, err
 	}
 
-	if filepath.Base(path) == ".made.yml" {
+	if filepath.Base(path) == ".made.yml" || strings.HasSuffix(filepath.Base(path), ".made.yml") {
 		decoder := yaml.NewDecoder(bytes.NewReader(data))
 		decoder.KnownFields(true)
 		if err := decoder.Decode(&cfg); err != nil {

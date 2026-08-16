@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/douglasjarquin/made/internal/api"
@@ -128,9 +129,10 @@ func startDaemon(ctx context.Context, home, lockPath string, idle time.Duration,
 		return rm, done
 	}
 	reviewStore := daemon.NewReviewDecisions()
+	admission := &sync.Mutex{}
 	runCtx, cancelRun := context.WithCancel(ctx)
 	srv := api.NewServer(socketPath)
-	registerDaemonHandlers(srv, rm, reviewStore, spool, cancelRun)
+	registerDaemonHandlers(srv, rm, reviewStore, spool, cancelRun, admission)
 
 	done := make(chan error, 1)
 
@@ -154,6 +156,9 @@ func startDaemon(ctx context.Context, home, lockPath string, idle time.Duration,
 			ActiveFunc:    rm.HasActive,
 			UndrainedFunc: spool.HasPending,
 		})
+		admission.Lock()
+		rm.StopAccepting()
+		admission.Unlock()
 		if cancelErr := cancelInFlightRuns(rm, shutdownCancelTimeout); cancelErr != nil {
 			runErr = errors.Join(runErr, cancelErr)
 		}
@@ -164,13 +169,13 @@ func startDaemon(ctx context.Context, home, lockPath string, idle time.Duration,
 		done <- runErr
 	}()
 
-	go replayPendingSubmissions(runCtx, rm, reviewStore, spool)
+	go replayPendingSubmissions(runCtx, rm, reviewStore, spool, admission)
 
 	return rm, done
 }
 
-func replayPendingSubmissions(ctx context.Context, rm *daemon.RunManager, reviewDecisions *daemon.ReviewDecisions, spool *daemon.GateSpool) {
-	handler := gateNotifyPushHandler(rm, reviewDecisions, spool)
+func replayPendingSubmissions(ctx context.Context, rm *daemon.RunManager, reviewDecisions *daemon.ReviewDecisions, spool *daemon.GateSpool, admission ...*sync.Mutex) {
+	handler := gateNotifyPushHandler(rm, reviewDecisions, spool, admission...)
 	for {
 		pending := spool.Pending()
 		if len(pending) == 0 {
@@ -182,6 +187,7 @@ func replayPendingSubmissions(ctx context.Context, rm *daemon.RunManager, review
 				Ref:      submission.Ref,
 				NewSHA:   submission.SHA,
 				RunID:    submission.RunID,
+				Replay:   true,
 			})
 			if err != nil {
 				return
@@ -239,6 +245,11 @@ func cancelInFlightRuns(rm *daemon.RunManager, timeout time.Duration) error {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	for _, snap := range rm.List() {
+		if !isTerminalRunStatus(snap.Status) {
+			return errors.Join(firstErr, fmt.Errorf("shutdown: timed out waiting for run %q to finish", snap.ID))
+		}
+	}
 	return firstErr
 }
 
@@ -248,15 +259,15 @@ func isTerminalRunStatus(s daemon.RunStatus) bool {
 
 const debugHandlersEnv = "MADE_DEBUG_HANDLERS"
 
-func registerDaemonHandlers(srv *api.Server, rm *daemon.RunManager, store *daemon.ReviewDecisions, spool *daemon.GateSpool, cancel context.CancelFunc) {
+func registerDaemonHandlers(srv *api.Server, rm *daemon.RunManager, store *daemon.ReviewDecisions, spool *daemon.GateSpool, cancel context.CancelFunc, admission ...*sync.Mutex) {
 	srv.Handle("run.status", runStatusHandler(rm))
-	srv.Handle("run.submit", runSubmitHandler(rm))
+	srv.Handle("run.submit", runSubmitHandler(rm, admission...))
 	srv.Handle("run.list", runListHandler(rm))
 	srv.Handle("run.cancel", runCancelHandler(rm))
 	srv.Handle("review.decide", reviewDecideRunHandler(rm, store))
-	srv.Handle("daemon.shutdown", daemonShutdownHandler(rm, spool, cancel))
+	srv.Handle("daemon.shutdown", daemonShutdownHandler(rm, spool, cancel, admission...))
 	srv.Handle("gate.admitPush", gateAdmitPushHandler())
-	srv.Handle("gate.notifyPush", gateNotifyPushHandler(rm, store, spool))
+	srv.Handle("gate.notifyPush", gateNotifyPushHandler(rm, store, spool, admission...))
 	if os.Getenv(debugHandlersEnv) == "1" {
 		srv.Handle("debug.submitCancellableRun", debugSubmitCancellableRunHandler(rm))
 	}
@@ -330,6 +341,7 @@ type gateNotifyPushParams struct {
 	NewSHA   string `json:"new_sha"`
 	Ref      string `json:"ref"`
 	RunID    string `json:"run_id,omitempty"`
+	Replay   bool   `json:"replay,omitempty"`
 }
 
 type gateNotifyPushResult struct {
@@ -343,7 +355,7 @@ type gateNotifyPushResult struct {
 // still-queued run for the same branch before submitting this push's own
 // run, so a rapid second push always wins over a first one that hasn't
 // started yet - never over one already running.
-func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.ReviewDecisions, spool *daemon.GateSpool) api.HandlerFunc {
+func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.ReviewDecisions, spool *daemon.GateSpool, admission ...*sync.Mutex) api.HandlerFunc {
 	return func(ctx context.Context, params json.RawMessage) (any, error) {
 		var p gateNotifyPushParams
 		if err := json.Unmarshal(params, &p); err != nil {
@@ -366,10 +378,22 @@ func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.Review
 
 		decision := gitgate.ClassifyRef(p.Ref, defaultBranch, p.OldSHA, p.NewSHA)
 		if !decision.Accept {
+			if p.Replay {
+				if err := spool.Drain(daemon.GateSubmission{Gate: p.GatePath, Ref: p.Ref, SHA: p.NewSHA, RunID: p.RunID}); err != nil {
+					return nil, fmt.Errorf("gate.notifyPush: drain rejected replay: %w", err)
+				}
+				return gateNotifyPushResult{}, nil
+			}
 			return nil, fmt.Errorf("gate.notifyPush: %s", decision.Message)
 		}
 		if !decision.CreateRun {
 			return gateNotifyPushResult{}, nil
+		}
+
+		unlock := lockAdmission(admission)
+		defer unlock()
+		if !rm.Accepting() {
+			return nil, daemon.ErrRunSubmissionClosed
 		}
 
 		branch := strings.TrimPrefix(p.Ref, "refs/heads/")

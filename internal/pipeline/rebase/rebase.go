@@ -6,6 +6,7 @@
 package rebase
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -24,7 +25,11 @@ type Result struct {
 // etc); a rebase conflict is a normal outcome reported via Result.OK, not an
 // error.
 func Run(worktreePath, defaultBranch string) (Result, error) {
-	cmd := exec.Command("git", "-C", worktreePath, "rebase", defaultBranch)
+	return RunContext(context.Background(), worktreePath, defaultBranch)
+}
+
+func RunContext(ctx context.Context, worktreePath, defaultBranch string) (Result, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", worktreePath, "rebase", defaultBranch)
 	out, rebaseErr := cmd.CombinedOutput()
 	if rebaseErr == nil {
 		return Result{
@@ -33,16 +38,16 @@ func Run(worktreePath, defaultBranch string) (Result, error) {
 		}, nil
 	}
 
-	if !rebaseInProgress(worktreePath) {
+	if !rebaseInProgress(ctx, worktreePath) {
 		return Result{}, fmt.Errorf("rebase: git rebase %s: %w: %s", defaultBranch, rebaseErr, strings.TrimSpace(string(out)))
 	}
 
-	files, err := conflictingFiles(worktreePath)
+	files, err := conflictingFiles(ctx, worktreePath)
 	if err != nil {
 		return Result{}, fmt.Errorf("rebase: list conflicting files after failed rebase onto %s: %w", defaultBranch, err)
 	}
 	if len(files) == 0 {
-		if err := abortRebase(worktreePath); err != nil {
+		if err := abortRebase(ctx, worktreePath); err != nil {
 			return Result{}, fmt.Errorf("rebase: failed without unmerged paths and abort failed: %w", err)
 		}
 		return Result{}, fmt.Errorf("rebase: git rebase %s failed without unmerged paths", defaultBranch)
@@ -50,7 +55,7 @@ func Run(worktreePath, defaultBranch string) (Result, error) {
 
 	// A halted stage must never leave the worktree mid-rebase, so whatever
 	// runs next (a retry, another stage) always starts from a clean state.
-	if err := abortRebase(worktreePath); err != nil {
+	if err := abortRebase(ctx, worktreePath); err != nil {
 		return Result{}, fmt.Errorf("rebase: abort after conflict onto %s: %w", defaultBranch, err)
 	}
 
@@ -61,8 +66,8 @@ func Run(worktreePath, defaultBranch string) (Result, error) {
 	}, nil
 }
 
-func conflictingFiles(worktreePath string) ([]string, error) {
-	cmd := exec.Command("git", "-C", worktreePath, "diff", "--name-only", "--diff-filter=U")
+func conflictingFiles(ctx context.Context, worktreePath string) ([]string, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", worktreePath, "diff", "--name-only", "--diff-filter=U")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, err
@@ -77,8 +82,8 @@ func conflictingFiles(worktreePath string) ([]string, error) {
 	return files, nil
 }
 
-func abortRebase(worktreePath string) error {
-	cmd := exec.Command("git", "-C", worktreePath, "rebase", "--abort")
+func abortRebase(ctx context.Context, worktreePath string) error {
+	cmd := exec.CommandContext(ctx, "git", "-C", worktreePath, "rebase", "--abort")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git rebase --abort: %w: %s", err, strings.TrimSpace(string(out)))
@@ -86,8 +91,8 @@ func abortRebase(worktreePath string) error {
 	return nil
 }
 
-func rebaseInProgress(worktreePath string) bool {
-	out, err := exec.Command("git", "-C", worktreePath, "rev-parse", "--git-dir").Output()
+func rebaseInProgress(ctx context.Context, worktreePath string) bool {
+	out, err := exec.CommandContext(ctx, "git", "-C", worktreePath, "rev-parse", "--git-dir").Output()
 	if err != nil {
 		return false
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/douglasjarquin/made/internal/api"
@@ -27,7 +28,7 @@ func runStatusHandler(rm *daemon.RunManager) api.HandlerFunc {
 	}
 }
 
-func runSubmitHandler(rm *daemon.RunManager) api.HandlerFunc {
+func runSubmitHandler(rm *daemon.RunManager, admission ...*sync.Mutex) api.HandlerFunc {
 	return func(_ context.Context, params json.RawMessage) (any, error) {
 		var p runSubmitParams
 		if err := json.Unmarshal(params, &p); err != nil {
@@ -36,12 +37,13 @@ func runSubmitHandler(rm *daemon.RunManager) api.HandlerFunc {
 		if strings.TrimSpace(p.Repo) == "" || strings.TrimSpace(p.Branch) == "" || !validSHA(p.InputSHA) || (p.OutputSHA != "" && !validSHA(p.OutputSHA)) {
 			return nil, fmt.Errorf("run.submit: repo, branch, input_sha, and optional output_sha must use valid 40-character SHAs")
 		}
+		unlock := lockAdmission(admission)
+		defer unlock()
 		if p.RunID == "" {
 			p.RunID = rm.NewRunID()
 		}
-		snapshot, err := rm.SubmitWithMetadata(p.RunID, p.Repo, p.Branch, p.InputSHA, p.OutputSHA, func(ctx context.Context, _ func(daemon.Event)) error {
-			<-ctx.Done()
-			return ctx.Err()
+		snapshot, err := rm.SubmitWithMetadata(p.RunID, p.Repo, p.Branch, p.InputSHA, p.OutputSHA, func(context.Context, func(daemon.Event)) error {
+			return fmt.Errorf("run.submit: no executable gate work was supplied; submit through gate.notify-push")
 		})
 		if err != nil {
 			return nil, err
@@ -104,14 +106,27 @@ func runCancelHandler(rm *daemon.RunManager) api.HandlerFunc {
 	}
 }
 
-func daemonShutdownHandler(rm *daemon.RunManager, spool *daemon.GateSpool, cancel context.CancelFunc) api.HandlerFunc {
+func daemonShutdownHandler(rm *daemon.RunManager, spool *daemon.GateSpool, cancel context.CancelFunc, admission ...*sync.Mutex) api.HandlerFunc {
 	return func(_ context.Context, _ json.RawMessage) (any, error) {
-		if rm.HasActive() || spool.HasPending() {
+		unlock := lockAdmission(admission)
+		defer unlock()
+		if spool.HasPending() {
 			return nil, fmt.Errorf("daemon.shutdown: active or awaiting runs remain")
+		}
+		if err := rm.BeginShutdown(); err != nil {
+			return nil, fmt.Errorf("daemon.shutdown: active or awaiting runs remain: %w", err)
 		}
 		cancel()
 		return map[string]any{"ok": true, "schema_version": 1, "protocol_version": api.Version}, nil
 	}
+}
+
+func lockAdmission(admission []*sync.Mutex) func() {
+	if len(admission) == 0 || admission[0] == nil {
+		return func() {}
+	}
+	admission[0].Lock()
+	return admission[0].Unlock
 }
 
 func activeRunStatus(status daemon.RunStatus) bool {

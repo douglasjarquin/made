@@ -10,11 +10,14 @@ import (
 	"time"
 
 	"github.com/douglasjarquin/made/internal/api"
+	"github.com/douglasjarquin/made/internal/daemon"
 	"github.com/douglasjarquin/made/internal/exec"
 	"github.com/douglasjarquin/made/internal/gitgate"
 )
 
 const gateCommandTimeout = 30 * time.Second
+
+const gitZeroSHAValue = "0000000000000000000000000000000000000000"
 
 func runGateCommand(args []string, stdout, stderr *os.File) int {
 	if len(args) < 1 {
@@ -68,7 +71,21 @@ func runGateNotifyPushCommand(args []string, stdout, stderr *os.File) int {
 
 	client, err := api.Dial(api.SocketPath(home))
 	if err != nil {
-		_, _ = fmt.Fprintln(stderr, "gate notify-push: dial daemon:", err)
+		if *newSHA != gitZeroSHAValue {
+			spool, spoolErr := daemon.OpenGateSpool(filepath.Join(home, "gate.spool"))
+			if spoolErr == nil {
+				_, _, spoolErr = spool.Enqueue(daemon.GateSubmission{
+					Gate: *gatePath, Ref: *ref, SHA: *newSHA, RunID: daemon.NewRunID(),
+				})
+			}
+			if spoolErr != nil {
+				_, _ = fmt.Fprintln(stderr, "gate notify-push: dial daemon:", err, "; durable queue:", spoolErr)
+			} else {
+				_, _ = fmt.Fprintln(stderr, "gate notify-push: daemon unavailable; submission durably queued:", err)
+			}
+		} else {
+			_, _ = fmt.Fprintln(stderr, "gate notify-push: ref deletion does not require a run:", err)
+		}
 		return 0
 	}
 	defer func() { _ = client.Close() }()

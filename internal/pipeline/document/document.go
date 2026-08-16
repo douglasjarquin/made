@@ -8,6 +8,7 @@
 package document
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -31,7 +32,11 @@ type Result struct {
 // failing, worktreePath unreadable, etc); a policy violation is a normal
 // outcome reported via Result.Findings, not an error.
 func Run(worktreePath, baseBranch string, rules []Rule) (Result, error) {
-	changed, err := changedFiles(worktreePath, baseBranch)
+	return RunContext(context.Background(), worktreePath, baseBranch, rules)
+}
+
+func RunContext(ctx context.Context, worktreePath, baseBranch string, rules []Rule) (Result, error) {
+	changed, err := changedFiles(ctx, worktreePath, baseBranch)
 	if err != nil {
 		return Result{}, fmt.Errorf("document: %w", err)
 	}
@@ -77,8 +82,8 @@ func Run(worktreePath, baseBranch string, rules []Rule) (Result, error) {
 	}, nil
 }
 
-func changedFiles(worktreePath, baseBranch string) ([]string, error) {
-	cmd := exec.Command("git", "-C", worktreePath, "diff", "--name-only", baseBranch+"...HEAD")
+func changedFiles(ctx context.Context, worktreePath, baseBranch string) ([]string, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", worktreePath, "diff", "--name-only", baseBranch+"...HEAD")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("git diff --name-only %s...HEAD: %w: %s", baseBranch, err, strings.TrimSpace(string(out)))

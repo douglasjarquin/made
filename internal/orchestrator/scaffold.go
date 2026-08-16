@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/douglasjarquin/made/internal/config"
@@ -143,7 +144,7 @@ func refreshDefaultBranch(ctx context.Context, gatePath, defaultBranch string) e
 		return fmt.Errorf("orchestrator: inspect origin remote: %w", err)
 	}
 	if remote.ExitCode != 0 {
-		return nil
+		return fmt.Errorf("orchestrator: origin remote is unavailable: %s", string(remote.Stderr))
 	}
 	refspec := fmt.Sprintf("%s:refs/heads/%s", defaultBranch, defaultBranch)
 	fetch, err := execpkg.Run(ctx, execpkg.Command{Name: "git", Args: []string{"fetch", "origin", refspec}, Dir: gatePath})
@@ -151,6 +152,9 @@ func refreshDefaultBranch(ctx context.Context, gatePath, defaultBranch string) e
 		return fmt.Errorf("orchestrator: refresh default branch %s: %w", defaultBranch, err)
 	}
 	if fetch.ExitCode != 0 {
+		if strings.Contains(string(fetch.Stderr), "couldn't find remote ref") {
+			return nil
+		}
 		return fmt.Errorf("orchestrator: refresh default branch %s failed: %s", defaultBranch, string(fetch.Stderr))
 	}
 	return nil

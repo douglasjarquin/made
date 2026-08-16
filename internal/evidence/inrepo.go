@@ -87,6 +87,11 @@ func (s *InRepoStore) WriteEvidence(runID string, files map[string][]byte) (err 
 			closeEvidenceDirectories(parentOpened)
 			return fmt.Errorf("evidence: open evidence file %q: %w", name, openErr)
 		}
+		if chmodErr := unix.Fchmod(fileFD, 0o600); chmodErr != nil {
+			_ = unix.Close(fileFD)
+			closeEvidenceDirectories(parentOpened)
+			return fmt.Errorf("evidence: restrict evidence file %q: %w", name, chmodErr)
+		}
 		redacted := Redact(content)
 		writeErr := writeEvidenceFile(fileFD, redacted)
 		closeErr := unix.Close(fileFD)
@@ -143,10 +148,26 @@ func openEvidenceDirectory(rootFD int, parts []string) (int, []int, error) {
 			closeEvidenceDirectories(opened)
 			return -1, nil, err
 		}
+		if err := restrictEvidenceDirectory(fd); err != nil {
+			_ = unix.Close(fd)
+			closeEvidenceDirectories(opened)
+			return -1, nil, err
+		}
 		opened = append(opened, fd)
 		current = fd
 	}
 	return current, opened, nil
+}
+
+func restrictEvidenceDirectory(fd int) error {
+	var stat unix.Stat_t
+	if err := unix.Fstat(fd, &stat); err != nil {
+		return err
+	}
+	if stat.Mode&0o077 != 0 {
+		return unix.Fchmod(fd, 0o700)
+	}
+	return nil
 }
 
 func closeEvidenceDirectories(fds []int) {

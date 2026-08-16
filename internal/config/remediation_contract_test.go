@@ -10,6 +10,14 @@ func TestLoadConfig_RejectsUnknownMadeYMLFields(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_RejectsUnknownFieldsInTrustedMadeYMLCopy(t *testing.T) {
+	path := writeConfigFile(t, t.TempDir(), "trusted-copy.made.yml", "version: 1\nunknown_field: true\n")
+
+	if _, _, err := loadConfigFile(path); err == nil {
+		t.Fatal("loadConfigFile accepted an unknown field in a trusted .made.yml copy")
+	}
+}
+
 func TestLoadConfig_RejectsZeroValueMadeYML(t *testing.T) {
 	path := writeConfigFile(t, t.TempDir(), ".made.yml", "")
 
@@ -34,5 +42,11 @@ func TestConfig_DisabledStagesAreSkipped(t *testing.T) {
 	}
 	if got := cfg.StageResult("review"); got != "skipped" {
 		t.Fatalf("disabled stage result = %q, want skipped", got)
+	}
+}
+
+func TestConfig_NoCIIsRepresentedAsSkipped(t *testing.T) {
+	if got := (Config{NoCI: true}).StageResult("ci"); got != "skipped" {
+		t.Fatalf("NoCI stage result = %q, want skipped", got)
 	}
 }

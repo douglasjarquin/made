@@ -46,6 +46,12 @@ func TestInRepoStore_RedactsPublishedSecrets(t *testing.T) {
 func TestInRepoStore_UsesPrivateEvidencePermissions(t *testing.T) {
 	repo := t.TempDir()
 	store := &evidence.InRepoStore{RepoPath: repo, Dir: ".made/evidence"}
+	if err := os.MkdirAll(filepath.Join(repo, ".made", "evidence", "run-1"), 0o755); err != nil {
+		t.Fatalf("create existing evidence directories: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".made", "evidence", "run-1", "log.txt"), []byte("old"), 0o644); err != nil {
+		t.Fatalf("create existing evidence file: %v", err)
+	}
 	if err := store.WriteEvidence("run-1", map[string][]byte{"log.txt": []byte("bounded")}); err != nil {
 		t.Fatalf("WriteEvidence: %v", err)
 	}

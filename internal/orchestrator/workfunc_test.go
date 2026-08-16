@@ -32,9 +32,14 @@ type wfFixture struct {
 
 func TestChain_RefusesDeliveryWhenRequiredStageDisabled(t *testing.T) {
 	disabled := false
+	rm := daemon.NewRunManager()
+	runID := rm.NewRunID()
+	if _, err := rm.Submit(runID, "repo", "branch", func(context.Context, func(daemon.Event)) error { return nil }); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
 	c := &chain{rc: &RunContext{Config: config.Config{
 		Stages: map[string]config.Stage{stageNameReview: {Enabled: &disabled}},
-	}}}
+	}}, rm: rm, runID: runID}
 
 	err := c.requireDeliveryStages()
 	if err == nil {
@@ -42,6 +47,10 @@ func TestChain_RefusesDeliveryWhenRequiredStageDisabled(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), `required stage "review" is disabled`) {
 		t.Fatalf("requireDeliveryStages error = %q, want disabled review stage", err)
+	}
+	snapshot, ok := rm.Snapshot(runID)
+	if !ok || len(snapshot.Stages) != 1 || snapshot.Stages[0] != (daemon.StageResult{Name: stageNameReview, Result: "skipped"}) {
+		t.Fatalf("disabled stage snapshot = %+v, want review/skipped", snapshot.Stages)
 	}
 }
 

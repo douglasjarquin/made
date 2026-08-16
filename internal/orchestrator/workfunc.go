@@ -152,10 +152,11 @@ func (c *chain) requireDeliveryStages() error {
 		if c.rc.Config.StageResult(name) != "skipped" {
 			continue
 		}
-		if name == stageNamePush || name == stageNamePR || name == stageNameCI {
-			if err := c.finish(name, "skipped", "stage disabled"); err != nil {
-				return err
-			}
+		if name == stageNameCI && c.rc.Config.NoCI {
+			continue
+		}
+		if err := c.finish(name, "skipped", "stage disabled"); err != nil {
+			return err
 		}
 		return fmt.Errorf("orchestrator: refusing delivery because required stage %q is disabled", name)
 	}
@@ -215,7 +216,7 @@ func (c *chain) stageFailure(stage, message string) error {
 
 func (c *chain) intentStage() error {
 	c.start(stageNameIntent)
-	result, err := intent.Check(c.rc.Worktree.Path)
+	result, err := intent.CheckContext(c.ctx, c.rc.Worktree.Path)
 	if err != nil {
 		return err
 	}
@@ -230,7 +231,7 @@ func (c *chain) intentStage() error {
 
 func (c *chain) rebaseStage() error {
 	c.start(stageNameRebase)
-	result, err := rebase.Run(c.rc.Worktree.Path, c.defaultBranch)
+	result, err := rebase.RunContext(c.ctx, c.rc.Worktree.Path, c.defaultBranch)
 	if err != nil {
 		return err
 	}
@@ -302,7 +303,7 @@ func (c *chain) testStage() error {
 
 func (c *chain) documentStage() error {
 	c.start(stageNameDocument)
-	result, err := document.Run(c.rc.Worktree.Path, c.defaultBranch, deriveDocumentRules(c.rc.Config))
+	result, err := document.RunContext(c.ctx, c.rc.Worktree.Path, c.defaultBranch, deriveDocumentRules(c.rc.Config))
 	if err != nil {
 		return err
 	}
@@ -375,7 +376,10 @@ func (c *chain) prStage() (pr.Result, error) {
 		EvidenceRef: deriveEvidenceRef(c.rc.Evidence, c.runID),
 	})
 	if err != nil {
-		return pr.Result{}, err
+		if finishErr := c.finish(stageNamePR, stageResultFail, err.Error()); finishErr != nil {
+			return pr.Result{}, finishErr
+		}
+		return pr.Result{}, c.stageFailure(stageNamePR, err.Error())
 	}
 	if !result.OK {
 		if err := c.finish(stageNamePR, stageResultFail, result.Message); err != nil {

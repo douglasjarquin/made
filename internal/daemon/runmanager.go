@@ -59,6 +59,8 @@ type WorkFunc func(ctx context.Context, emit func(Event)) error
 
 var ErrRunIDExists = errors.New("daemon: run ID already submitted")
 
+var ErrRunSubmissionClosed = errors.New("daemon: run submission is closed")
+
 type run struct {
 	mu     sync.Mutex
 	snap   RunSnapshot
@@ -99,13 +101,27 @@ type RunManager struct {
 	store     *RunStore
 	persistMu sync.Mutex
 
-	mu    sync.Mutex
-	repos map[string]*repoQueue
-	runs  map[string]*run
+	mu      sync.Mutex
+	repos   map[string]*repoQueue
+	runs    map[string]*run
+	closing bool
 }
 
 func NewRunManager() *RunManager {
 	return newRunManager(nil, nil)
+}
+
+func NewRunID() string {
+	var id [16]byte
+	if _, err := rand.Read(id[:]); err != nil {
+		counter := atomic.AddUint64(&fallbackRunIDCounter, 1)
+		for i := range id {
+			id[i] = byte(counter >> (uint(i%8) * 8))
+		}
+	}
+	id[6] = (id[6] & 0x0f) | 0x40
+	id[8] = (id[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x", id[0:4], id[4:6], id[6:8], id[8:10], id[10:16])
 }
 
 func NewPersistentRunManager(path string) (*RunManager, error) {
@@ -180,16 +196,7 @@ func (rm *RunManager) signalActivity() {
 }
 
 func (rm *RunManager) NewRunID() string {
-	var id [16]byte
-	if _, err := rand.Read(id[:]); err != nil {
-		counter := atomic.AddUint64(&fallbackRunIDCounter, 1)
-		for i := range id {
-			id[i] = byte(counter >> (uint(i%8) * 8))
-		}
-	}
-	id[6] = (id[6] & 0x0f) | 0x40
-	id[8] = (id[8] & 0x3f) | 0x80
-	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x", id[0:4], id[4:6], id[6:8], id[8:10], id[10:16])
+	return NewRunID()
 }
 
 var fallbackRunIDCounter uint64
@@ -219,6 +226,11 @@ func (rm *RunManager) SubmitWithMetadata(id, repo, branch, inputSHA, outputSHA s
 	}
 
 	rm.mu.Lock()
+	if rm.closing {
+		rm.mu.Unlock()
+		cancel()
+		return RunSnapshot{}, ErrRunSubmissionClosed
+	}
 	if _, exists := rm.runs[id]; exists {
 		rm.mu.Unlock()
 		return RunSnapshot{}, ErrRunIDExists
@@ -252,6 +264,34 @@ func (rm *RunManager) SubmitWithMetadata(id, repo, branch, inputSHA, outputSHA s
 	}
 
 	return r.snapshot(), nil
+}
+
+func (rm *RunManager) BeginShutdown() error {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+	if rm.closing {
+		return ErrRunSubmissionClosed
+	}
+	for _, r := range rm.runs {
+		snapshot := r.snapshot()
+		if snapshot.Status == RunQueued || snapshot.Status == RunRunning || snapshot.Status == RunAwaitingReview || snapshot.Status == RunAwaitingMerge {
+			return fmt.Errorf("daemon: active run %q remains in state %s", snapshot.ID, snapshot.Status)
+		}
+	}
+	rm.closing = true
+	return nil
+}
+
+func (rm *RunManager) StopAccepting() {
+	rm.mu.Lock()
+	rm.closing = true
+	rm.mu.Unlock()
+}
+
+func (rm *RunManager) Accepting() bool {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+	return !rm.closing
 }
 
 func (rm *RunManager) drain(rq *repoQueue) {

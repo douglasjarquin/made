@@ -4,6 +4,7 @@
 package intent
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -18,12 +19,16 @@ type Result struct {
 // unreadable, git missing, etc); a missing/empty Intent trailer is a normal
 // outcome reported via Result.OK, not an error.
 func Check(repoPath string) (Result, error) {
-	message, err := commitMessage(repoPath)
+	return CheckContext(context.Background(), repoPath)
+}
+
+func CheckContext(ctx context.Context, repoPath string) (Result, error) {
+	message, err := commitMessage(ctx, repoPath)
 	if err != nil {
 		return Result{}, err
 	}
 
-	value, err := intentTrailerValue(repoPath, message)
+	value, err := intentTrailerValue(ctx, repoPath, message)
 	if err != nil {
 		return Result{}, err
 	}
@@ -41,8 +46,8 @@ func Check(repoPath string) (Result, error) {
 	}, nil
 }
 
-func commitMessage(repoPath string) (string, error) {
-	cmd := exec.Command("git", "-C", repoPath, "log", "-1", "--format=%B", "HEAD")
+func commitMessage(ctx context.Context, repoPath string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "log", "-1", "--format=%B", "HEAD")
 	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("intent: read tip commit message: %w", err)
@@ -50,8 +55,8 @@ func commitMessage(repoPath string) (string, error) {
 	return string(out), nil
 }
 
-func intentTrailerValue(repoPath, message string) (string, error) {
-	cmd := exec.Command("git", "-C", repoPath, "interpret-trailers", "--parse")
+func intentTrailerValue(ctx context.Context, repoPath, message string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "interpret-trailers", "--parse")
 	cmd.Stdin = strings.NewReader(message)
 	out, err := cmd.Output()
 	if err != nil {

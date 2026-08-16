@@ -105,7 +105,11 @@ func (c *Client) CreatePR(ctx context.Context, opts CreatePROptions) (string, er
 	if res.ExitCode != 0 {
 		return "", fmt.Errorf("github: gh pr create failed: %s", strings.TrimSpace(string(res.Stderr)))
 	}
-	return lastLine(res.Stdout), nil
+	url := lastLine(res.Stdout)
+	if url == "" {
+		return "", fmt.Errorf("github: gh pr create returned an empty URL")
+	}
+	return url, nil
 }
 
 func (c *Client) findOpenPR(ctx context.Context, opts CreatePROptions) (string, error) {

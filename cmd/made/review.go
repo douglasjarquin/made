@@ -22,6 +22,14 @@ type reviewDecideParams struct {
 	Decision string `json:"decision"`
 }
 
+type reviewDecisionReport struct {
+	SchemaVersion   int    `json:"schema_version"`
+	ProtocolVersion int    `json:"protocol_version"`
+	RunID           string `json:"run_id"`
+	Stage           string `json:"stage"`
+	Decision        string `json:"decision"`
+}
+
 func reviewDecideRunHandler(rm *daemon.RunManager, store *daemon.ReviewDecisions) api.HandlerFunc {
 	return func(_ context.Context, params json.RawMessage) (any, error) {
 		var p reviewDecideParams
@@ -41,7 +49,10 @@ func reviewDecideRunHandler(rm *daemon.RunManager, store *daemon.ReviewDecisions
 			return nil, err
 		}
 		store.Set(p.RunID, p.Stage, p.Decision)
-		return map[string]any{"ok": true}, nil
+		return reviewDecisionReport{
+			SchemaVersion: 1, ProtocolVersion: api.Version,
+			RunID: p.RunID, Stage: p.Stage, Decision: p.Decision,
+		}, nil
 	}
 }
 
@@ -69,9 +80,10 @@ func runReviewDecideCommand(args []string, stdout, stderr *os.File) int {
 		return 1
 	}
 	defer func() { _ = client.Close() }()
-	if err := client.CallInto("review.decide", reviewDecideParams{RunID: fs.Arg(0), Stage: *stage, Decision: *decision}, nil); err != nil {
+	var report reviewDecisionReport
+	if err := client.CallInto("review.decide", reviewDecideParams{RunID: fs.Arg(0), Stage: *stage, Decision: *decision}, &report); err != nil {
 		_, _ = fmt.Fprintln(stderr, "made review decide:", err)
 		return 1
 	}
-	return writeJSON(stdout, map[string]any{"schema_version": 1, "protocol_version": api.Version, "run_id": fs.Arg(0), "stage": *stage, "decision": *decision}, stderr, "made review decide")
+	return writeJSON(stdout, report, stderr, "made review decide")
 }
