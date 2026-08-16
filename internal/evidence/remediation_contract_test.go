@@ -39,3 +39,25 @@ func TestInRepoStore_RedactsPublishedSecrets(t *testing.T) {
 		t.Fatalf("published evidence retained an authorization secret: %q", data)
 	}
 }
+
+func TestInRepoStore_RejectsSymlinkedEvidenceDirectory(t *testing.T) {
+	repo := t.TempDir()
+	outside := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".made"), 0o755); err != nil {
+		t.Fatalf("create evidence parent: %v", err)
+	}
+	if err := os.Symlink(outside, filepath.Join(repo, ".made", "evidence")); err != nil {
+		t.Fatalf("create evidence symlink: %v", err)
+	}
+	store := &evidence.InRepoStore{RepoPath: repo, Dir: ".made/evidence"}
+	if err := store.WriteEvidence("run-1", map[string][]byte{"log.txt": []byte("must remain inside")}); err == nil {
+		t.Fatal("evidence store followed a symlinked evidence directory")
+	}
+	entries, err := os.ReadDir(outside)
+	if err != nil {
+		t.Fatalf("read outside directory: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("evidence escaped through symlink: %+v", entries)
+	}
+}

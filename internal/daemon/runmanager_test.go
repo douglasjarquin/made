@@ -291,7 +291,9 @@ func TestRunManager_SupersedeQueuedDropsOnlyStillQueuedJobForBranch(t *testing.T
 		t.Fatalf("expected first run still queued behind the blocker before supersession, got %+v (ok=%v)", snap, ok)
 	}
 
-	rm.SupersedeQueued(repo, "feature-x")
+	if err := rm.SupersedeQueued(repo, "feature-x"); err != nil {
+		t.Fatalf("SupersedeQueued: %v", err)
+	}
 
 	id2 := rm.NewRunID()
 	if _, err := rm.Submit(id2, repo, "feature-x", recordWork("second")); err != nil {
@@ -341,7 +343,9 @@ func TestRunManager_SupersedeQueuedLeavesAlreadyStartedRunAlone(t *testing.T) {
 	<-started
 	waitForStatus(t, rm, id, RunRunning, time.Second)
 
-	rm.SupersedeQueued(repo, "feature-x")
+	if err := rm.SupersedeQueued(repo, "feature-x"); err != nil {
+		t.Fatalf("SupersedeQueued: %v", err)
+	}
 
 	if snap, _ := rm.Snapshot(id); snap.Status != RunRunning {
 		t.Fatalf("expected already-started run to stay RunRunning after SupersedeQueued, got %v", snap.Status)

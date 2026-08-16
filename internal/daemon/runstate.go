@@ -36,7 +36,9 @@ func (rm *RunManager) UpdateStages(id string, stages []StageResult) error {
 	r.update(func(s *RunSnapshot) {
 		s.Stages = append([]StageResult(nil), stages...)
 	})
-	rm.persist(r)
+	if err := rm.persist(r); err != nil {
+		return fmt.Errorf("persist stages for run %q: %w", id, err)
+	}
 	return nil
 }
 
@@ -54,7 +56,9 @@ func (rm *RunManager) UpdatePendingFindings(id string, findings []AskUserFinding
 			s.Status = RunRunning
 		}
 	})
-	rm.persist(r)
+	if err := rm.persist(r); err != nil {
+		return fmt.Errorf("persist pending findings for run %q: %w", id, err)
+	}
 	return nil
 }
 

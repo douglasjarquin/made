@@ -73,12 +73,65 @@ func TestRunStateSurvivesDaemonRestart(t *testing.T) {
 	}
 	defer func() { _ = client2.Close() }()
 	var status StatusReport
-	if err := client2.CallInto("status", statusParams{RunID: runID}, &status); err != nil {
+	if err := client2.CallInto("run.status", statusParams{RunID: runID}, &status); err != nil {
 		t.Fatalf("status after restart: %v", err)
 	}
 	if status.RunID != runID {
 		t.Fatalf("status after restart run ID = %q, want %q", status.RunID, runID)
 	}
+}
+
+func TestGateSubmissionSpoolReplaysAfterDaemonRestart(t *testing.T) {
+	home := shortTempDir(t)
+	barePath, sourceDir := setupGateFixture(t, home)
+	testGit(t, sourceDir, "checkout", "-b", "feature-replay")
+	sha := pushFeatureCommit(t, sourceDir, "feature-replay", "replayed\n", "replayed gate submission")
+	runID := "123e4567-e89b-12d3-a456-426614174004"
+
+	spoolPath := filepath.Join(home, "gate.spool")
+	spool, err := daemon.OpenGateSpool(spoolPath)
+	if err != nil {
+		t.Fatalf("OpenGateSpool: %v", err)
+	}
+	if _, created, err := spool.Enqueue(daemon.GateSubmission{
+		Gate: barePath, Ref: "refs/heads/feature-replay", SHA: sha, RunID: runID,
+	}); err != nil || !created {
+		t.Fatalf("seed pending gate submission: created=%v err=%v", created, err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ready := make(chan int, 1)
+	rm, done := startDaemon(ctx, home, filepath.Join(home, "daemon.lock"), time.Minute, func(pid int) { ready <- pid })
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Error("daemon did not stop after replay test")
+		}
+	})
+	select {
+	case <-ready:
+	case err := <-done:
+		t.Fatalf("daemon stopped before replay: %v", err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("daemon did not become ready for replay")
+	}
+
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if snapshot, ok := rm.Snapshot(runID); ok && snapshot.Branch == "feature-replay" {
+			reopened, err := daemon.OpenGateSpool(spoolPath)
+			if err != nil {
+				t.Fatalf("reopen gate spool: %v", err)
+			}
+			if !reopened.HasPending() {
+				return
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("pending gate submission was not replayed, runs=%+v", rm.List())
 }
 
 func TestStartDaemon_DuplicatePreservesOriginalSocketOwner(t *testing.T) {
@@ -139,6 +192,38 @@ func TestStartDaemon_DuplicatePreservesOriginalSocketOwner(t *testing.T) {
 	}
 	if _, err := firstClient.Call("ping", nil); err != nil {
 		t.Fatalf("original daemon became unreachable after duplicate start: %v", err)
+	}
+}
+
+func TestDaemonRejectsObsoleteUnversionedRPCs(t *testing.T) {
+	home := shortTempDir(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	ready := make(chan int, 1)
+	_, done := startDaemon(ctx, home, filepath.Join(home, "daemon.lock"), time.Hour, func(pid int) { ready <- pid })
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Error("daemon did not stop during cleanup")
+		}
+	})
+	select {
+	case <-ready:
+	case err := <-done:
+		t.Fatalf("daemon stopped before RPC probe: %v", err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("daemon did not become ready")
+	}
+	client, err := api.Dial(api.SocketPath(home))
+	if err != nil {
+		t.Fatalf("dial daemon: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+	for _, method := range []string{"status", "review.decision"} {
+		if _, err := client.Call(method, nil); err == nil {
+			t.Fatalf("obsolete RPC %q was still registered", method)
+		}
 	}
 }
 

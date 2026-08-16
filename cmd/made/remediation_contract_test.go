@@ -79,6 +79,14 @@ func TestRun_SubmitJSONReturnsExactRunIDAndImmutableInputHead(t *testing.T) {
 	}
 }
 
+func TestRunSubmit_RejectsInvalidOutputSHA(t *testing.T) {
+	rm := daemon.NewRunManager()
+	_, err := runSubmitHandler(rm)(context.Background(), []byte(`{"repo":"/repo","branch":"feature","input_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","output_sha":"not-a-sha"}`))
+	if err == nil {
+		t.Fatal("run.submit accepted an invalid output_sha")
+	}
+}
+
 func TestStatusHandler_RequiresExactRunID(t *testing.T) {
 	rm := daemon.NewRunManager()
 	started := make(chan struct{})
@@ -125,8 +133,8 @@ func TestStatusReport_JSONHasFixedDurableRunSchema(t *testing.T) {
 }
 
 func TestReviewDecide_RejectsUnknownExactRunID(t *testing.T) {
-	store := newReviewDecisions()
-	_, err := reviewDecideHandler(store)(context.Background(), []byte(`{"run_id":"missing","stage":"review","decision":"approved"}`))
+	store := daemon.NewReviewDecisions()
+	_, err := reviewDecideRunHandler(daemon.NewRunManager(), store)(context.Background(), []byte(`{"run_id":"missing","stage":"review","decision":"approved"}`))
 	if err == nil {
 		t.Fatal("review.decide accepted a decision for an unknown exact run ID")
 	}

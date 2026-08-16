@@ -120,7 +120,9 @@ func (c *chain) run() error {
 	var prResult pr.Result
 	var err error
 	if c.rc.Config.StageResult(stageNamePR) == "skipped" {
-		c.finish(stageNamePR, "skipped", "stage disabled")
+		if err := c.finish(stageNamePR, "skipped", "stage disabled"); err != nil {
+			return err
+		}
 	} else {
 		prResult, err = c.prStage()
 	}
@@ -141,8 +143,7 @@ func (c *chain) run() error {
 
 func (c *chain) runStage(name string, stage func() error) error {
 	if c.rc.Config.StageResult(name) == "skipped" {
-		c.finish(name, "skipped", "stage disabled")
-		return nil
+		return c.finish(name, "skipped", "stage disabled")
 	}
 	stageCtx, cancel := context.WithTimeout(c.ctx, stageTimeout)
 	previous := c.ctx
@@ -155,8 +156,7 @@ func (c *chain) runStage(name string, stage func() error) error {
 
 func (c *chain) runCIStage(prURL string) error {
 	if c.rc.Config.StageResult(stageNameCI) == "skipped" || prURL == "" {
-		c.finish(stageNameCI, "skipped", "stage disabled")
-		return nil
+		return c.finish(stageNameCI, "skipped", "stage disabled")
 	}
 	return c.ciStage(prURL)
 }
@@ -167,12 +167,15 @@ func (c *chain) start(stage string) {
 	}
 }
 
-func (c *chain) finish(stage, result, message string) {
+func (c *chain) finish(stage, result, message string) error {
 	c.stages = append(c.stages, daemon.StageResult{Name: stage, Result: result})
-	_ = c.rm.UpdateStages(c.runID, append([]daemon.StageResult(nil), c.stages...))
+	if err := c.rm.UpdateStages(c.runID, append([]daemon.StageResult(nil), c.stages...)); err != nil {
+		return err
+	}
 	if c.emit != nil {
 		c.emit(daemon.Event{Kind: daemon.EventStageFinished, Stage: stage, Message: message})
 	}
+	return nil
 }
 
 func (c *chain) stageFailure(stage, message string) error {
@@ -196,11 +199,12 @@ func (c *chain) intentStage() error {
 		return err
 	}
 	if !result.OK {
-		c.finish(stageNameIntent, stageResultFail, result.Message)
+		if err := c.finish(stageNameIntent, stageResultFail, result.Message); err != nil {
+			return err
+		}
 		return c.stageFailure(stageNameIntent, result.Message)
 	}
-	c.finish(stageNameIntent, stageResultPass, result.Message)
-	return nil
+	return c.finish(stageNameIntent, stageResultPass, result.Message)
 }
 
 func (c *chain) rebaseStage() error {
@@ -210,11 +214,12 @@ func (c *chain) rebaseStage() error {
 		return err
 	}
 	if !result.OK {
-		c.finish(stageNameRebase, stageResultFail, result.Message)
+		if err := c.finish(stageNameRebase, stageResultFail, result.Message); err != nil {
+			return err
+		}
 		return c.stageFailure(stageNameRebase, result.Message)
 	}
-	c.finish(stageNameRebase, stageResultPass, result.Message)
-	return nil
+	return c.finish(stageNameRebase, stageResultPass, result.Message)
 }
 
 func (c *chain) reviewStage() error {
@@ -244,7 +249,9 @@ func (c *chain) reviewStage() error {
 		return err
 	}
 	if !result.OK {
-		c.finish(stageNameReview, stageResultFail, result.Message)
+		if err := c.finish(stageNameReview, stageResultFail, result.Message); err != nil {
+			return err
+		}
 		return c.stageFailure(stageNameReview, result.Message)
 	}
 
@@ -254,8 +261,7 @@ func (c *chain) reviewStage() error {
 		}
 	}
 
-	c.finish(stageNameReview, stageResultPass, result.Message)
-	return nil
+	return c.finish(stageNameReview, stageResultPass, result.Message)
 }
 
 func (c *chain) testStage() error {
@@ -265,11 +271,12 @@ func (c *chain) testStage() error {
 		return err
 	}
 	if !result.OK {
-		c.finish(stageNameTest, stageResultFail, result.Message)
+		if err := c.finish(stageNameTest, stageResultFail, result.Message); err != nil {
+			return err
+		}
 		return c.stageFailure(stageNameTest, result.Message)
 	}
-	c.finish(stageNameTest, stageResultPass, result.Message)
-	return nil
+	return c.finish(stageNameTest, stageResultPass, result.Message)
 }
 
 func (c *chain) documentStage() error {
@@ -286,7 +293,9 @@ func (c *chain) documentStage() error {
 		return err
 	}
 	if !result.OK {
-		c.finish(stageNameDocument, stageResultFail, result.Message)
+		if err := c.finish(stageNameDocument, stageResultFail, result.Message); err != nil {
+			return err
+		}
 		return c.stageFailure(stageNameDocument, result.Message)
 	}
 
@@ -296,8 +305,7 @@ func (c *chain) documentStage() error {
 		}
 	}
 
-	c.finish(stageNameDocument, stageResultPass, result.Message)
-	return nil
+	return c.finish(stageNameDocument, stageResultPass, result.Message)
 }
 
 func (c *chain) lintStage() error {
@@ -307,11 +315,12 @@ func (c *chain) lintStage() error {
 		return err
 	}
 	if !result.OK {
-		c.finish(stageNameLint, stageResultFail, result.Message)
+		if err := c.finish(stageNameLint, stageResultFail, result.Message); err != nil {
+			return err
+		}
 		return c.stageFailure(stageNameLint, result.Message)
 	}
-	c.finish(stageNameLint, stageResultPass, result.Message)
-	return nil
+	return c.finish(stageNameLint, stageResultPass, result.Message)
 }
 
 func (c *chain) pushStage() error {
@@ -321,12 +330,13 @@ func (c *chain) pushStage() error {
 		return err
 	}
 	if !result.OK {
-		c.finish(stageNamePush, stageResultFail, result.Message)
+		if err := c.finish(stageNamePush, stageResultFail, result.Message); err != nil {
+			return err
+		}
 		return c.stageFailure(stageNamePush, result.Message)
 	}
 	c.pushed = true
-	c.finish(stageNamePush, stageResultPass, result.Message)
-	return nil
+	return c.finish(stageNamePush, stageResultPass, result.Message)
 }
 
 func (c *chain) prStage() (pr.Result, error) {
@@ -347,13 +357,17 @@ func (c *chain) prStage() (pr.Result, error) {
 		return pr.Result{}, err
 	}
 	if !result.OK {
-		c.finish(stageNamePR, stageResultFail, result.Message)
+		if err := c.finish(stageNamePR, stageResultFail, result.Message); err != nil {
+			return pr.Result{}, err
+		}
 		return pr.Result{}, c.stageFailure(stageNamePR, result.Message)
 	}
 	if err := c.rm.SetPRURL(c.runID, result.PRURL); err != nil {
 		return pr.Result{}, err
 	}
-	c.finish(stageNamePR, stageResultPass, result.Message)
+	if err := c.finish(stageNamePR, stageResultPass, result.Message); err != nil {
+		return pr.Result{}, err
+	}
 	return result, nil
 }
 
@@ -367,11 +381,12 @@ func (c *chain) ciStage(prURL string) error {
 		return err
 	}
 	if !result.OK {
-		c.finish(stageNameCI, stageResultFail, result.Message)
+		if err := c.finish(stageNameCI, stageResultFail, result.Message); err != nil {
+			return err
+		}
 		return c.stageFailure(stageNameCI, result.Message)
 	}
-	c.finish(stageNameCI, stageResultPass, result.Message)
-	return nil
+	return c.finish(stageNameCI, stageResultPass, result.Message)
 }
 
 // parkForApproval records findings and blocks on a single decision per
@@ -381,14 +396,21 @@ func (c *chain) ciStage(prURL string) error {
 // report success while still carrying findings a human must weigh in on, so
 // OK alone is never sufficient to proceed past them.
 func (c *chain) parkForApproval(stage string, findings []daemon.AskUserFinding) error {
-	_ = c.rm.UpdatePendingFindings(c.runID, findings)
+	if err := c.rm.UpdatePendingFindings(c.runID, findings); err != nil {
+		return err
+	}
 	decision, err := c.reviewDecisions.Wait(c.ctx, c.runID, stage)
-	_ = c.rm.UpdatePendingFindings(c.runID, nil)
+	clearErr := c.rm.UpdatePendingFindings(c.runID, nil)
 	if err != nil {
 		return fmt.Errorf("orchestrator: wait for %s decision: %w", stage, err)
 	}
+	if clearErr != nil {
+		return clearErr
+	}
 	if decision == daemon.ReviewRejected {
-		c.finish(stage, stageResultFail, "rejected by reviewer")
+		if err := c.finish(stage, stageResultFail, "rejected by reviewer"); err != nil {
+			return err
+		}
 		return c.stageFailure(stage, "rejected by reviewer")
 	}
 	return nil

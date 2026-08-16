@@ -25,13 +25,11 @@ var pipelineStages = []string{
 	"intent", "rebase", "review", "test", "document", "lint", "push", "pr", "ci",
 }
 
-// StatusReport is the schema for `made status --json`, replacing
-// no-mistakes' TOON status output for downstream consumers (Task 26). Stages
-// and PendingFindings come straight from daemon.RunSnapshot; until an
-// orchestrator (this plan's Task 12) actually calls UpdateStages/
-// UpdatePendingFindings on a run, Stages falls back to an all-"pending" list
-// over the fixed 9-stage order and PendingFindings falls back to empty, so
-// callers can integrate against the shape before real orchestration lands.
+// StatusReport is the schema for `made run status --json`. Stages and
+// PendingFindings come straight from daemon.RunSnapshot; until an orchestrator
+// calls UpdateStages/UpdatePendingFindings on a run, Stages falls back to an
+// all-"pending" list over the fixed 9-stage order and PendingFindings falls
+// back to empty.
 type StatusReport struct {
 	SchemaVersion     int                      `json:"schema_version"`
 	ProtocolVersion   int                      `json:"protocol_version"`
@@ -74,22 +72,15 @@ func statusHandler(rm *daemon.RunManager) api.HandlerFunc {
 			}
 		}
 
-		snap, ok := resolveRun(rm, p.RunID)
+		if p.RunID == "" {
+			return nil, fmt.Errorf("run.status: run_id is required")
+		}
+		snap, ok := rm.Snapshot(p.RunID)
 		if !ok {
-			return nil, fmt.Errorf("status: exact run_id %q was not found", p.RunID)
+			return nil, fmt.Errorf("run.status: exact run_id %q was not found", p.RunID)
 		}
 		return newStatusReport(snap), nil
 	}
-}
-
-func resolveRun(rm *daemon.RunManager, runID string) (daemon.RunSnapshot, bool) {
-	if runID != "" {
-		return rm.Snapshot(runID)
-	}
-	if runID == "" {
-		return daemon.RunSnapshot{}, false
-	}
-	return rm.Snapshot(runID)
 }
 
 func newStatusReport(snap daemon.RunSnapshot) StatusReport {

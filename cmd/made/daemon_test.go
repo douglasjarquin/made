@@ -95,7 +95,7 @@ func TestDaemonStop_CancelsInFlightRunBeforeProcessExits(t *testing.T) {
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		var report StatusReport
-		if err := client.CallInto("status", statusParams{RunID: runID}, &report); err != nil {
+		if err := client.CallInto("run.status", statusParams{RunID: runID}, &report); err != nil {
 			t.Fatalf("status: %v", err)
 		}
 		if report.State == "running" {

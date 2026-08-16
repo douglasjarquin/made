@@ -141,12 +141,13 @@ func startDaemon(ctx context.Context, home, lockPath string, idle time.Duration,
 
 	go func() {
 		runErr := daemon.Run(runCtx, daemon.Options{
-			LockPath:    lockPath,
-			Lock:        ownedLock,
-			IdleTimeout: idle,
-			OnReady:     onReady,
-			ActivityCh:  rm.ActivitySignal(),
-			ActiveFunc:  rm.HasActive,
+			LockPath:      lockPath,
+			Lock:          ownedLock,
+			IdleTimeout:   idle,
+			OnReady:       onReady,
+			ActivityCh:    rm.ActivitySignal(),
+			ActiveFunc:    rm.HasActive,
+			UndrainedFunc: spool.HasPending,
 		})
 		cancelInFlightRuns(rm, shutdownCancelTimeout)
 		cancelServe()
@@ -155,7 +156,27 @@ func startDaemon(ctx context.Context, home, lockPath string, idle time.Duration,
 		done <- runErr
 	}()
 
+	go replayPendingSubmissions(runCtx, rm, reviewStore, spool)
+
 	return rm, done
+}
+
+func replayPendingSubmissions(ctx context.Context, rm *daemon.RunManager, reviewDecisions *daemon.ReviewDecisions, spool *daemon.GateSpool) {
+	handler := gateNotifyPushHandler(rm, reviewDecisions, spool)
+	for _, submission := range spool.Pending() {
+		params, err := json.Marshal(gateNotifyPushParams{
+			GatePath: submission.Gate,
+			Ref:      submission.Ref,
+			NewSHA:   submission.SHA,
+			RunID:    submission.RunID,
+		})
+		if err != nil {
+			return
+		}
+		if _, err := handler(ctx, params); err != nil {
+			continue
+		}
+	}
 }
 
 // cancelInFlightRuns runs between daemon.Run returning (SIGTERM, ctx
@@ -194,13 +215,11 @@ func isTerminalRunStatus(s daemon.RunStatus) bool {
 const debugHandlersEnv = "MADE_DEBUG_HANDLERS"
 
 func registerDaemonHandlers(srv *api.Server, rm *daemon.RunManager, store *daemon.ReviewDecisions, spool *daemon.GateSpool, cancel context.CancelFunc) {
-	srv.Handle("status", statusHandler(rm))
 	srv.Handle("run.status", runStatusHandler(rm))
 	srv.Handle("run.submit", runSubmitHandler(rm))
 	srv.Handle("run.list", runListHandler(rm))
 	srv.Handle("run.cancel", runCancelHandler(rm))
 	srv.Handle("review.decide", reviewDecideRunHandler(rm, store))
-	srv.Handle("review.decision", reviewDecisionHandler(store))
 	srv.Handle("daemon.shutdown", daemonShutdownHandler(rm, spool, cancel))
 	srv.Handle("gate.admitPush", gateAdmitPushHandler())
 	srv.Handle("gate.notifyPush", gateNotifyPushHandler(rm, store, spool))
@@ -276,6 +295,7 @@ type gateNotifyPushParams struct {
 	OldSHA   string `json:"old_sha"`
 	NewSHA   string `json:"new_sha"`
 	Ref      string `json:"ref"`
+	RunID    string `json:"run_id,omitempty"`
 }
 
 type gateNotifyPushResult struct {
@@ -324,15 +344,29 @@ func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.Review
 		gatePath := p.GatePath
 		worktreesDir := gitgate.WorktreesDir(gatePath)
 		newSHA := p.NewSHA
-		runID := rm.NewRunID()
+		runID := p.RunID
+		if runID == "" {
+			runID = rm.NewRunID()
+		}
 		submission, created, err := spool.Enqueue(daemon.GateSubmission{Gate: p.GatePath, Ref: p.Ref, SHA: p.NewSHA, RunID: runID})
 		if err != nil {
 			return nil, fmt.Errorf("gate.notifyPush: enqueue submission: %w", err)
 		}
 		if !created {
-			return gateNotifyPushResult{RunID: submission.RunID}, nil
+			if _, ok := rm.Snapshot(submission.RunID); ok {
+				if err := rm.AppendSubmissionEvent(submission.RunID, daemon.SubmissionEvent{Gate: p.GatePath, Ref: p.Ref, InputSHA: p.NewSHA, Kind: "push"}); err != nil {
+					return nil, fmt.Errorf("gate.notifyPush: persist replayed submission event: %w", err)
+				}
+				if err := spool.Drain(submission); err != nil {
+					return nil, fmt.Errorf("gate.notifyPush: drain replayed submission: %w", err)
+				}
+				return gateNotifyPushResult{RunID: submission.RunID}, nil
+			}
+			runID = submission.RunID
 		}
-		rm.SupersedeQueued(repo, branch)
+		if err := rm.SupersedeQueued(repo, branch); err != nil {
+			return nil, fmt.Errorf("gate.notifyPush: supersede queued runs: %w", err)
+		}
 
 		work := func(workCtx context.Context, emit func(daemon.Event)) error {
 			return orchestrator.Run(workCtx, gatePath, defaultBranch, worktreesDir, runID, newSHA,

@@ -116,12 +116,13 @@ func applyAutoFix(worktreePath string, finding agent.Finding) (string, string, e
 		if err != nil {
 			return "", "", err
 		}
+		if _, err := gitOutput(worktreePath, "ls-files", "--error-unmatch", "--", clean); err != nil {
+			return "", "", fmt.Errorf("auto-fix returned untracked or unauthorized path %q", clean)
+		}
 		allowed[clean] = struct{}{}
 	}
 	if len(allowed) == 0 {
-		for _, path := range paths {
-			allowed[path] = struct{}{}
-		}
+		return "", "", fmt.Errorf("auto-fixable finding must return paths")
 	}
 	for _, path := range paths {
 		if _, ok := allowed[path]; !ok {

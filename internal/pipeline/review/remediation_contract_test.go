@@ -22,7 +22,7 @@ func TestRun_AutoFixRequiresCleanStateBeforeApplyingReturnedPatch(t *testing.T) 
 	}
 	patch := autoFixPatch(t, wt.Path)
 	scenarioPath := writeScenario(t, agent.Findings{Findings: []agent.Finding{
-		{Kind: agent.FindingAutoFixable, Description: "clean-state fix", Patch: patch},
+		{Kind: agent.FindingAutoFixable, Description: "clean-state fix", Patch: patch, Paths: []string{"reviewed.txt"}},
 	}})
 
 	if _, err := review.Run(t.Context(), wt.Path, agent.KindCodex, review.Options{

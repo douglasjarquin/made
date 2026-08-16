@@ -33,8 +33,8 @@ func runSubmitHandler(rm *daemon.RunManager) api.HandlerFunc {
 		if err := json.Unmarshal(params, &p); err != nil {
 			return nil, fmt.Errorf("run.submit: invalid params: %w", err)
 		}
-		if strings.TrimSpace(p.Repo) == "" || strings.TrimSpace(p.Branch) == "" || !validSHA(p.InputSHA) {
-			return nil, fmt.Errorf("run.submit: repo, branch, and a 40-character input_sha are required")
+		if strings.TrimSpace(p.Repo) == "" || strings.TrimSpace(p.Branch) == "" || !validSHA(p.InputSHA) || (p.OutputSHA != "" && !validSHA(p.OutputSHA)) {
+			return nil, fmt.Errorf("run.submit: repo, branch, input_sha, and optional output_sha must use valid 40-character SHAs")
 		}
 		if p.RunID == "" {
 			p.RunID = rm.NewRunID()

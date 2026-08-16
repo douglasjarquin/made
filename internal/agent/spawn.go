@@ -133,6 +133,9 @@ func strictFindings(data []byte) (Findings, error) {
 			if strings.TrimSpace(finding.Patch) == "" {
 				return Findings{}, fmt.Errorf("auto-fixable finding patch is required")
 			}
+			if len(finding.Paths) == 0 {
+				return Findings{}, fmt.Errorf("auto-fixable finding paths are required")
+			}
 		case FindingAskUser, FindingBlocking:
 		default:
 			return Findings{}, fmt.Errorf("unknown finding kind %q", finding.Kind)

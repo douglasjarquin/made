@@ -16,35 +16,19 @@ type reviewKey struct {
 }
 
 // ReviewDecisions lives alongside RunManager because a decision only ever
-// applies to one (run, stage) pair, making it per-run state that both the
-// review.decide/review.decision RPC handlers and the orchestrator's WorkFunc
-// need to reach from their separate packages.
+// applies to one (run, stage) pair, making it per-run state that the versioned
+// review.decide handler and orchestrator's WorkFunc share.
 type ReviewDecisions struct {
 	mu      sync.Mutex
 	entries map[reviewKey]string
 	waiters map[reviewKey][]chan string
-	runs    map[string]struct{}
 }
 
 func NewReviewDecisions() *ReviewDecisions {
 	return &ReviewDecisions{
 		entries: make(map[reviewKey]string),
 		waiters: make(map[reviewKey][]chan string),
-		runs:    make(map[string]struct{}),
 	}
-}
-
-func (d *ReviewDecisions) RegisterRun(runID string) {
-	d.mu.Lock()
-	d.runs[runID] = struct{}{}
-	d.mu.Unlock()
-}
-
-func (d *ReviewDecisions) HasRun(runID string) bool {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	_, ok := d.runs[runID]
-	return ok
 }
 
 // Set records a decision for (runID, stage) and wakes any goroutine blocked
@@ -61,13 +45,6 @@ func (d *ReviewDecisions) Set(runID, stage, decision string) {
 	for _, ch := range waiters {
 		ch <- decision
 	}
-}
-
-func (d *ReviewDecisions) Get(runID, stage string) (string, bool) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	decision, ok := d.entries[reviewKey{RunID: runID, Stage: stage}]
-	return decision, ok
 }
 
 // Wait blocks until a decision is recorded for (runID, stage) via Set, or

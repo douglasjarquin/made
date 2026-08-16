@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 func TestPersistentRunStateIncludesSubmissionAndDecisionData(t *testing.T) {
@@ -66,10 +67,52 @@ func TestGateSpoolIsIdempotentAndDurable(t *testing.T) {
 	if !reopened.HasPending() {
 		t.Fatal("pending submission disappeared after restart")
 	}
+	if pending := reopened.Pending(); len(pending) != 1 || pending[0] != submission {
+		t.Fatalf("Pending returned %+v, want %+v", pending, submission)
+	}
 	if err := reopened.Drain(submission); err != nil {
 		t.Fatalf("Drain: %v", err)
 	}
 	if reopened.HasPending() {
 		t.Fatal("drained submission remained pending")
+	}
+}
+
+func TestPersistentRunManagerReconcilesUnfinishedExecutionAfterRestart(t *testing.T) {
+	path := t.TempDir() + "/runs.wal"
+	store, _, err := OpenRunStore(path)
+	if err != nil {
+		t.Fatalf("OpenRunStore: %v", err)
+	}
+	id := "123e4567-e89b-12d3-a456-426614174003"
+	if err := store.Append(RunSnapshot{
+		ID:        id,
+		Repo:      "repo",
+		Branch:    "feature",
+		Status:    RunRunning,
+		QueuedAt:  time.Now().Add(-time.Minute),
+		StartedAt: time.Now().Add(-30 * time.Second),
+	}); err != nil {
+		t.Fatalf("seed unfinished snapshot: %v", err)
+	}
+
+	rm, err := NewPersistentRunManager(path)
+	if err != nil {
+		t.Fatalf("NewPersistentRunManager: %v", err)
+	}
+	snapshot, ok := rm.Snapshot(id)
+	if !ok {
+		t.Fatal("reconciled run missing")
+	}
+	if snapshot.Status != RunFailed || !snapshot.ExecutionFinished || snapshot.Err == nil {
+		t.Fatalf("unfinished run was not reconciled to durable failure: %+v", snapshot)
+	}
+
+	restarted, err := NewPersistentRunManager(path)
+	if err != nil {
+		t.Fatalf("reopen reconciled store: %v", err)
+	}
+	if snapshot, _ := restarted.Snapshot(id); snapshot.Status != RunFailed || !snapshot.ExecutionFinished {
+		t.Fatalf("reconciled failure was not durable: %+v", snapshot)
 	}
 }

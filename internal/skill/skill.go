@@ -129,7 +129,7 @@ and the run resumes.
   marks the run done on its own. The run's message names the open PR and
   says it is awaiting merge - tell the user it is ready for their review,
   and do not wait for the merge yourself.
-- ` + "`failed`" + ` - a stage blocked the run. Read ` + "`made status --json`" + ` for
+- ` + "`failed`" + ` - a stage blocked the run. Read ` + "`made run status --json <exact-run-id>`" + ` for
   the failing stage's result and message, fix it, commit the fix on the
   same branch, and push to ` + "`made`" + ` again. If PR or CI fails after
   Push already succeeded, the message says so explicitly - e.g. "push

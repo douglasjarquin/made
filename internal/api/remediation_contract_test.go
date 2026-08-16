@@ -131,6 +131,32 @@ func TestServer_DuplicateListenPreservesOriginalOwner(t *testing.T) {
 	}
 }
 
+func TestServer_CloseDoesNotRemoveSuccessorSocket(t *testing.T) {
+	path := filepath.Join(tempSocketDir(t), "daemon.sock")
+	first := api.NewServer(path)
+	if err := first.Listen(); err != nil {
+		t.Fatalf("first Listen: %v", err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatalf("remove first socket for handoff fixture: %v", err)
+	}
+	second := api.NewServer(path)
+	if err := second.Listen(); err != nil {
+		t.Fatalf("successor Listen: %v", err)
+	}
+	defer func() { _ = second.Close() }()
+	secondCtx, secondCancel := context.WithTimeout(context.Background(), time.Second)
+	defer secondCancel()
+	go func() { _ = second.Serve(secondCtx) }()
+
+	if err := first.Close(); err != nil {
+		t.Fatalf("first Close: %v", err)
+	}
+	if err := waitForPing(path); err != nil {
+		t.Fatalf("successor socket was removed by first Close: %v", err)
+	}
+}
+
 func waitForPing(path string) error {
 	conn, err := net.DialTimeout("unix", path, 100*time.Millisecond)
 	if err != nil {

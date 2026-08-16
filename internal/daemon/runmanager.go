@@ -114,7 +114,11 @@ func NewPersistentRunManager(path string) (*RunManager, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newRunManager(store, snapshots), nil
+	rm := newRunManager(store, snapshots)
+	if err := rm.reconcileRestoredRuns(); err != nil {
+		return nil, err
+	}
+	return rm, nil
 }
 
 func newRunManager(store *RunStore, snapshots map[string]RunSnapshot) *RunManager {
@@ -132,12 +136,34 @@ func newRunManager(store *RunStore, snapshots map[string]RunSnapshot) *RunManage
 	return rm
 }
 
-func (rm *RunManager) persist(r *run) {
-	if rm.store != nil {
-		rm.persistMu.Lock()
-		defer rm.persistMu.Unlock()
-		_ = rm.store.Append(r.snapshot())
+func (rm *RunManager) persist(r *run) error {
+	if rm.store == nil {
+		return nil
 	}
+	rm.persistMu.Lock()
+	defer rm.persistMu.Unlock()
+	return rm.store.Append(r.snapshot())
+}
+
+func (rm *RunManager) reconcileRestoredRuns() error {
+	for _, r := range rm.runs {
+		snapshot := r.snapshot()
+		if snapshot.Status != RunQueued && snapshot.Status != RunRunning {
+			continue
+		}
+		restartedErr := errors.New("daemon restarted before execution finished")
+		r.update(func(s *RunSnapshot) {
+			s.Status = RunFailed
+			s.EndedAt = time.Now()
+			s.ExecutionFinished = true
+			s.Err = restartedErr
+			s.Errors = append(s.Errors, restartedErr.Error())
+		})
+		if err := rm.persist(r); err != nil {
+			return fmt.Errorf("reconcile restored run %q: %w", snapshot.ID, err)
+		}
+	}
+	return nil
 }
 
 func (rm *RunManager) ActivitySignal() <-chan struct{} {
@@ -205,7 +231,16 @@ func (rm *RunManager) SubmitWithMetadata(id, repo, branch, inputSHA, outputSHA s
 		rm.repos[repo] = rq
 	}
 	rm.mu.Unlock()
-	rm.persist(r)
+	if err := rm.persist(r); err != nil {
+		rm.mu.Lock()
+		delete(rm.runs, id)
+		if current, ok := rm.repos[repo]; ok && current == rq {
+			delete(rm.repos, repo)
+		}
+		rm.mu.Unlock()
+		cancel()
+		return RunSnapshot{}, fmt.Errorf("persist submitted run: %w", err)
+	}
 
 	rq.mu.Lock()
 	rq.pending = append(rq.pending, &queuedJob{run: r, work: work})
@@ -243,7 +278,15 @@ func (rm *RunManager) execute(r *run, work WorkFunc) {
 		s.Status = RunRunning
 		s.StartedAt = started
 	})
-	rm.persist(r)
+	if err := rm.persist(r); err != nil {
+		retryErr := rm.recordPersistenceFailure(r, err)
+		eventErr := err
+		if retryErr != nil {
+			eventErr = errors.Join(err, retryErr)
+		}
+		rm.mailbox.Publish(Event{RunID: id, Kind: EventRunFailed, Time: time.Now(), Err: eventErr})
+		return
+	}
 	rm.mailbox.Publish(Event{RunID: id, Kind: EventRunStarted, Time: started})
 	rm.signalActivity()
 
@@ -279,13 +322,38 @@ func (rm *RunManager) execute(r *run, work WorkFunc) {
 			s.Status = RunSucceeded
 		}
 	})
-	rm.persist(r)
+	if persistErr := rm.persist(r); persistErr != nil {
+		retryErr := rm.recordPersistenceFailure(r, persistErr)
+		if retryErr != nil {
+			err = errors.Join(err, persistErr, retryErr)
+		} else {
+			err = errors.Join(err, persistErr)
+		}
+	}
 
 	finalKind := EventRunCompleted
 	if err != nil {
 		finalKind = EventRunFailed
 	}
 	rm.mailbox.Publish(Event{RunID: id, Kind: finalKind, Time: ended, Err: err})
+}
+
+func (rm *RunManager) recordPersistenceFailure(r *run, persistErr error) error {
+	durabilityErr := fmt.Errorf("daemon: durable run state write failed: %w", persistErr)
+	r.update(func(s *RunSnapshot) {
+		s.Status = RunFailed
+		s.EndedAt = time.Now()
+		s.ExecutionFinished = true
+		s.Err = durabilityErr
+		s.Errors = append(s.Errors, durabilityErr.Error())
+	})
+	retryErr := rm.persist(r)
+	if retryErr != nil {
+		r.update(func(s *RunSnapshot) {
+			s.Errors = append(s.Errors, fmt.Sprintf("daemon: retry durable run state write failed: %v", retryErr))
+		})
+	}
+	return retryErr
 }
 
 func (rm *RunManager) Snapshot(id string) (RunSnapshot, bool) {
@@ -333,7 +401,9 @@ func (rm *RunManager) Cancel(id string) error {
 		return fmt.Errorf("daemon: run %q is already %s", id, snapshot.Status)
 	}
 	r.update(func(s *RunSnapshot) { s.CancelRequested = true })
-	rm.persist(r)
+	if err := rm.persist(r); err != nil {
+		return fmt.Errorf("persist cancellation request: %w", err)
+	}
 	if snapshot.Status == RunAwaitingMerge || snapshot.Status == RunAwaitingReview {
 		r.update(func(s *RunSnapshot) {
 			s.Status = RunCanceled
@@ -342,7 +412,10 @@ func (rm *RunManager) Cancel(id string) error {
 			s.Err = context.Canceled
 			s.Errors = append(s.Errors, context.Canceled.Error())
 		})
-		rm.persist(r)
+		r.cancel()
+		if err := rm.persist(r); err != nil {
+			return fmt.Errorf("persist canceled run: %w", err)
+		}
 		return nil
 	}
 	r.cancel()
@@ -368,7 +441,9 @@ func (rm *RunManager) Finish(id string, status RunStatus, message string) error 
 		s.Message = message
 		s.finalized = true
 	})
-	rm.persist(r)
+	if err := rm.persist(r); err != nil {
+		return fmt.Errorf("persist finished run: %w", err)
+	}
 	return nil
 }
 
@@ -382,12 +457,12 @@ var ErrRunSuperseded = errors.New("daemon: run superseded by a newer push to the
 // inspected, so a job already popped off the queue - running or terminal -
 // is left completely alone, matching a fresh push's right to replace a
 // stale intent that hasn't started yet, but never a run already underway.
-func (rm *RunManager) SupersedeQueued(repo, branch string) {
+func (rm *RunManager) SupersedeQueued(repo, branch string) error {
 	rm.mu.Lock()
 	rq, ok := rm.repos[repo]
 	rm.mu.Unlock()
 	if !ok {
-		return
+		return nil
 	}
 
 	rq.mu.Lock()
@@ -404,6 +479,7 @@ func (rm *RunManager) SupersedeQueued(repo, branch string) {
 	rq.mu.Unlock()
 
 	now := time.Now()
+	var firstErr error
 	for _, j := range dropped {
 		j.run.update(func(s *RunSnapshot) {
 			s.Status = RunSuperseded
@@ -412,8 +488,11 @@ func (rm *RunManager) SupersedeQueued(repo, branch string) {
 			s.EndedAt = now
 			s.ExecutionFinished = true
 		})
-		rm.persist(j.run)
+		if err := rm.persist(j.run); err != nil && firstErr == nil {
+			firstErr = fmt.Errorf("persist superseded run: %w", err)
+		}
 		rm.mailbox.Publish(Event{RunID: j.run.snapshot().ID, Kind: EventRunFailed, Time: now, Err: ErrRunSuperseded})
 		rm.signalActivity()
 	}
+	return firstErr
 }

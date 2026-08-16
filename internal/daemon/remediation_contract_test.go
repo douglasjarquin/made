@@ -81,6 +81,35 @@ func TestRunManager_CancelUsesCanceledLifecycleAndIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestRunManager_CancelAwaitingReviewStopsBlockedWorker(t *testing.T) {
+	rm := NewRunManager()
+	id := rm.NewRunID()
+	workerStopped := make(chan struct{})
+	if _, err := rm.Submit(id, "repo-awaiting-review", "feature", func(ctx context.Context, _ func(Event)) error {
+		if err := rm.UpdatePendingFindings(id, []AskUserFinding{{Stage: "review", Message: "approve"}}); err != nil {
+			return err
+		}
+		<-ctx.Done()
+		close(workerStopped)
+		return ctx.Err()
+	}); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	waitForStatus(t, rm, id, RunAwaitingReview, 2*time.Second)
+	if err := rm.Cancel(id); err != nil {
+		t.Fatalf("Cancel awaiting review: %v", err)
+	}
+	select {
+	case <-workerStopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("awaiting-review worker did not observe cancellation")
+	}
+	final := waitForStatus(t, rm, id, RunCanceled, 2*time.Second)
+	if !final.ExecutionFinished {
+		t.Fatal("canceled awaiting-review run did not record execution_finished")
+	}
+}
+
 func TestRunManager_SupersedeUsesSupersededLifecycle(t *testing.T) {
 	rm := NewRunManager()
 	const repo = "repo-supersession"
@@ -100,7 +129,9 @@ func TestRunManager_SupersedeUsesSupersededLifecycle(t *testing.T) {
 	if _, err := rm.Submit(first, repo, "feature", func(context.Context, func(Event)) error { return nil }); err != nil {
 		t.Fatalf("Submit first: %v", err)
 	}
-	rm.SupersedeQueued(repo, "feature")
+	if err := rm.SupersedeQueued(repo, "feature"); err != nil {
+		t.Fatalf("SupersedeQueued: %v", err)
+	}
 	close(release)
 
 	deadline := time.After(2 * time.Second)

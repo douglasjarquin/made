@@ -15,6 +15,7 @@ type HandlerFunc func(ctx context.Context, params json.RawMessage) (any, error)
 type Server struct {
 	socketPath string
 	ln         net.Listener
+	socketInfo os.FileInfo
 
 	mu       sync.RWMutex
 	handlers map[string]HandlerFunc
@@ -53,8 +54,17 @@ func (s *Server) Listen() error {
 		_ = ln.Close()
 		return fmt.Errorf("chmod %s: %w", s.socketPath, err)
 	}
+	if unixListener, ok := ln.(*net.UnixListener); ok {
+		unixListener.SetUnlinkOnClose(false)
+	}
 
 	s.ln = ln
+	info, err := os.Lstat(s.socketPath)
+	if err != nil {
+		_ = ln.Close()
+		return fmt.Errorf("stat listened socket %s: %w", s.socketPath, err)
+	}
+	s.socketInfo = info
 	return nil
 }
 
@@ -107,7 +117,7 @@ func (s *Server) Close() error {
 		return nil
 	}
 	err := s.ln.Close()
-	if info, statErr := os.Lstat(s.socketPath); statErr == nil && info.Mode()&os.ModeSocket != 0 {
+	if info, statErr := os.Lstat(s.socketPath); statErr == nil && os.SameFile(s.socketInfo, info) && info.Mode()&os.ModeSocket != 0 {
 		_ = os.Remove(s.socketPath)
 	}
 	return err

@@ -29,7 +29,7 @@ func TestSpawn_ParsesFindingsFromFakeAgent(t *testing.T) {
 	bin := agenttest.Build(t)
 	scenarioPath := writeScenario(t, agent.Findings{
 		Findings: []agent.Finding{
-			{Kind: agent.FindingAutoFixable, Description: "fix formatting", Patch: "diff --git a/x b/x\n"},
+			{Kind: agent.FindingAutoFixable, Description: "fix formatting", Patch: "diff --git a/x b/x\n", Paths: []string{"x"}},
 			{Kind: agent.FindingAskUser, Description: "consider renaming Foo"},
 		},
 	})

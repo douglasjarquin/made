@@ -29,7 +29,9 @@ func (rm *RunManager) SetDecision(id, stage, decision string) error {
 		}
 		snapshot.Decisions[stage] = decision
 	})
-	rm.persist(r)
+	if err := rm.persist(r); err != nil {
+		return fmt.Errorf("persist decision for run %q: %w", id, err)
+	}
 	return nil
 }
 
@@ -39,7 +41,9 @@ func (rm *RunManager) SetPRURL(id, prURL string) error {
 		return fmt.Errorf("daemon: no run %q", id)
 	}
 	r.update(func(snapshot *RunSnapshot) { snapshot.PRURL = prURL })
-	rm.persist(r)
+	if err := rm.persist(r); err != nil {
+		return fmt.Errorf("persist PR URL for run %q: %w", id, err)
+	}
 	return nil
 }
 
@@ -51,7 +55,9 @@ func (rm *RunManager) AddFindings(id string, findings []RunFinding) error {
 	r.update(func(snapshot *RunSnapshot) {
 		snapshot.Findings = append(snapshot.Findings, findings...)
 	})
-	rm.persist(r)
+	if err := rm.persist(r); err != nil {
+		return fmt.Errorf("persist findings for run %q: %w", id, err)
+	}
 	return nil
 }
 
@@ -71,6 +77,8 @@ func (rm *RunManager) AppendSubmissionEvent(id string, event SubmissionEvent) er
 		}
 		snapshot.SubmissionEvents = append(snapshot.SubmissionEvents, event)
 	})
-	rm.persist(r)
+	if err := rm.persist(r); err != nil {
+		return fmt.Errorf("persist submission event for run %q: %w", id, err)
+	}
 	return nil
 }

@@ -106,6 +106,16 @@ func (s *GateSpool) HasPending() bool {
 	return len(s.pending) > 0
 }
 
+func (s *GateSpool) Pending() []GateSubmission {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	pending := make([]GateSubmission, 0, len(s.pending))
+	for _, submission := range s.pending {
+		pending = append(pending, submission)
+	}
+	return pending
+}
+
 func (s *GateSpool) appendLocked(record spoolRecord) error {
 	data, err := json.Marshal(record)
 	if err != nil {
