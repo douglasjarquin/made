@@ -90,13 +90,15 @@ The Made CI workflow validates the pinned Go version with race, vet, and pinned 
 
 ## Validation evidence
 
-The final source SHA for this validation section is `d866545b1391e25f738930200566ab7dcff5c4e5`.
+The final executable source SHA covered by this validation section is `d866545b1391e25f738930200566ab7dcff5c4e5`.
+
+The evidence-only report commits after that SHA did not change executable source, tests, configuration, or CI.
 
 The final validation set was `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false GOTOOLCHAIN=local go build ./...`, `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false GOTOOLCHAIN=local go test -count=1 ./...`, `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false GOTOOLCHAIN=local go test -race -shuffle=on -count=1 ./...`, `GOTOOLCHAIN=local go vet ./...`, and `GOTOOLCHAIN=local golangci-lint run --timeout=5m --max-issues-per-linter=0 --max-same-issues=0 ./...`.
 
 All final validation commands exited `0`, and golangci-lint reported `0 issues`.
 
-The fresh exact-HEAD real-process manual QA transcript is `/tmp/made-remediation-p1p3b-manual-d866.log`, and its final marker was `manual-qa-final=PASS` at the same full SHA.
+The fresh real-process manual QA transcript for the final executable SHA is `/tmp/made-remediation-p1p3b-manual-d866.log`, and its final marker was `manual-qa-final=PASS` at that full SHA.
 
 That scenario used a fresh binary and task-local Made homes to observe capabilities, doctor through the real Consigliere script, exact submission and SHA preservation, exact status and active-list queries, review decision, cancellation, shutdown refusal, WAL restart, duplicate singleton start, stale PID handling, regular-file, symlink, and directory socket rejection, and predecessor command rejection.
 
