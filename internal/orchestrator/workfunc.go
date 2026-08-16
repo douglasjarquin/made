@@ -114,6 +114,9 @@ func (c *chain) run() error {
 	if err := c.runStage(stageNameLint, c.lintStage); err != nil {
 		return err
 	}
+	if err := c.requireDeliveryStages(); err != nil {
+		return err
+	}
 	if err := c.runStage(stageNamePush, c.pushStage); err != nil {
 		return err
 	}
@@ -139,6 +142,24 @@ func (c *chain) run() error {
 	// URL surfaced in the message instead of a terminal "done" state.
 	message := fmt.Sprintf("all stages passed, PR open, awaiting merge: %s", prResult.PRURL)
 	return c.rm.Finish(c.runID, daemon.RunAwaitingMerge, message)
+}
+
+func (c *chain) requireDeliveryStages() error {
+	for _, name := range []string{
+		stageNameIntent, stageNameRebase, stageNameReview, stageNameTest,
+		stageNameDocument, stageNameLint, stageNamePush, stageNamePR, stageNameCI,
+	} {
+		if c.rc.Config.StageResult(name) != "skipped" {
+			continue
+		}
+		if name == stageNamePush || name == stageNamePR || name == stageNameCI {
+			if err := c.finish(name, "skipped", "stage disabled"); err != nil {
+				return err
+			}
+		}
+		return fmt.Errorf("orchestrator: refusing delivery because required stage %q is disabled", name)
+	}
+	return nil
 }
 
 func (c *chain) runStage(name string, stage func() error) error {

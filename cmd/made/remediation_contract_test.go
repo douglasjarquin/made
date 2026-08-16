@@ -36,6 +36,38 @@ func TestRun_CapabilitiesJSONIsVersionedAndListsStructuredCommands(t *testing.T)
 	}
 }
 
+func TestEnsureMadeHome_RepairsGroupAndOtherPermissions(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "made")
+	if err := os.Mkdir(home, 0o755); err != nil {
+		t.Fatalf("create made home: %v", err)
+	}
+	if _, err := ensureMadeHome(home); err != nil {
+		t.Fatalf("ensureMadeHome: %v", err)
+	}
+	info, err := os.Stat(home)
+	if err != nil {
+		t.Fatalf("stat made home: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o700 {
+		t.Fatalf("made home permissions = %o, want 700", got)
+	}
+}
+
+func TestEnsureMadeHome_RejectsSymlink(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "target")
+	if err := os.Mkdir(target, 0o700); err != nil {
+		t.Fatalf("create target: %v", err)
+	}
+	link := filepath.Join(root, "made")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("create made home symlink: %v", err)
+	}
+	if _, err := ensureMadeHome(link); err == nil {
+		t.Fatal("ensureMadeHome accepted a symlink")
+	}
+}
+
 func TestRun_SubmitJSONReturnsExactRunIDAndImmutableInputHead(t *testing.T) {
 	home := shortTempDir(t)
 	t.Setenv("MADE_HOME", home)

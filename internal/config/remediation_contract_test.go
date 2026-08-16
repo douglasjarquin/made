@@ -18,6 +18,14 @@ func TestLoadConfig_RejectsZeroValueMadeYML(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_RejectsVersionOnlyMadeYML(t *testing.T) {
+	path := writeConfigFile(t, t.TempDir(), ".made.yml", "version: 1\n")
+
+	if _, _, err := loadConfigFile(path); err == nil {
+		t.Fatal("loadConfigFile accepted a version-only .made.yml configuration")
+	}
+}
+
 func TestConfig_DisabledStagesAreSkipped(t *testing.T) {
 	path := writeConfigFile(t, t.TempDir(), ".made.yml", "version: 1\nstages:\n  review:\n    enabled: false\n")
 	cfg, _, err := loadConfigFile(path)

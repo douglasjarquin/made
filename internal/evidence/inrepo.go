@@ -82,7 +82,7 @@ func (s *InRepoStore) WriteEvidence(runID string, files map[string][]byte) (err 
 				return fmt.Errorf("evidence: open parent for %q: %w", name, err)
 			}
 		}
-		fileFD, openErr := unix.Openat(parentFD, parts[len(parts)-1], unix.O_WRONLY|unix.O_CREAT|unix.O_TRUNC|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0o644)
+		fileFD, openErr := unix.Openat(parentFD, parts[len(parts)-1], unix.O_WRONLY|unix.O_CREAT|unix.O_TRUNC|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0o600)
 		if openErr != nil {
 			closeEvidenceDirectories(parentOpened)
 			return fmt.Errorf("evidence: open evidence file %q: %w", name, openErr)
@@ -133,7 +133,7 @@ func openEvidenceDirectory(rootFD int, parts []string) (int, []int, error) {
 	for _, part := range parts {
 		fd, err := unix.Openat(current, part, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 		if errors.Is(err, unix.ENOENT) {
-			if mkdirErr := unix.Mkdirat(current, part, 0o755); mkdirErr != nil && !errors.Is(mkdirErr, unix.EEXIST) {
+			if mkdirErr := unix.Mkdirat(current, part, 0o700); mkdirErr != nil && !errors.Is(mkdirErr, unix.EEXIST) {
 				closeEvidenceDirectories(opened)
 				return -1, nil, mkdirErr
 			}

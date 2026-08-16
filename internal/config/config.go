@@ -177,6 +177,9 @@ func loadConfigFile(path string) (cfg Config, exists bool, err error) {
 		if cfg.Version != 1 {
 			return Config{}, true, fmt.Errorf("versioned .made.yml requires version: 1, got %d", cfg.Version)
 		}
+		if !cfg.hasConfiguredValue() {
+			return Config{}, true, fmt.Errorf("versioned .made.yml must configure at least one non-version field")
+		}
 		return cfg, true, nil
 	}
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
@@ -184,4 +187,12 @@ func loadConfigFile(path string) (cfg Config, exists bool, err error) {
 	}
 
 	return cfg, true, nil
+}
+
+func (c Config) hasConfiguredValue() bool {
+	return len(c.Document.Rules) > 0 || c.Review.Required || c.DisableProjectSettings || c.NoCI ||
+		c.CI.Required || c.CI.RerunBudget != 0 || len(c.Test.Evidence.Branch) > 0 ||
+		c.Test.Evidence.StoreInRepo || len(c.Test.Evidence.Dir) > 0 || len(c.Commands.Test) > 0 ||
+		len(c.Commands.Lint) > 0 || len(c.Agent) > 0 || len(c.Agents) > 0 || c.AllowRepoCommands ||
+		len(c.Stages) > 0
 }

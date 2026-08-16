@@ -229,7 +229,10 @@ func TestDaemonRejectsObsoleteUnversionedRPCs(t *testing.T) {
 
 func TestHermeticCompatibility_RealMadeBinaryThroughConsigliereScript(t *testing.T) {
 	root := repoRoot(t)
-	consigliereRoot := "/Users/douglasjarquin/github/consigliere"
+	consigliereRoot := os.Getenv("MADE_CONSIGLIERE_ROOT")
+	if consigliereRoot == "" {
+		t.Skip("MADE_CONSIGLIERE_ROOT is required for the real Consigliere script compatibility test")
+	}
 	script := filepath.Join(consigliereRoot, "bin", "cs-made-lib.sh")
 	if _, err := os.Stat(script); err != nil {
 		t.Fatalf("real Consigliere script unavailable: %v", err)
@@ -252,6 +255,7 @@ func TestHermeticCompatibility_RealMadeBinaryThroughConsigliereScript(t *testing
 	cmd.Env = append(os.Environ(),
 		"MADE_HOME="+t.TempDir(),
 		"PATH="+binDir+":"+os.Getenv("PATH"),
+		"HERDR_SOCKET_PATH="+filepath.Join(t.TempDir(), "herdr.sock"),
 	)
 	output, err := cmd.CombinedOutput()
 	if !json.Valid([]byte(strings.TrimSpace(string(output)))) {

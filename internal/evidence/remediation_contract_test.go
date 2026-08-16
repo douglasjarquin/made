@@ -43,6 +43,30 @@ func TestInRepoStore_RedactsPublishedSecrets(t *testing.T) {
 	}
 }
 
+func TestInRepoStore_UsesPrivateEvidencePermissions(t *testing.T) {
+	repo := t.TempDir()
+	store := &evidence.InRepoStore{RepoPath: repo, Dir: ".made/evidence"}
+	if err := store.WriteEvidence("run-1", map[string][]byte{"log.txt": []byte("bounded")}); err != nil {
+		t.Fatalf("WriteEvidence: %v", err)
+	}
+	for _, tc := range []struct {
+		name string
+		want os.FileMode
+	}{
+		{name: ".made/evidence", want: 0o700},
+		{name: ".made/evidence/run-1", want: 0o700},
+		{name: ".made/evidence/run-1/log.txt", want: 0o600},
+	} {
+		info, err := os.Stat(filepath.Join(repo, tc.name))
+		if err != nil {
+			t.Fatalf("stat %s: %v", tc.name, err)
+		}
+		if got := info.Mode().Perm(); got != tc.want {
+			t.Errorf("permissions for %s = %o, want %o", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestInRepoStore_RejectsSymlinkedEvidenceDirectory(t *testing.T) {
 	repo := t.TempDir()
 	outside := t.TempDir()

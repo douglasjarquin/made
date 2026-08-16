@@ -30,6 +30,21 @@ type wfFixture struct {
 	defaultBranch string
 }
 
+func TestChain_RefusesDeliveryWhenRequiredStageDisabled(t *testing.T) {
+	disabled := false
+	c := &chain{rc: &RunContext{Config: config.Config{
+		Stages: map[string]config.Stage{stageNameReview: {Enabled: &disabled}},
+	}}}
+
+	err := c.requireDeliveryStages()
+	if err == nil {
+		t.Fatal("requireDeliveryStages allowed delivery with a disabled required review stage")
+	}
+	if !strings.Contains(err.Error(), `required stage "review" is disabled`) {
+		t.Fatalf("requireDeliveryStages error = %q, want disabled review stage", err)
+	}
+}
+
 func newWFFixture(t *testing.T) *wfFixture {
 	t.Helper()
 	dir := t.TempDir()

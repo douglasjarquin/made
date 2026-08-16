@@ -16,6 +16,7 @@ import (
 	"github.com/douglasjarquin/made/internal/exec"
 	"github.com/douglasjarquin/made/internal/gitgate"
 	"github.com/douglasjarquin/made/internal/orchestrator"
+	"golang.org/x/sys/unix"
 )
 
 const defaultIdleTimeout = 30 * time.Minute
@@ -92,11 +93,13 @@ func daemonStart(args []string, home, lockPath string, stdout, stderr *os.File) 
 // The returned channel receives daemon.Run's final error exactly once, after
 // the socket server has also been shut down.
 func startDaemon(ctx context.Context, home, lockPath string, idle time.Duration, onReady func(pid int)) (*daemon.RunManager, <-chan error) {
-	if err := os.MkdirAll(home, 0o700); err != nil {
+	validatedHome, err := ensureMadeHome(home)
+	if err != nil {
 		done := make(chan error, 1)
-		done <- fmt.Errorf("create made home: %w", err)
+		done <- err
 		return daemon.NewRunManager(), done
 	}
+	home = validatedHome
 	ownedLock, err := daemon.AcquireLock(lockPath)
 	if err != nil {
 		done := make(chan error, 1)
@@ -494,8 +497,33 @@ func madeHome() (string, error) {
 		}
 		dir = filepath.Join(home, ".made")
 	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", fmt.Errorf("create made home %s: %w", dir, err)
+	return ensureMadeHome(dir)
+}
+
+func ensureMadeHome(dir string) (string, error) {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return "", fmt.Errorf("resolve made home %s: %w", dir, err)
 	}
-	return dir, nil
+	if err := os.MkdirAll(abs, 0o700); err != nil {
+		return "", fmt.Errorf("create made home %s: %w", abs, err)
+	}
+	fd, err := unix.Open(abs, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return "", fmt.Errorf("open made home %s: %w", abs, err)
+	}
+	defer func() { _ = unix.Close(fd) }()
+	var stat unix.Stat_t
+	if err := unix.Fstat(fd, &stat); err != nil {
+		return "", fmt.Errorf("inspect made home %s: %w", abs, err)
+	}
+	if uint32(stat.Uid) != uint32(os.Getuid()) {
+		return "", fmt.Errorf("made home %s is not owned by the current user", abs)
+	}
+	if stat.Mode&0o077 != 0 {
+		if err := unix.Fchmod(fd, 0o700); err != nil {
+			return "", fmt.Errorf("restrict made home %s: %w", abs, err)
+		}
+	}
+	return abs, nil
 }
