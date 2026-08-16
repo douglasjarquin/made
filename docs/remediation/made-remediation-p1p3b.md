@@ -50,6 +50,10 @@ The review-boundary follow-up commit was `3b387b78c9b3a6ec393d29fc866be0ff138a87
 
 The final validation-fix commit is `d866545b1391e25f738930200566ab7dcff5c4e5` with subject `fix: close final validation findings`.
 
+The final boundary-hardening commit is `1f8055eeab3fb93b34bf764911f0aec7bfb54767` with subject `fix: close remediation boundary review gaps`.
+
+That follow-up hardens Made home ownership and permissions, private evidence permissions, version-only configuration rejection, disabled required-stage delivery refusal, and environment-injected real Consigliere compatibility testing.
+
 The implementation acquires the singleton before socket preparation, uses `lstat`, removes only a stale owner-owned Unix socket, rejects regular files, symlinks, and directories, preserves duplicate owners, and authorizes shutdown through the owner-only socket.
 
 The daemon persists complete run snapshots in an fsync-backed append-only WAL and persists idempotent gate submissions in an fsync-backed spool keyed by gate, ref, and SHA.
@@ -90,17 +94,19 @@ The Made CI workflow validates the pinned Go version with race, vet, and pinned 
 
 ## Validation evidence
 
-The final executable source SHA covered by this validation section is `d866545b1391e25f738930200566ab7dcff5c4e5`.
+The final executable source SHA covered by this validation section is `1f8055eeab3fb93b34bf764911f0aec7bfb54767`.
 
-The evidence-only report commits after that SHA did not change executable source, tests, configuration, or CI.
+The evidence-only report commits before that SHA did not change executable source, tests, configuration, or CI.
 
-The final validation set was `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false GOTOOLCHAIN=local go build ./...`, `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false GOTOOLCHAIN=local go test -count=1 ./...`, `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false GOTOOLCHAIN=local go test -race -shuffle=on -count=1 ./...`, `GOTOOLCHAIN=local go vet ./...`, and `GOTOOLCHAIN=local golangci-lint run --timeout=5m --max-issues-per-linter=0 --max-same-issues=0 ./...`.
+The final validation set was `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false GOTOOLCHAIN=local MADE_CONSIGLIERE_ROOT=/Users/douglasjarquin/github/consigliere go build ./...`, `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false GOTOOLCHAIN=local MADE_CONSIGLIERE_ROOT=/Users/douglasjarquin/github/consigliere go test -count=1 ./...`, `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false GOTOOLCHAIN=local MADE_CONSIGLIERE_ROOT=/Users/douglasjarquin/github/consigliere go test -race -shuffle=on -count=1 ./...`, `GOTOOLCHAIN=local MADE_CONSIGLIERE_ROOT=/Users/douglasjarquin/github/consigliere go vet ./...`, and `GOTOOLCHAIN=local MADE_CONSIGLIERE_ROOT=/Users/douglasjarquin/github/consigliere golangci-lint run --timeout=5m --max-issues-per-linter=0 --max-same-issues=0 ./...`.
 
 All final validation commands exited `0`, and golangci-lint reported `0 issues`.
 
-The fresh real-process manual QA transcript for the final executable SHA is `/tmp/made-remediation-p1p3b-manual-d866.log`, and its final marker was `manual-qa-final=PASS` at that full SHA.
+The fresh real-process manual QA transcript for the final executable SHA is `/tmp/made-remediation-p1p3b-manual-1f8055e-final.log`, and its final marker was `manual-qa-1f8055e=PASS` at that full SHA.
 
 That scenario used a fresh binary and task-local Made homes to observe capabilities, doctor through the real Consigliere script, exact submission and SHA preservation, exact status and active-list queries, review decision, cancellation, shutdown refusal, WAL restart, duplicate singleton start, stale PID handling, regular-file, symlink, and directory socket rejection, and predecessor command rejection.
+
+The compatibility subscenario used the real `bin/cs-made-lib.sh` script, the real Made binary, a strict fake `gh auth status` boundary, a task-local unavailable Herdr socket, and accepted the expected nonzero health exit only after asserting valid versioned JSON and authenticated GitHub state.
 
 The first manual cancellation run returned `running` before the worker completed, which falsified the CLI response contract.
 
@@ -110,7 +116,7 @@ The first full validation exposed a WAL replay ordering race where a stale `succ
 
 Serializing snapshot capture with WAL append removed that race, and `go test -shuffle=on -count=10 ./internal/daemon -run '^TestPersistentRunStateIncludesSubmissionAndDecisionData$'` passed afterward.
 
-The final changed-file authority is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..d866545b1391e25f738930200566ab7dcff5c4e5`, which reports 63 paths from the custody base.
+The final changed-file authority is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..1f8055eeab3fb93b34bf764911f0aec7bfb54767`, which reports the Made-only paths from the custody base.
 
 At directory level, the base-to-final diff is limited to `.github/workflows/ci.yml`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `cmd/made`, `docs/remediation`, `internal/agent`, `internal/api`, `internal/config`, `internal/daemon`, `internal/evidence`, `internal/exec`, `internal/github`, `internal/orchestrator`, `internal/pipeline`, `internal/skill`, and `skills/made/SKILL.md`.
 
