@@ -3,7 +3,6 @@ package evidence
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -31,7 +30,11 @@ func (s *InRepoStore) WriteEvidence(runID string, files map[string][]byte) error
 	if dir == "" {
 		dir = DefaultDir
 	}
-	repoPath, err := filepath.EvalSymlinks(s.RepoPath)
+	repoPath, err := filepath.Abs(s.RepoPath)
+	if err != nil {
+		return fmt.Errorf("evidence: resolve repository path: %w", err)
+	}
+	repoPath, err = filepath.EvalSymlinks(repoPath)
 	if err != nil {
 		return fmt.Errorf("evidence: resolve repository path: %w", err)
 	}
@@ -43,31 +46,52 @@ func (s *InRepoStore) WriteEvidence(runID string, files map[string][]byte) error
 	if !isContainedPath(evidenceRoot, runDir) {
 		return fmt.Errorf("evidence: run ID %q escapes evidence directory", runID)
 	}
-	if err := ensureEvidenceDirectory(repoPath); err != nil {
-		return err
+	dirParts, err := safePathComponents(dir)
+	if err != nil {
+		return fmt.Errorf("evidence: invalid directory: %w", err)
 	}
-	if err := ensureEvidenceDirectory(runDir); err != nil {
-		return err
+	runParts, err := safePathComponents(runID)
+	if err != nil {
+		return fmt.Errorf("evidence: invalid run ID: %w", err)
 	}
-	for name, data := range files {
-		dest := filepath.Join(runDir, name)
-		rel, err := filepath.Rel(runDir, dest)
-		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(name) {
-			return fmt.Errorf("evidence: path %q escapes run evidence directory", name)
-		}
-		if err := ensureEvidenceDirectory(filepath.Dir(dest)); err != nil {
-			return fmt.Errorf("evidence: create evidence dir for %q: %w", name, err)
-		}
-		file, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_TRUNC|unix.O_NOFOLLOW, 0o644)
+	rootFD, err := unix.Open(repoPath, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return fmt.Errorf("evidence: open repository: %w", err)
+	}
+	defer unix.Close(rootFD)
+	runFD, opened, err := openEvidenceDirectory(rootFD, append(dirParts, runParts...))
+	if err != nil {
+		return fmt.Errorf("evidence: open run directory: %w", err)
+	}
+	defer closeEvidenceDirectories(opened)
+
+	for name, content := range files {
+		parts, err := safePathComponents(name)
 		if err != nil {
-			return fmt.Errorf("evidence: write evidence file %q: %w", name, err)
+			return fmt.Errorf("evidence: invalid file path %q: %w", name, err)
 		}
-		if _, err := file.Write(Redact(data)); err != nil {
-			_ = file.Close()
-			return fmt.Errorf("evidence: write evidence file %q: %w", name, err)
+		parentFD := runFD
+		parentOpened := []int(nil)
+		if len(parts) > 1 {
+			parentFD, parentOpened, err = openEvidenceDirectory(runFD, parts[:len(parts)-1])
+			if err != nil {
+				return fmt.Errorf("evidence: open parent for %q: %w", name, err)
+			}
 		}
-		if err := file.Close(); err != nil {
-			return fmt.Errorf("evidence: close evidence file %q: %w", name, err)
+		fileFD, openErr := unix.Openat(parentFD, parts[len(parts)-1], unix.O_WRONLY|unix.O_CREAT|unix.O_TRUNC|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0o644)
+		if openErr != nil {
+			closeEvidenceDirectories(parentOpened)
+			return fmt.Errorf("evidence: open evidence file %q: %w", name, openErr)
+		}
+		redacted := Redact(content)
+		writeErr := writeEvidenceFile(fileFD, redacted)
+		closeErr := unix.Close(fileFD)
+		closeEvidenceDirectories(parentOpened)
+		if writeErr != nil {
+			return fmt.Errorf("evidence: write evidence file %q: %w", name, writeErr)
+		}
+		if closeErr != nil {
+			return fmt.Errorf("evidence: close evidence file %q: %w", name, closeErr)
 		}
 	}
 	return nil
@@ -78,33 +102,65 @@ func isContainedPath(root, target string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
 
-func ensureEvidenceDirectory(path string) error {
-	clean := filepath.Clean(path)
-	volume := filepath.VolumeName(clean)
-	rest := strings.TrimPrefix(clean, volume)
-	current := volume
-	if strings.HasPrefix(rest, string(filepath.Separator)) {
-		current += string(filepath.Separator)
-		rest = strings.TrimPrefix(rest, string(filepath.Separator))
+func safePathComponents(path string) ([]string, error) {
+	if path == "" || filepath.IsAbs(path) || filepath.VolumeName(path) != "" {
+		return nil, errors.New("path must be relative")
 	}
-	for _, component := range strings.Split(rest, string(filepath.Separator)) {
-		if component == "" {
+	parts := strings.Split(path, string(filepath.Separator))
+	clean := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part == "" {
 			continue
 		}
-		current = filepath.Join(current, component)
-		info, err := os.Lstat(current)
-		if errors.Is(err, os.ErrNotExist) {
-			if err := os.Mkdir(current, 0o755); err != nil && !errors.Is(err, os.ErrExist) {
-				return fmt.Errorf("evidence: create directory %q: %w", current, err)
+		if part == "." || part == ".." {
+			return nil, errors.New("path traversal is not allowed")
+		}
+		clean = append(clean, part)
+	}
+	if len(clean) == 0 {
+		return nil, errors.New("path must not be empty")
+	}
+	return clean, nil
+}
+
+func openEvidenceDirectory(rootFD int, parts []string) (int, []int, error) {
+	current := rootFD
+	opened := make([]int, 0, len(parts))
+	for _, part := range parts {
+		fd, err := unix.Openat(current, part, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+		if errors.Is(err, unix.ENOENT) {
+			if mkdirErr := unix.Mkdirat(current, part, 0o755); mkdirErr != nil && !errors.Is(mkdirErr, unix.EEXIST) {
+				closeEvidenceDirectories(opened)
+				return -1, nil, mkdirErr
 			}
-			info, err = os.Lstat(current)
+			fd, err = unix.Openat(current, part, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 		}
 		if err != nil {
-			return fmt.Errorf("evidence: inspect directory %q: %w", current, err)
+			closeEvidenceDirectories(opened)
+			return -1, nil, err
 		}
-		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-			return fmt.Errorf("evidence: refusing unsafe directory %q", current)
-		}
+		opened = append(opened, fd)
+		current = fd
 	}
-	return nil
+	return current, opened, nil
+}
+
+func closeEvidenceDirectories(fds []int) {
+	for i := len(fds) - 1; i >= 0; i-- {
+		_ = unix.Close(fds[i])
+	}
+}
+
+func writeEvidenceFile(fd int, data []byte) error {
+	for len(data) > 0 {
+		n, err := unix.Write(fd, data)
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return errors.New("short write")
+		}
+		data = data[n:]
+	}
+	return unix.Fsync(fd)
 }

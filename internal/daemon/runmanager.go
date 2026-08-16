@@ -18,7 +18,6 @@ const (
 	RunAwaitingReview RunStatus = "awaiting_review"
 	RunAwaitingMerge  RunStatus = "awaiting_merge"
 	RunSucceeded      RunStatus = "succeeded"
-	RunCompleted      RunStatus = RunSucceeded
 	RunFailed         RunStatus = "failed"
 	RunCanceled       RunStatus = "canceled"
 	RunSuperseded     RunStatus = "superseded"
@@ -49,10 +48,10 @@ type RunSnapshot struct {
 
 	// finalized is set by Finish and read by execute: it lets a WorkFunc
 	// declare a run's definitive terminal-or-not Status/Message itself,
-	// overriding execute's normal "nil error means RunCompleted" inference -
+	// overriding execute's normal "nil error means RunSucceeded" inference -
 	// needed for the orchestrator's CI-passed-but-awaiting-human-merge case,
 	// where the pipeline finished successfully yet the run must stay
-	// RunRunning rather than flip to RunCompleted.
+	// RunAwaitingMerge rather than flip to RunSucceeded.
 	finalized bool
 }
 
@@ -148,7 +147,7 @@ func (rm *RunManager) persist(r *run) error {
 func (rm *RunManager) reconcileRestoredRuns() error {
 	for _, r := range rm.runs {
 		snapshot := r.snapshot()
-		if snapshot.Status != RunQueued && snapshot.Status != RunRunning {
+		if snapshot.Status != RunQueued && snapshot.Status != RunRunning && snapshot.Status != RunAwaitingReview {
 			continue
 		}
 		restartedErr := errors.New("daemon restarted before execution finished")
@@ -383,25 +382,36 @@ func (rm *RunManager) Subscribe(id string) (<-chan Event, func()) {
 	return rm.mailbox.Subscribe(id)
 }
 
-// Cancel signals the run's WorkFunc via its context; cancellation surfaces as
-// the existing RunFailed status with Err wrapping context.Canceled rather
-// than a new status value, since a cooperating WorkFunc returning ctx.Err()
-// already distinguishes it from an ordinary failure for any caller checking
-// errors.Is(snap.Err, context.Canceled).
 func (rm *RunManager) Cancel(id string) error {
 	r, ok := rm.lookupRun(id)
 	if !ok {
 		return fmt.Errorf("daemon: no run %q", id)
 	}
 	snapshot := r.snapshot()
-	if snapshot.Status == RunCanceled || snapshot.CancelRequested {
+	if snapshot.Status == RunCanceled {
 		return nil
 	}
 	if isTerminalRunStatus(snapshot.Status) {
 		return fmt.Errorf("daemon: run %q is already %s", id, snapshot.Status)
 	}
+	if snapshot.CancelRequested {
+		r.cancel()
+		if snapshot.Status == RunAwaitingMerge || snapshot.Status == RunAwaitingReview {
+			r.update(func(s *RunSnapshot) {
+				s.Status = RunCanceled
+				s.ExecutionFinished = true
+				s.EndedAt = time.Now()
+				s.Err = context.Canceled
+			})
+			if err := rm.persist(r); err != nil {
+				return fmt.Errorf("persist canceled run: %w", err)
+			}
+		}
+		return nil
+	}
 	r.update(func(s *RunSnapshot) { s.CancelRequested = true })
 	if err := rm.persist(r); err != nil {
+		r.cancel()
 		return fmt.Errorf("persist cancellation request: %w", err)
 	}
 	if snapshot.Status == RunAwaitingMerge || snapshot.Status == RunAwaitingReview {
@@ -428,7 +438,7 @@ func isTerminalRunStatus(s RunStatus) bool {
 
 // Finish lets a WorkFunc declare a run's definitive Status and a
 // human-readable Message just before it returns, so execute's normal
-// nil-error-means-RunCompleted inference does not overwrite it (see
+// nil-error-means-RunSucceeded inference does not overwrite it (see
 // RunSnapshot.finalized). status may be any RunStatus, including RunRunning
 // for a run that must stay open pending action made cannot itself take.
 func (rm *RunManager) Finish(id string, status RunStatus, message string) error {

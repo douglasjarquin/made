@@ -135,7 +135,7 @@ func (c *chain) run() error {
 
 	// A passing CI stage validates the branch and leaves a PR open, but
 	// merging it is a human decision made cannot observe - so the run's
-	// final status stays RunRunning rather than RunCompleted, with the PR
+	// final status stays RunAwaitingMerge rather than RunSucceeded, with the PR
 	// URL surfaced in the message instead of a terminal "done" state.
 	message := fmt.Sprintf("all stages passed, PR open, awaiting merge: %s", prResult.PRURL)
 	return c.rm.Finish(c.runID, daemon.RunAwaitingMerge, message)

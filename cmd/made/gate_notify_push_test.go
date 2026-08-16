@@ -62,7 +62,7 @@ func waitForRunTerminal(t *testing.T, rm *daemon.RunManager, id string, timeout 
 	deadline := time.After(timeout)
 	for {
 		snap, ok := rm.Snapshot(id)
-		if ok && (snap.Status == daemon.RunCompleted || snap.Status == daemon.RunFailed) {
+		if ok && (snap.Status == daemon.RunSucceeded || snap.Status == daemon.RunFailed) {
 			return snap
 		}
 		select {

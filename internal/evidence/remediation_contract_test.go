@@ -28,15 +28,18 @@ func TestInRepoStore_RejectsPathTraversalAndOversizedEvidence(t *testing.T) {
 func TestInRepoStore_RedactsPublishedSecrets(t *testing.T) {
 	repo := t.TempDir()
 	store := &evidence.InRepoStore{RepoPath: repo, Dir: ".made/evidence"}
-	if err := store.WriteEvidence("run-1", map[string][]byte{"log.txt": []byte("Authorization: Bearer secret-value\n")}); err != nil {
+	input := "Authorization: Bearer bearer-secret\napi_key=api-secret\n\"access_token\": \"json-secret\"\nx-api-key: header-secret\ntoken=query-secret&ok=1\nghp_1234567890abcdef\nAKIA1234567890ABCDEF\n-----BEGIN RSA PRIVATE KEY-----\nprivate-secret\n-----END RSA PRIVATE KEY-----\n"
+	if err := store.WriteEvidence("run-1", map[string][]byte{"log.txt": []byte(input)}); err != nil {
 		t.Fatalf("WriteEvidence: %v", err)
 	}
 	data, err := os.ReadFile(filepath.Join(repo, ".made/evidence", "run-1", "log.txt"))
 	if err != nil {
 		t.Fatalf("read evidence: %v", err)
 	}
-	if strings.Contains(string(data), "secret-value") {
-		t.Fatalf("published evidence retained an authorization secret: %q", data)
+	for _, secret := range []string{"bearer-secret", "api-secret", "json-secret", "header-secret", "query-secret", "ghp_1234567890abcdef", "AKIA1234567890ABCDEF", "private-secret"} {
+		if strings.Contains(string(data), secret) {
+			t.Fatalf("published evidence retained %q: %q", secret, data)
+		}
 	}
 }
 

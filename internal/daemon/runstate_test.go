@@ -95,7 +95,7 @@ func TestRunManager_UpdateStagesReflectsListToo(t *testing.T) {
 	deadline := time.After(2 * time.Second)
 	for {
 		snap, ok := rm.Snapshot(id)
-		if ok && (snap.Status == RunCompleted || snap.Status == RunFailed) {
+		if ok && (snap.Status == RunSucceeded || snap.Status == RunFailed) {
 			break
 		}
 		select {

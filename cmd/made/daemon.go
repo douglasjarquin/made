@@ -97,23 +97,25 @@ func startDaemon(ctx context.Context, home, lockPath string, idle time.Duration,
 		done <- fmt.Errorf("create made home: %w", err)
 		return daemon.NewRunManager(), done
 	}
+	ownedLock, err := daemon.AcquireLock(lockPath)
+	if err != nil {
+		done := make(chan error, 1)
+		done <- err
+		return daemon.NewRunManager(), done
+	}
 	spool, err := daemon.OpenGateSpool(filepath.Join(home, "gate.spool"))
 	if err != nil {
+		_ = ownedLock.Release()
 		done := make(chan error, 1)
 		done <- err
 		return daemon.NewRunManager(), done
 	}
 	rm, err := daemon.NewPersistentRunManager(filepath.Join(home, "runs.wal"))
 	if err != nil {
+		_ = ownedLock.Release()
 		done := make(chan error, 1)
 		done <- err
 		return daemon.NewRunManager(), done
-	}
-	ownedLock, err := daemon.AcquireLock(lockPath)
-	if err != nil {
-		done := make(chan error, 1)
-		done <- err
-		return rm, done
 	}
 	socketPath := api.SocketPath(home)
 	if err := api.PrepareSocket(socketPath); err != nil {
@@ -149,7 +151,10 @@ func startDaemon(ctx context.Context, home, lockPath string, idle time.Duration,
 			ActiveFunc:    rm.HasActive,
 			UndrainedFunc: spool.HasPending,
 		})
-		cancelInFlightRuns(rm, shutdownCancelTimeout)
+		if cancelErr := cancelInFlightRuns(rm, shutdownCancelTimeout); cancelErr != nil {
+			runErr = errors.Join(runErr, cancelErr)
+		}
+		cancelRun()
 		cancelServe()
 		<-serveErr
 		_ = srv.Close()
@@ -163,18 +168,39 @@ func startDaemon(ctx context.Context, home, lockPath string, idle time.Duration,
 
 func replayPendingSubmissions(ctx context.Context, rm *daemon.RunManager, reviewDecisions *daemon.ReviewDecisions, spool *daemon.GateSpool) {
 	handler := gateNotifyPushHandler(rm, reviewDecisions, spool)
-	for _, submission := range spool.Pending() {
-		params, err := json.Marshal(gateNotifyPushParams{
-			GatePath: submission.Gate,
-			Ref:      submission.Ref,
-			NewSHA:   submission.SHA,
-			RunID:    submission.RunID,
-		})
-		if err != nil {
+	for {
+		pending := spool.Pending()
+		if len(pending) == 0 {
 			return
 		}
-		if _, err := handler(ctx, params); err != nil {
-			continue
+		for _, submission := range pending {
+			params, err := json.Marshal(gateNotifyPushParams{
+				GatePath: submission.Gate,
+				Ref:      submission.Ref,
+				NewSHA:   submission.SHA,
+				RunID:    submission.RunID,
+			})
+			if err != nil {
+				return
+			}
+			if _, err := handler(ctx, params); err != nil {
+				continue
+			}
+		}
+		if !spool.HasPending() {
+			return
+		}
+		timer := time.NewTimer(5 * time.Second)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			return
+		case <-timer.C:
 		}
 	}
 }
@@ -185,10 +211,14 @@ func replayPendingSubmissions(ctx context.Context, rm *daemon.RunManager, review
 // run's WorkFunc is only cooperative with cancellation, not instantly
 // killable, so this blocks (up to timeout) for it to actually observe
 // ctx.Done() and return before shutdown proceeds.
-func cancelInFlightRuns(rm *daemon.RunManager, timeout time.Duration) {
+
+func cancelInFlightRuns(rm *daemon.RunManager, timeout time.Duration) error {
+	var firstErr error
 	for _, snap := range rm.List() {
 		if !isTerminalRunStatus(snap.Status) {
-			_ = rm.Cancel(snap.ID)
+			if err := rm.Cancel(snap.ID); err != nil && firstErr == nil {
+				firstErr = fmt.Errorf("cancel run %q during shutdown: %w", snap.ID, err)
+			}
 		}
 	}
 
@@ -202,10 +232,11 @@ func cancelInFlightRuns(rm *daemon.RunManager, timeout time.Duration) {
 			}
 		}
 		if allTerminal {
-			return
+			return firstErr
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	return firstErr
 }
 
 func isTerminalRunStatus(s daemon.RunStatus) bool {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"syscall"
 	"sync"
 )
 
@@ -81,6 +82,10 @@ func PrepareSocket(socketPath string) error {
 	}
 	if info.Mode()&os.ModeSocket == 0 {
 		return fmt.Errorf("api: refusing regular socket path %s", socketPath)
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || uint32(stat.Uid) != uint32(os.Getuid()) {
+		return fmt.Errorf("api: refusing socket path %s owned by another user", socketPath)
 	}
 	if err := os.Remove(socketPath); err != nil {
 		return fmt.Errorf("api: remove stale owner socket %s: %w", socketPath, err)

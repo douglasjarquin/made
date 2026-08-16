@@ -6,9 +6,15 @@ import (
 )
 
 var evidenceSecretPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)(authorization:\s*bearer\s+)[A-Za-z0-9._-]+`),
-	regexp.MustCompile(`\b(?:ghp_|github_pat_|sk-)[A-Za-z0-9_-]+`),
-	regexp.MustCompile(`(?i)(token=)[^&\s]+`),
+	regexp.MustCompile(`(?i)(authorization:\s*(?:bearer|basic)\s+)[^\s]+`),
+	regexp.MustCompile(`(?i)(\b(?:token|api[_-]?key|secret|password|passwd|access[_-]?token|refresh[_-]?token|client[_-]?secret)\b\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;&}]+)`),
+	regexp.MustCompile(`(?i)(["']?(?:token|api[_-]?key|secret|password|passwd|access[_-]?token|refresh[_-]?token|client[_-]?secret)["']?\s*:\s*)(?:"[^"]*"|'[^']*'|[^,\s}]+)`),
+	regexp.MustCompile(`(?i)(x-api-key:\s*)[^\s]+`),
+	regexp.MustCompile(`(?i)(cookie:\s*)[^\r\n]+`),
+	regexp.MustCompile(`(?i)(token=|access_token=|refresh_token=|client_secret=)[^&\s]+`),
+	regexp.MustCompile(`\b(?:ghp_|github_pat_|sk-|xox[baprs]-)[A-Za-z0-9._-]+`),
+	regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`),
+	regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----`),
 }
 
 func Redact(data []byte) []byte {

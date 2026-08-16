@@ -95,6 +95,14 @@ func TestPersistentRunManagerReconcilesUnfinishedExecutionAfterRestart(t *testin
 	}); err != nil {
 		t.Fatalf("seed unfinished snapshot: %v", err)
 	}
+	reviewID := "123e4567-e89b-12d3-a456-426614174005"
+	if err := store.Append(RunSnapshot{
+		ID: reviewID, Repo: "repo", Branch: "review", Status: RunAwaitingReview,
+		QueuedAt: time.Now().Add(-time.Minute), StartedAt: time.Now().Add(-30 * time.Second),
+		PendingFindings: []AskUserFinding{{Stage: "review", Message: "approve"}},
+	}); err != nil {
+		t.Fatalf("seed awaiting-review snapshot: %v", err)
+	}
 
 	rm, err := NewPersistentRunManager(path)
 	if err != nil {
@@ -106,6 +114,10 @@ func TestPersistentRunManagerReconcilesUnfinishedExecutionAfterRestart(t *testin
 	}
 	if snapshot.Status != RunFailed || !snapshot.ExecutionFinished || snapshot.Err == nil {
 		t.Fatalf("unfinished run was not reconciled to durable failure: %+v", snapshot)
+	}
+	reviewSnapshot, ok := rm.Snapshot(reviewID)
+	if !ok || reviewSnapshot.Status != RunFailed || !reviewSnapshot.ExecutionFinished {
+		t.Fatalf("awaiting-review run was not reconciled to durable failure: %+v", reviewSnapshot)
 	}
 
 	restarted, err := NewPersistentRunManager(path)

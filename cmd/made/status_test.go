@@ -46,7 +46,7 @@ func TestStatusJSON_SchemaValidity(t *testing.T) {
 	deadline := time.After(2 * time.Second)
 	for {
 		snap, ok := rm.Snapshot("run-test-1")
-		if ok && (snap.Status == daemon.RunCompleted || snap.Status == daemon.RunFailed) {
+		if ok && (snap.Status == daemon.RunSucceeded || snap.Status == daemon.RunFailed) {
 			break
 		}
 		select {
