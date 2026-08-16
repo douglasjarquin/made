@@ -14,6 +14,8 @@ They resolved to the disposable Herdr worktree, branch `cs/made-remediation-p1p3
 
 The baseline toolchain was Go `1.26.6 darwin/arm64` and golangci-lint `2.11.2`.
 
+The committed module and CI pin Go `1.26.5`; the local Go `1.26.6` toolchain was used only for this validation run.
+
 The baseline normal, race, vet, and lint commands passed after applying the process-local signing override `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false`.
 
 The signing override was needed because the inherited global SSH signing configuration requires an unavailable 1Password socket.
@@ -42,6 +44,12 @@ The old mocks were updated or removed so they do not authorize commands that the
 
 The initial implementation commit was `f92baaf345dea88a907e29e8727aa6d937902df9` with subject `feat: deliver versioned durable remediation contract`.
 
+The durability follow-up commit was `deea4ff0a37c7ac2118a2125a487316b65162d8b` with subject `fix: close remediation durability review gaps`.
+
+The review-boundary follow-up commit was `3b387b78c9b3a6ec393d29fc866be0ff138a871b` with subject `fix: harden remediation review boundaries`.
+
+The final validation-fix commit is `d866545b1391e25f738930200566ab7dcff5c4e5` with subject `fix: close final validation findings`.
+
 The implementation acquires the singleton before socket preparation, uses `lstat`, removes only a stale owner-owned Unix socket, rejects regular files, symlinks, and directories, preserves duplicate owners, and authorizes shutdown through the owner-only socket.
 
 The daemon persists complete run snapshots in an fsync-backed append-only WAL and persists idempotent gate submissions in an fsync-backed spool keyed by gate, ref, and SHA.
@@ -54,7 +62,7 @@ Execution completion is represented separately by `execution_finished`.
 
 Cancellation requires an exact run ID, is idempotent for an already canceled run, waits for cooperative execution to finish at the CLI boundary, and refuses unknown or unrelated runs.
 
-Restored queued and running snapshots are reconciled to durable failed state after a daemon restart because no worker can safely resume execution without a durable work specification.
+Restored queued, running, and awaiting-review snapshots are reconciled to durable failed state after a daemon restart because no worker can safely resume execution without a durable work specification.
 
 Pending gate submissions are replayed on daemon startup and remain undrained when their external boundary is unavailable.
 
@@ -82,11 +90,13 @@ The Made CI workflow validates the pinned Go version with race, vet, and pinned 
 
 ## Validation evidence
 
-The targeted command `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false GOTOOLCHAIN=local go test ./internal/daemon ./internal/orchestrator ./cmd/made` passed after the durability fixes.
+The final source SHA for this validation section is `d866545b1391e25f738930200566ab7dcff5c4e5`.
 
-The final validation set is `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false GOTOOLCHAIN=local go test -count=1 ./...`, `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false GOTOOLCHAIN=local go test -race -shuffle=on -count=1 ./...`, `GOTOOLCHAIN=local go vet ./...`, and `GOTOOLCHAIN=local golangci-lint run --timeout=5m`.
+The final validation set was `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false GOTOOLCHAIN=local go build ./...`, `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false GOTOOLCHAIN=local go test -count=1 ./...`, `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false GOTOOLCHAIN=local go test -race -shuffle=on -count=1 ./...`, `GOTOOLCHAIN=local go vet ./...`, and `GOTOOLCHAIN=local golangci-lint run --timeout=5m --max-issues-per-linter=0 --max-same-issues=0 ./...`.
 
-The real-process manual QA transcript is `/tmp/made-remediation-p1p3b-manual-final.log` and its final marker was `manual-qa-final=PASS`.
+All final validation commands exited `0`, and golangci-lint reported `0 issues`.
+
+The fresh exact-HEAD real-process manual QA transcript is `/tmp/made-remediation-p1p3b-manual-d866.log`, and its final marker was `manual-qa-final=PASS` at the same full SHA.
 
 That scenario used a fresh binary and task-local Made homes to observe capabilities, doctor through the real Consigliere script, exact submission and SHA preservation, exact status and active-list queries, review decision, cancellation, shutdown refusal, WAL restart, duplicate singleton start, stale PID handling, regular-file, symlink, and directory socket rejection, and predecessor command rejection.
 
@@ -98,14 +108,16 @@ The first full validation exposed a WAL replay ordering race where a stale `succ
 
 Serializing snapshot capture with WAL append removed that race, and `go test -shuffle=on -count=10 ./internal/daemon -run '^TestPersistentRunStateIncludesSubmissionAndDecisionData$'` passed afterward.
 
-The final changed-file authority is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403`.
+The final changed-file authority is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..d866545b1391e25f738930200566ab7dcff5c4e5`, which reports 63 paths from the custody base.
 
-The implementation and contract-test paths in that diff are `.github/workflows/ci.yml`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `cmd/made`, `internal/agent`, `internal/api`, `internal/config`, `internal/daemon`, `internal/evidence`, `internal/exec`, `internal/github`, `internal/orchestrator`, `internal/pipeline`, `internal/skill`, and `skills/made/SKILL.md`.
+At directory level, the base-to-final diff is limited to `.github/workflows/ci.yml`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `cmd/made`, `docs/remediation`, `internal/agent`, `internal/api`, `internal/config`, `internal/daemon`, `internal/evidence`, `internal/exec`, `internal/github`, `internal/orchestrator`, `internal/pipeline`, `internal/skill`, and `skills/made/SKILL.md`.
+
+The final validation-fix commit-only diff is `git diff --name-status deea4ff0a37c7ac2118a2125a487316b65162d8b..d866545b1391e25f738930200566ab7dcff5c4e5` and contains only the 12 review-boundary files changed by that follow-up.
 
 No Consigliere repository file, GitHub issue, default branch, merge, or shared daemon state was changed.
 
 ## Delivery dependency
 
-The remaining dependency after this report is the direct PR on `cs/made-remediation-p1p3b` against `main`.
+The remaining dependency after this report is the exact-SHA review pass and direct PR on `cs/made-remediation-p1p3b` against `main`.
 
 The branch must be committed, pushed only to `origin/cs/made-remediation-p1p3b`, and opened as a direct PR before the Made lane reports done.
