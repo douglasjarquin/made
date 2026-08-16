@@ -116,6 +116,10 @@ At directory level, the base-to-final diff is limited to `.github/workflows/ci.y
 
 The final validation-fix commit-only diff is `git diff --name-status deea4ff0a37c7ac2118a2125a487316b65162d8b..d866545b1391e25f738930200566ab7dcff5c4e5` and contains only the 12 review-boundary files changed by that follow-up.
 
+The separate Made project plan `plans/made-rewrite.md` retains its broader F3 checkbox because that criterion requires running the full Consigliere `--mode made` soldier flow and changing shared Herdr lifecycle state.
+
+This task explicitly forbids running `/made`, editing the Consigliere repository, and stopping or restarting the shared Made daemon, so the Made-specific manual QA above does not claim completion of that broader plan item.
+
 No Consigliere repository file, GitHub issue, default branch, merge, or shared daemon state was changed.
 
 ## Delivery dependency
