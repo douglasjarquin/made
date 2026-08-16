@@ -26,6 +26,19 @@ func TestInRepoStore_RejectsPathTraversalAndOversizedEvidence(t *testing.T) {
 	}
 }
 
+func TestNewStoreAppliesConfiguredRetentionBound(t *testing.T) {
+	store, ok := evidence.NewStore(t.TempDir(), evidence.Config{StoreInRepo: true, RetentionBytes: 8}).(*evidence.InRepoStore)
+	if !ok {
+		t.Fatal("NewStore returned the wrong store type")
+	}
+	if store.RetentionBytes != 8 {
+		t.Fatalf("retention bytes = %d, want 8", store.RetentionBytes)
+	}
+	if err := store.WriteEvidence("run-1", map[string][]byte{"log.txt": []byte("123456789")}); err == nil {
+		t.Fatal("configured evidence retention bound was not enforced")
+	}
+}
+
 func TestInRepoStore_RedactsPublishedSecrets(t *testing.T) {
 	repo := t.TempDir()
 	store := &evidence.InRepoStore{RepoPath: repo, Dir: ".made/evidence"}

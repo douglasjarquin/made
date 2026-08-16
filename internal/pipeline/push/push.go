@@ -19,6 +19,14 @@ type Result struct {
 	Message string
 }
 
+type InfrastructureError struct {
+	Detail string
+}
+
+func (e *InfrastructureError) Error() string {
+	return "push: infrastructure failure: " + e.Detail
+}
+
 // credentialInURL matches the userinfo component of a URL (scheme://user:pass@host)
 // so it can be stripped from anything made surfaces in a Result or error - git
 // itself prints the real remote URL verbatim into its own error output when a
@@ -26,10 +34,8 @@ type Result struct {
 // and that string must never end up in made's own logs, DB, or evidence.
 var credentialInURL = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.-]*://)[^\s/@]+@`)
 
-// Run's error return is reserved for infrastructure failures (empty
-// arguments, git failing to start); a push rejected by the remote - auth
-// failure, unreachable host, non-fast-forward - is a normal outcome reported
-// via Result.OK, not an error, following the lint/test stage convention.
+// Run returns infrastructure errors for a remote that cannot accept the push,
+// including authentication, transport, and policy-hook failures.
 //
 // Run never reads or constructs the remote's URL itself: it shells out to
 // `git push <remoteName> <branch>` inside the worktree, so git resolves the
@@ -65,10 +71,7 @@ func Run(ctx context.Context, worktreePath, remoteName, branch string) (Result, 
 
 	if res.ExitCode != 0 {
 		output := redact(strings.TrimSpace(string(res.Stdout) + "\n" + string(res.Stderr)))
-		return Result{
-			OK:      false,
-			Message: fmt.Sprintf("git push %s %s failed with exit code %d: %s", remoteName, refspec, res.ExitCode, output),
-		}, nil
+		return Result{}, &InfrastructureError{Detail: fmt.Sprintf("git push %s %s failed with exit code %d: %s", remoteName, refspec, res.ExitCode, output)}
 	}
 
 	return Result{

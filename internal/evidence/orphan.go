@@ -11,8 +11,24 @@ import (
 )
 
 type OrphanBranchStore struct {
-	RepoPath string
-	Branch   string
+	RepoPath       string
+	Branch         string
+	RetentionBytes int
+}
+
+func (s *OrphanBranchStore) PublishEvidence(runID string) error {
+	if err := validateEvidenceInput(runID, nil, s.RetentionBytes); err != nil {
+		return err
+	}
+	branch := s.Branch
+	if branch == "" {
+		branch = DefaultBranch
+	}
+	ref := "refs/heads/" + branch
+	if _, err := s.runGit(nil, nil, "push", "origin", ref+":"+ref); err != nil {
+		return fmt.Errorf("evidence: publish branch %s: %w", branch, err)
+	}
+	return nil
 }
 
 // Location names where a run's evidence commit lives on the orphan branch,
@@ -33,7 +49,7 @@ func (s *OrphanBranchStore) Location(runID string) string {
 // commit-tree is what gives the branch no shared history with the default
 // branch.
 func (s *OrphanBranchStore) WriteEvidence(runID string, files map[string][]byte) error {
-	if err := validateEvidenceInput(runID, files); err != nil {
+	if err := validateEvidenceInput(runID, files, s.RetentionBytes); err != nil {
 		return err
 	}
 	branch := s.Branch

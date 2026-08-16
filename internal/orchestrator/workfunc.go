@@ -33,8 +33,6 @@ const (
 	stageNamePR       = "pr"
 	stageNameCI       = "ci"
 
-	ciStageTimeout = 30 * time.Minute
-	stageTimeout   = 30 * time.Minute
 	ciPollInterval = 10 * time.Second
 
 	pushRemoteName = "origin"
@@ -168,7 +166,7 @@ func (c *chain) runStage(name string, stage func() error) error {
 	if c.rc.Config.StageResult(name) == "skipped" {
 		return c.finish(name, "skipped", "stage disabled")
 	}
-	stageCtx, cancel := context.WithTimeout(c.ctx, stageTimeout)
+	stageCtx, cancel := context.WithTimeout(c.ctx, c.rc.Config.StageTimeout(name))
 	previous := c.ctx
 	c.ctx = stageCtx
 	err := stage()
@@ -416,7 +414,7 @@ func (c *chain) prStage() (pr.Result, error) {
 
 func (c *chain) ciStage(prURL string) error {
 	c.start(stageNameCI)
-	ciCtx, cancel := context.WithTimeout(c.ctx, ciStageTimeout)
+	ciCtx, cancel := context.WithTimeout(c.ctx, c.rc.Config.StageTimeout(stageNameCI))
 	defer cancel()
 
 	result, err := ci.Run(ciCtx, c.rc.GitHub, prURL, c.rc.Config.CI.RerunBudget, ciPollInterval)

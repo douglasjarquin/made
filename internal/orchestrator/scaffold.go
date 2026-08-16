@@ -72,9 +72,10 @@ func Setup(ctx context.Context, gatePath, defaultBranch, worktreesDir, runID, pu
 	setupTestHook()
 
 	store := evidence.NewStore(wt.Path, evidence.Config{
-		StoreInRepo: cfg.Test.Evidence.StoreInRepo,
-		Dir:         cfg.Test.Evidence.Dir,
-		Branch:      cfg.Test.Evidence.Branch,
+		StoreInRepo:    cfg.Test.Evidence.StoreInRepo,
+		Dir:            cfg.Test.Evidence.Dir,
+		Branch:         cfg.Test.Evidence.Branch,
+		RetentionBytes: cfg.EvidenceRetentionBytes(),
 	})
 
 	return &RunContext{

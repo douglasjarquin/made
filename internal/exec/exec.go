@@ -11,12 +11,13 @@ import (
 )
 
 type Command struct {
-	Name    string
-	Args    []string
-	Dir     string
-	Env     []string
-	Stdin   []byte
-	Timeout time.Duration
+	Name        string
+	Args        []string
+	Dir         string
+	Env         []string
+	Stdin       []byte
+	Timeout     time.Duration
+	OutputLimit int
 }
 
 type Result struct {
@@ -37,7 +38,13 @@ func Run(ctx context.Context, cmd Command) (*Result, error) {
 	c.Env = cmd.Env
 	c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
-	var stdout, stderr bytes.Buffer
+	limit := cmd.OutputLimit
+	if limit <= 0 {
+		limit = defaultOutputLimit
+	}
+	var stdout, stderr boundedBuffer
+	stdout.limit = limit
+	stderr.limit = limit
 	c.Stdout = &stdout
 	c.Stderr = &stderr
 	if cmd.Stdin != nil {
@@ -67,6 +74,42 @@ func Run(ctx context.Context, cmd Command) (*Result, error) {
 			Stderr:   stderr.Bytes(),
 		}, ctx.Err()
 	}
+}
+
+const defaultOutputLimit = 4 << 20
+
+type boundedBuffer struct {
+	data      []byte
+	limit     int
+	truncated bool
+}
+
+func (b *boundedBuffer) Write(data []byte) (int, error) {
+	remaining := b.limit - len(b.data)
+	if remaining > 0 {
+		if len(data) > remaining {
+			b.data = append(b.data, data[:remaining]...)
+			b.truncated = true
+		} else {
+			b.data = append(b.data, data...)
+		}
+	} else if len(data) > 0 {
+		b.truncated = true
+	}
+	return len(data), nil
+}
+
+func (b *boundedBuffer) Bytes() []byte {
+	data := append([]byte(nil), b.data...)
+	if !b.truncated {
+		return data
+	}
+	marker := []byte("\n[output truncated]\n")
+	if len(marker) >= b.limit {
+		return append([]byte(nil), marker[:b.limit]...)
+	}
+	data = data[:b.limit-len(marker)]
+	return append(data, marker...)
 }
 
 // killGroup signals the process's entire group, not just the direct child:

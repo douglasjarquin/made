@@ -95,8 +95,31 @@ func PrepareSocket(socketPath string) error {
 	if live {
 		return fmt.Errorf("api: refusing to replace live owner socket %s", socketPath)
 	}
-	if err := os.Remove(socketPath); err != nil {
-		return fmt.Errorf("api: remove stale owner socket %s: %w", socketPath, err)
+	current, err := os.Lstat(socketPath)
+	if err != nil {
+		return fmt.Errorf("api: recheck stale socket %s: %w", socketPath, err)
+	}
+	if !os.SameFile(info, current) {
+		return fmt.Errorf("api: refusing to remove replaced socket path %s", socketPath)
+	}
+	quarantine := fmt.Sprintf("%s.stale-%d", socketPath, time.Now().UnixNano())
+	if _, err := os.Lstat(quarantine); err == nil {
+		return fmt.Errorf("api: refusing occupied stale-socket quarantine path %s", quarantine)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("api: inspect stale-socket quarantine path %s: %w", quarantine, err)
+	}
+	if err := os.Rename(socketPath, quarantine); err != nil {
+		return fmt.Errorf("api: quarantine stale owner socket %s: %w", socketPath, err)
+	}
+	quarantined, err := os.Lstat(quarantine)
+	if err != nil {
+		return fmt.Errorf("api: inspect quarantined socket %s: %w", quarantine, err)
+	}
+	if !os.SameFile(info, quarantined) {
+		return fmt.Errorf("api: refusing to remove replaced socket path %s", socketPath)
+	}
+	if err := os.Remove(quarantine); err != nil {
+		return fmt.Errorf("api: remove quarantined stale owner socket %s: %w", quarantine, err)
 	}
 	return nil
 }

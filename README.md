@@ -12,7 +12,7 @@ See `plans/made-rewrite.md` for the full design and build plan.
 
 `made capabilities --json` reports the public protocol and command schema.
 
-Use `made run submit --json --repo <identity> --branch <branch> --input-sha <sha>` to create a run.
+Use `made run submit --json --gate <bare-gate-path> --ref refs/heads/<branch> --old-sha <previous-head-sha> --input-sha <sha>` to create a run.
 
 Use `made run status --json <exact-run-id>` for one run, `made run list --json --active` for the active batch, and `made run cancel --json <exact-run-id>` for idempotent cancellation.
 

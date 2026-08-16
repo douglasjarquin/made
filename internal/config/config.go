@@ -7,12 +7,19 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/douglasjarquin/made/internal/agent"
 	"gopkg.in/yaml.v3"
 )
 
-const defaultCIRerunBudget = 2
+const (
+	defaultCIRerunBudget     = 2
+	defaultStageTimeout      = 30 * time.Minute
+	maxStageTimeoutSeconds   = 2 * 60 * 60
+	defaultEvidenceRetention = 4 << 20
+	maxEvidenceRetention     = 64 << 20
+)
 
 var validStageNames = map[string]struct{}{
 	"intent": {}, "rebase": {}, "review": {}, "test": {}, "document": {},
@@ -35,7 +42,23 @@ type Config struct {
 }
 
 type Stage struct {
-	Enabled *bool `yaml:"enabled"`
+	Enabled        *bool `yaml:"enabled"`
+	TimeoutSeconds *int  `yaml:"timeout_seconds"`
+}
+
+func (c Config) StageTimeout(name string) time.Duration {
+	stage := c.Stages[name]
+	if stage.TimeoutSeconds == nil {
+		return defaultStageTimeout
+	}
+	return time.Duration(*stage.TimeoutSeconds) * time.Second
+}
+
+func (c Config) EvidenceRetentionBytes() int {
+	if c.Test.Evidence.RetentionBytes == nil {
+		return defaultEvidenceRetention
+	}
+	return *c.Test.Evidence.RetentionBytes
 }
 
 func (c Config) StageResult(name string) string {
@@ -83,9 +106,10 @@ type Test struct {
 }
 
 type Evidence struct {
-	Branch      string `yaml:"branch"`
-	StoreInRepo bool   `yaml:"store_in_repo"`
-	Dir         string `yaml:"dir"`
+	Branch         string `yaml:"branch"`
+	StoreInRepo    bool   `yaml:"store_in_repo"`
+	Dir            string `yaml:"dir"`
+	RetentionBytes *int   `yaml:"retention_bytes"`
 }
 
 type Commands struct {
@@ -201,6 +225,13 @@ func loadConfigFile(path string) (cfg Config, exists bool, err error) {
 			if _, ok := validStageNames[name]; !ok {
 				return Config{}, true, fmt.Errorf("versioned .made.yml has unknown stage %q", name)
 			}
+			stage := cfg.Stages[name]
+			if stage.TimeoutSeconds != nil && (*stage.TimeoutSeconds <= 0 || *stage.TimeoutSeconds > maxStageTimeoutSeconds) {
+				return Config{}, true, fmt.Errorf("versioned .made.yml stage %q timeout_seconds must be between 1 and %d", name, maxStageTimeoutSeconds)
+			}
+		}
+		if retention := cfg.Test.Evidence.RetentionBytes; retention != nil && (*retention <= 0 || *retention > maxEvidenceRetention) {
+			return Config{}, true, fmt.Errorf("versioned .made.yml test.evidence.retention_bytes must be between 1 and %d", maxEvidenceRetention)
 		}
 		if !cfg.hasConfiguredValue() {
 			return Config{}, true, fmt.Errorf("versioned .made.yml must configure at least one non-version field")
@@ -216,7 +247,7 @@ func loadConfigFile(path string) (cfg Config, exists bool, err error) {
 
 func (c Config) hasConfiguredValue() bool {
 	return len(c.Document.Rules) > 0 || c.Review.Required || c.DisableProjectSettings || c.NoCI ||
-		c.CI.Required || c.CI.RerunBudget != 0 || len(c.Test.Evidence.Branch) > 0 ||
+		c.CI.Required || c.CI.RerunBudget != 0 || len(c.Test.Evidence.Branch) > 0 || c.Test.Evidence.RetentionBytes != nil ||
 		c.Test.Evidence.StoreInRepo || len(c.Test.Evidence.Dir) > 0 || len(c.Commands.Test) > 0 ||
 		len(c.Commands.Lint) > 0 || len(c.Agent) > 0 || len(c.Agents) > 0 || c.AllowRepoCommands ||
 		len(c.Stages) > 0

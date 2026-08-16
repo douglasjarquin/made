@@ -26,3 +26,7 @@ func Redact(data []byte) []byte {
 	}
 	return redacted
 }
+
+func RedactString(value string) string {
+	return string(Redact([]byte(value)))
+}

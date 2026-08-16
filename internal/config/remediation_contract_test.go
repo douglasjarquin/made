@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestLoadConfig_RejectsUnknownMadeYMLFields(t *testing.T) {
 	path := writeConfigFile(t, t.TempDir(), ".made.yml", "version: 1\nunknown_field: true\n")
@@ -75,5 +78,46 @@ func TestConfig_RequiredSettingsControlDisabledReviewAndCI(t *testing.T) {
 	cfg.NoCI = true
 	if cfg.StageRequired("ci") {
 		t.Fatal("NoCI did not disable the CI requirement")
+	}
+}
+
+func TestLoadConfig_StageTimeoutAndEvidenceRetentionAreBounded(t *testing.T) {
+	path := writeConfigFile(t, t.TempDir(), ".made.yml", `version: 1
+stages:
+  review:
+    timeout_seconds: 45
+test:
+  evidence:
+    retention_bytes: 8192
+`)
+	cfg, _, err := loadConfigFile(path)
+	if err != nil {
+		t.Fatalf("loadConfigFile: %v", err)
+	}
+	if got := cfg.StageTimeout("review"); got != 45*time.Second {
+		t.Fatalf("review timeout = %s, want 45s", got)
+	}
+	if got := cfg.EvidenceRetentionBytes(); got != 8192 {
+		t.Fatalf("evidence retention = %d, want 8192", got)
+	}
+}
+
+func TestLoadConfig_RejectsZeroOrUnboundedTimeoutAndRetention(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "zero timeout", body: "version: 1\nstages:\n  review:\n    timeout_seconds: 0\n"},
+		{name: "unbounded timeout", body: "version: 1\nstages:\n  review:\n    timeout_seconds: 7201\n"},
+		{name: "zero retention", body: "version: 1\ntest:\n  evidence:\n    retention_bytes: 0\n"},
+		{name: "unbounded retention", body: "version: 1\ntest:\n  evidence:\n    retention_bytes: 67108865\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := writeConfigFile(t, t.TempDir(), ".made.yml", tt.body)
+			if _, _, err := loadConfigFile(path); err == nil {
+				t.Fatal("loadConfigFile accepted an invalid bounded setting")
+			}
+		})
 	}
 }

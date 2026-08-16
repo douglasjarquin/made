@@ -12,8 +12,9 @@ import (
 )
 
 type InRepoStore struct {
-	RepoPath string
-	Dir      string
+	RepoPath       string
+	Dir            string
+	RetentionBytes int
 }
 
 func (s *InRepoStore) Location(runID string) string {
@@ -25,7 +26,7 @@ func (s *InRepoStore) Location(runID string) string {
 }
 
 func (s *InRepoStore) WriteEvidence(runID string, files map[string][]byte) (err error) {
-	if err := validateEvidenceInput(runID, files); err != nil {
+	if err := validateEvidenceInput(runID, files, s.RetentionBytes); err != nil {
 		return err
 	}
 	dir := s.Dir
@@ -109,7 +110,7 @@ func (s *InRepoStore) WriteEvidence(runID string, files map[string][]byte) (err 
 }
 
 func (s *InRepoStore) PublishEvidence(runID string) error {
-	if err := validateEvidenceInput(runID, nil); err != nil {
+	if err := validateEvidenceInput(runID, nil, s.RetentionBytes); err != nil {
 		return err
 	}
 	dir := s.Dir

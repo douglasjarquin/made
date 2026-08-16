@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"golang.org/x/sys/unix"
 )
 
 type GateSubmission struct {
@@ -42,7 +44,7 @@ func OpenGateSpool(path string) (*GateSpool, error) {
 		return nil, fmt.Errorf("daemon: create gate spool directory: %w", err)
 	}
 	spool := &GateSpool{path: path, pending: make(map[string]GateSubmission), seen: make(map[string]GateSubmission)}
-	file, err := os.Open(path)
+	file, err := os.OpenFile(path, os.O_RDONLY|unix.O_NOFOLLOW, 0)
 	if errors.Is(err, os.ErrNotExist) {
 		return spool, nil
 	}
@@ -126,7 +128,7 @@ func (s *GateSpool) appendLocked(record spoolRecord) error {
 	if err != nil {
 		return fmt.Errorf("daemon: encode gate spool record: %w", err)
 	}
-	file, err := os.OpenFile(s.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	file, err := os.OpenFile(s.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND|unix.O_NOFOLLOW, 0o600)
 	if err != nil {
 		return fmt.Errorf("daemon: open gate spool for append: %w", err)
 	}

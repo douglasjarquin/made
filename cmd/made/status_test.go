@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -103,6 +104,22 @@ func TestStatusJSON_SchemaValidity(t *testing.T) {
 	}
 	if report.PendingFindings == nil {
 		t.Error("PendingFindings must be present (an empty slice, not null)")
+	}
+}
+
+func TestNewStatusReportRedactsSensitiveRunText(t *testing.T) {
+	secret := "token=status-secret"
+	report := newStatusReport(daemon.RunSnapshot{
+		ID:       "run-sensitive",
+		Errors:   []string{secret},
+		Findings: []daemon.RunFinding{{Message: secret}},
+	})
+	encoded, err := json.Marshal(report)
+	if err != nil {
+		t.Fatalf("marshal report: %v", err)
+	}
+	if strings.Contains(string(encoded), "status-secret") {
+		t.Fatalf("status report retained sensitive text: %s", encoded)
 	}
 }
 

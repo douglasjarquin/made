@@ -9,6 +9,9 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/douglasjarquin/made/internal/evidence"
+	"golang.org/x/sys/unix"
 )
 
 const runStoreRecordVersion = 1
@@ -80,7 +83,7 @@ func OpenRunStore(path string) (*RunStore, map[string]RunSnapshot, error) {
 	}
 	store := &RunStore{path: path}
 	snapshots := make(map[string]RunSnapshot)
-	file, err := os.Open(path)
+	file, err := os.OpenFile(path, os.O_RDONLY|unix.O_NOFOLLOW, 0)
 	if errors.Is(err, os.ErrNotExist) {
 		return store, snapshots, nil
 	}
@@ -118,7 +121,7 @@ func (s *RunStore) Append(snapshot RunSnapshot) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	file, err := os.OpenFile(s.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	file, err := os.OpenFile(s.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND|unix.O_NOFOLLOW, 0o600)
 	if err != nil {
 		return fmt.Errorf("daemon: open run store for append: %w", err)
 	}
@@ -137,22 +140,27 @@ func persistSnapshot(snapshot RunSnapshot) persistedSnapshot {
 	if snapshot.Err != nil && len(errorsList) == 0 {
 		errorsList = []string{snapshot.Err.Error()}
 	}
+	for i := range errorsList {
+		errorsList[i] = evidence.RedactString(errorsList[i])
+	}
 	decisions := make(map[string]string, len(snapshot.Decisions))
 	for key, value := range snapshot.Decisions {
-		decisions[key] = value
+		decisions[evidence.RedactString(key)] = evidence.RedactString(value)
 	}
+	findings := redactFindings(snapshot.Findings)
+	pendingFindings := redactPendingFindings(snapshot.PendingFindings)
 	return persistedSnapshot{
 		ID: snapshot.ID, Repo: snapshot.Repo, Branch: snapshot.Branch,
 		InputSHA: snapshot.InputSHA, OutputSHA: snapshot.OutputSHA,
 		Status: snapshot.Status, QueuedAt: snapshot.QueuedAt, StartedAt: snapshot.StartedAt,
 		EndedAt: snapshot.EndedAt, ExecutionFinished: snapshot.ExecutionFinished,
-		Message: snapshot.Message, Errors: errorsList,
-		Findings: append([]RunFinding(nil), snapshot.Findings...), Decisions: decisions,
-		PRURL: snapshot.PRURL, SupersededBy: snapshot.SupersededBy,
+		Message: evidence.RedactString(snapshot.Message), Errors: errorsList,
+		Findings: findings, Decisions: decisions,
+		PRURL: evidence.RedactString(snapshot.PRURL), SupersededBy: evidence.RedactString(snapshot.SupersededBy),
 		CancelRequested:  snapshot.CancelRequested,
 		SubmissionEvents: append([]SubmissionEvent(nil), snapshot.SubmissionEvents...),
 		Stages:           append([]StageResult(nil), snapshot.Stages...),
-		PendingFindings:  append([]AskUserFinding(nil), snapshot.PendingFindings...),
+		PendingFindings:  pendingFindings,
 		Finalized:        snapshot.finalized,
 	}
 }
@@ -160,20 +168,55 @@ func persistSnapshot(snapshot RunSnapshot) persistedSnapshot {
 func restoreSnapshot(snapshot persistedSnapshot) RunSnapshot {
 	var runErr error
 	if len(snapshot.Errors) > 0 {
-		runErr = errors.New(snapshot.Errors[len(snapshot.Errors)-1])
+		runErr = errors.New(evidence.RedactString(snapshot.Errors[len(snapshot.Errors)-1]))
 	}
 	return RunSnapshot{
 		ID: snapshot.ID, Repo: snapshot.Repo, Branch: snapshot.Branch,
 		InputSHA: snapshot.InputSHA, OutputSHA: snapshot.OutputSHA,
 		Status: snapshot.Status, QueuedAt: snapshot.QueuedAt, StartedAt: snapshot.StartedAt,
 		EndedAt: snapshot.EndedAt, ExecutionFinished: snapshot.ExecutionFinished,
-		Err: runErr, Errors: append([]string(nil), snapshot.Errors...),
-		Message: snapshot.Message, Findings: append([]RunFinding(nil), snapshot.Findings...),
+		Err: runErr, Errors: redactStrings(snapshot.Errors),
+		Message: evidence.RedactString(snapshot.Message), Findings: redactFindings(snapshot.Findings),
 		Decisions: snapshot.Decisions, PRURL: snapshot.PRURL,
 		SupersededBy: snapshot.SupersededBy, CancelRequested: snapshot.CancelRequested,
 		SubmissionEvents: append([]SubmissionEvent(nil), snapshot.SubmissionEvents...),
 		Stages:           append([]StageResult(nil), snapshot.Stages...),
-		PendingFindings:  append([]AskUserFinding(nil), snapshot.PendingFindings...),
+		PendingFindings:  redactPendingFindings(snapshot.PendingFindings),
 		finalized:        snapshot.Finalized,
 	}
+}
+
+func redactStrings(values []string) []string {
+	if values == nil {
+		return nil
+	}
+	redacted := make([]string, len(values))
+	for i, value := range values {
+		redacted[i] = evidence.RedactString(value)
+	}
+	return redacted
+}
+
+func redactFindings(values []RunFinding) []RunFinding {
+	if values == nil {
+		return nil
+	}
+	redacted := make([]RunFinding, len(values))
+	for i, value := range values {
+		value.Message = evidence.RedactString(value.Message)
+		redacted[i] = value
+	}
+	return redacted
+}
+
+func redactPendingFindings(values []AskUserFinding) []AskUserFinding {
+	if values == nil {
+		return nil
+	}
+	redacted := make([]AskUserFinding, len(values))
+	for i, value := range values {
+		value.Message = evidence.RedactString(value.Message)
+		redacted[i] = value
+	}
+	return redacted
 }

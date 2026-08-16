@@ -8,6 +8,7 @@ import (
 
 	"github.com/douglasjarquin/made/internal/api"
 	"github.com/douglasjarquin/made/internal/daemon"
+	"github.com/douglasjarquin/made/internal/evidence"
 )
 
 const statusSchemaVersion = 1
@@ -99,7 +100,7 @@ func newStatusReport(snap daemon.RunSnapshot) StatusReport {
 
 	errMsg := ""
 	if snap.Err != nil {
-		errMsg = snap.Err.Error()
+		errMsg = evidence.RedactString(snap.Err.Error())
 	}
 
 	return StatusReport{
@@ -112,10 +113,10 @@ func newStatusReport(snap daemon.RunSnapshot) StatusReport {
 		InputSHA:          snap.InputSHA,
 		OutputSHA:         snap.OutputSHA,
 		ExecutionFinished: snap.ExecutionFinished,
-		Findings:          nonNilFindings(snap.Findings),
+		Findings:          redactedFindings(snap.Findings),
 		Decisions:         nonNilDecisions(snap.Decisions),
 		PRURL:             snap.PRURL,
-		Errors:            nonNilErrors(snap.Errors, snap.Err),
+		Errors:            redactedErrors(snap.Errors, snap.Err),
 		SupersededBy:      snap.SupersededBy,
 		CancelRequested:   snap.CancelRequested,
 		SubmissionEvents:  nonNilSubmissionEvents(snap.SubmissionEvents),
@@ -128,11 +129,16 @@ func newStatusReport(snap daemon.RunSnapshot) StatusReport {
 	}
 }
 
-func nonNilFindings(findings []daemon.RunFinding) []daemon.RunFinding {
+func redactedFindings(findings []daemon.RunFinding) []daemon.RunFinding {
 	if findings == nil {
 		return []daemon.RunFinding{}
 	}
-	return findings
+	redacted := make([]daemon.RunFinding, len(findings))
+	copy(redacted, findings)
+	for i := range redacted {
+		redacted[i].Message = evidence.RedactString(redacted[i].Message)
+	}
+	return redacted
 }
 
 func nonNilDecisions(decisions map[string]string) map[string]string {
@@ -142,14 +148,18 @@ func nonNilDecisions(decisions map[string]string) map[string]string {
 	return decisions
 }
 
-func nonNilErrors(values []string, runErr error) []string {
-	if len(values) > 0 {
-		return values
+func redactedErrors(values []string, runErr error) []string {
+	if len(values) == 0 {
+		if runErr == nil {
+			return []string{}
+		}
+		return []string{evidence.RedactString(runErr.Error())}
 	}
-	if runErr != nil {
-		return []string{runErr.Error()}
+	redacted := make([]string, len(values))
+	for i, value := range values {
+		redacted[i] = evidence.RedactString(value)
 	}
-	return []string{}
+	return redacted
 }
 
 func nonNilSubmissionEvents(events []daemon.SubmissionEvent) []daemon.SubmissionEvent {

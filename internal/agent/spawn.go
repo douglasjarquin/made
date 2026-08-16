@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/douglasjarquin/made/internal/evidence"
 	"github.com/douglasjarquin/made/internal/exec"
 )
 
@@ -50,12 +51,12 @@ func Spawn(ctx context.Context, kind Kind, params SpawnParams) (Findings, error)
 		return Findings{}, fmt.Errorf("agent: spawn %s (%s): %w", kind, binary, err)
 	}
 	if result.ExitCode != 0 {
-		return Findings{}, fmt.Errorf("agent: %s (%s) exited %d: %s", kind, binary, result.ExitCode, result.Stderr)
+		return Findings{}, fmt.Errorf("agent: %s (%s) exited %d: %s", kind, binary, result.ExitCode, evidence.RedactString(string(result.Stderr)))
 	}
 
 	findings, err := decodeFindings(result.Stdout)
 	if err != nil {
-		return Findings{}, fmt.Errorf("agent: parse findings from %s: %w: stdout=%s", kind, err, result.Stdout)
+		return Findings{}, fmt.Errorf("agent: parse findings from %s: %w: stdout=%s", kind, err, evidence.RedactString(string(result.Stdout)))
 	}
 	return findings, nil
 }

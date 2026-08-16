@@ -2,6 +2,8 @@ package daemon
 
 import (
 	"context"
+	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -44,6 +46,30 @@ func TestPersistentRunStateIncludesSubmissionAndDecisionData(t *testing.T) {
 	}
 	if snapshot.Status != RunAwaitingMerge || snapshot.PRURL == "" || snapshot.Decisions["review"] != ReviewApproved || len(snapshot.SubmissionEvents) != 1 {
 		t.Fatalf("durable state incomplete after restart: %+v", snapshot)
+	}
+}
+
+func TestRunStoreRedactsDurableFindingAndErrorText(t *testing.T) {
+	path := t.TempDir() + "/runs.wal"
+	store, _, err := OpenRunStore(path)
+	if err != nil {
+		t.Fatalf("OpenRunStore: %v", err)
+	}
+	secret := "token=durable-secret"
+	if err := store.Append(RunSnapshot{
+		ID:       "123e4567-e89b-12d3-a456-426614174006",
+		Message:  secret,
+		Errors:   []string{secret},
+		Findings: []RunFinding{{Message: secret}},
+	}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read WAL: %v", err)
+	}
+	if strings.Contains(string(data), "durable-secret") {
+		t.Fatalf("WAL retained sensitive text: %s", data)
 	}
 }
 
