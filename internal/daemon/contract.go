@@ -47,6 +47,21 @@ func (rm *RunManager) SetPRURL(id, prURL string) error {
 	return nil
 }
 
+func (rm *RunManager) SetOutputSHA(id, outputSHA string) error {
+	r, ok := rm.lookupRun(id)
+	if !ok {
+		return fmt.Errorf("daemon: no run %q", id)
+	}
+	if outputSHA == "" {
+		return fmt.Errorf("daemon: output SHA is required")
+	}
+	r.update(func(snapshot *RunSnapshot) { snapshot.OutputSHA = outputSHA })
+	if err := rm.persist(r); err != nil {
+		return fmt.Errorf("persist output SHA for run %q: %w", id, err)
+	}
+	return nil
+}
+
 func (rm *RunManager) AddFindings(id string, findings []RunFinding) error {
 	r, ok := rm.lookupRun(id)
 	if !ok {

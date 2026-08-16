@@ -50,3 +50,30 @@ func TestConfig_NoCIIsRepresentedAsSkipped(t *testing.T) {
 		t.Fatalf("NoCI stage result = %q, want skipped", got)
 	}
 }
+
+func TestLoadConfig_RejectsUnknownStageKeys(t *testing.T) {
+	path := writeConfigFile(t, t.TempDir(), ".made.yml", "version: 1\nstages:\n  reviw:\n    enabled: false\n")
+
+	if _, _, err := loadConfigFile(path); err == nil {
+		t.Fatal("loadConfigFile accepted an unknown stage key")
+	}
+}
+
+func TestConfig_RequiredSettingsControlDisabledReviewAndCI(t *testing.T) {
+	disabled := false
+	cfg := Config{
+		Stages: map[string]Stage{"review": {Enabled: &disabled}, "ci": {Enabled: &disabled}},
+	}
+	if cfg.StageRequired("review") || cfg.StageRequired("ci") {
+		t.Fatal("review or CI was required without the trusted required setting")
+	}
+	cfg.Review.Required = true
+	cfg.CI.Required = true
+	if !cfg.StageRequired("review") || !cfg.StageRequired("ci") {
+		t.Fatal("trusted required settings did not make disabled review and CI stages required")
+	}
+	cfg.NoCI = true
+	if cfg.StageRequired("ci") {
+		t.Fatal("NoCI did not disable the CI requirement")
+	}
+}

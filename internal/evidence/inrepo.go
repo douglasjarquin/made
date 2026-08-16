@@ -3,6 +3,8 @@ package evidence
 import (
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -102,6 +104,65 @@ func (s *InRepoStore) WriteEvidence(runID string, files map[string][]byte) (err 
 		if closeErr != nil {
 			return fmt.Errorf("evidence: close evidence file %q: %w", name, closeErr)
 		}
+	}
+	return nil
+}
+
+func (s *InRepoStore) PublishEvidence(runID string) error {
+	if err := validateEvidenceInput(runID, nil); err != nil {
+		return err
+	}
+	dir := s.Dir
+	if dir == "" {
+		dir = DefaultDir
+	}
+	repoPath, err := filepath.Abs(s.RepoPath)
+	if err != nil {
+		return fmt.Errorf("evidence: resolve repository path: %w", err)
+	}
+	if _, err := os.Stat(filepath.Join(repoPath, dir, runID)); errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("evidence: inspect run directory: %w", err)
+	}
+	relPath := filepath.Join(dir, runID)
+	if err := runEvidenceGit(repoPath, "add", "--", relPath); err != nil {
+		return fmt.Errorf("evidence: stage in-repo evidence: %w", err)
+	}
+	diff := exec.Command("git", "diff", "--cached", "--quiet", "--", relPath)
+	diff.Dir = repoPath
+	if err := diff.Run(); err == nil {
+		return nil
+	} else if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 1 {
+		return fmt.Errorf("evidence: inspect staged evidence: %w", err)
+	}
+	titleCmd := exec.Command("git", "log", "-1", "--format=%s")
+	titleCmd.Dir = repoPath
+	titleOutput, err := titleCmd.Output()
+	if err != nil {
+		return fmt.Errorf("evidence: derive commit subject: %w", err)
+	}
+	title := strings.TrimSpace(string(titleOutput))
+	if title == "" {
+		title = "made: publish evidence"
+	}
+	if err := runEvidenceGit(repoPath, "-c", "commit.gpgsign=false", "commit", "--only", "-m", title, "--", relPath); err != nil {
+		return fmt.Errorf("evidence: commit in-repo evidence: %w", err)
+	}
+	return nil
+}
+
+func runEvidenceGit(repoPath string, args ...string) error {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = repoPath
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=made-evidence",
+		"GIT_AUTHOR_EMAIL=made-evidence@localhost",
+		"GIT_COMMITTER_NAME=made-evidence",
+		"GIT_COMMITTER_EMAIL=made-evidence@localhost",
+	)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(output)))
 	}
 	return nil
 }

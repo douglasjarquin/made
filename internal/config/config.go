@@ -14,6 +14,11 @@ import (
 
 const defaultCIRerunBudget = 2
 
+var validStageNames = map[string]struct{}{
+	"intent": {}, "rebase": {}, "review": {}, "test": {}, "document": {},
+	"lint": {}, "push": {}, "pr": {}, "ci": {},
+}
+
 type Config struct {
 	Version                int              `yaml:"version"`
 	Document               Document         `yaml:"document"`
@@ -42,6 +47,17 @@ func (c Config) StageResult(name string) string {
 		return "skipped"
 	}
 	return "pending"
+}
+
+func (c Config) StageRequired(name string) bool {
+	switch name {
+	case "review":
+		return c.Review.Required
+	case "ci":
+		return c.CI.Required && !c.NoCI
+	default:
+		return true
+	}
 }
 
 type Document struct {
@@ -180,6 +196,11 @@ func loadConfigFile(path string) (cfg Config, exists bool, err error) {
 		}
 		if cfg.Version != 1 {
 			return Config{}, true, fmt.Errorf("versioned .made.yml requires version: 1, got %d", cfg.Version)
+		}
+		for name := range cfg.Stages {
+			if _, ok := validStageNames[name]; !ok {
+				return Config{}, true, fmt.Errorf("versioned .made.yml has unknown stage %q", name)
+			}
 		}
 		if !cfg.hasConfiguredValue() {
 			return Config{}, true, fmt.Errorf("versioned .made.yml must configure at least one non-version field")

@@ -131,6 +131,27 @@ func TestServer_DuplicateListenPreservesOriginalOwner(t *testing.T) {
 	}
 }
 
+func TestPrepareSocket_PreservesLiveOwnerSocket(t *testing.T) {
+	path := filepath.Join(tempSocketDir(t), "daemon.sock")
+	listener, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatalf("listen live owner socket: %v", err)
+	}
+	defer func() { _ = listener.Close() }()
+
+	if err := api.PrepareSocket(path); err == nil {
+		t.Fatal("PrepareSocket replaced a live owner socket")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("live owner socket was not preserved: %v", err)
+	}
+	conn, err := net.DialTimeout("unix", path, 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("preserved live owner socket is not reachable: %v", err)
+	}
+	_ = conn.Close()
+}
+
 func TestServer_CloseDoesNotRemoveSuccessorSocket(t *testing.T) {
 	path := filepath.Join(tempSocketDir(t), "daemon.sock")
 	first := api.NewServer(path)

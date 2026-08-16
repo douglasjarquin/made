@@ -94,8 +94,10 @@ func TestRun_SubmitJSONReturnsExactRunIDAndImmutableInputHead(t *testing.T) {
 		t.Fatal("daemon did not become ready")
 	}
 
-	inputSHA := strings.Repeat("a", 40)
-	code, stdout, stderr := captureRun(t, "run", "submit", "--json", "--repo", "/repo/example", "--branch", "feature", "--input-sha", inputSHA)
+	barePath, sourceDir := setupGateFixture(t, home)
+	testGit(t, sourceDir, "checkout", "-b", "feature-submit-cli")
+	inputSHA := pushFeatureCommit(t, sourceDir, "feature-submit-cli", "v1\n", "run submit cli")
+	code, stdout, stderr := captureRun(t, "run", "submit", "--json", "--gate", barePath, "--ref", "refs/heads/feature-submit-cli", "--old-sha", gitZeroSHA, "--input-sha", inputSHA)
 	if code != 0 {
 		t.Fatalf("run submit exit=%d stderr=%q", code, stderr)
 	}
@@ -107,36 +109,59 @@ func TestRun_SubmitJSONReturnsExactRunIDAndImmutableInputHead(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
 		t.Fatalf("decode submit JSON: %v; stdout=%q", err, stdout)
 	}
-	if payload.RunID == "" || payload.State != "queued" || payload.InputSHA != inputSHA {
+	if payload.RunID == "" || (payload.State != "queued" && payload.State != "running") || payload.InputSHA != inputSHA {
 		t.Fatalf("submit payload = %+v, want exact queued run identity", payload)
 	}
 }
 
 func TestRunSubmit_RejectsInvalidOutputSHA(t *testing.T) {
 	rm := daemon.NewRunManager()
-	_, err := runSubmitHandler(rm)(context.Background(), []byte(`{"repo":"/repo","branch":"feature","input_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","output_sha":"not-a-sha"}`))
+	_, err := runSubmitHandler(rm, nil, nil)(context.Background(), []byte(`{"repo":"/repo","branch":"feature","input_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","output_sha":"not-a-sha"}`))
 	if err == nil {
 		t.Fatal("run.submit accepted an invalid output_sha")
 	}
 }
 
-func TestRunSubmit_DoesNotLeaveMissingExecutionWorkActive(t *testing.T) {
+func TestRunSubmit_RequiresExecutableGateDescriptor(t *testing.T) {
 	rm := daemon.NewRunManager()
-	result, err := runSubmitHandler(rm)(context.Background(), []byte(`{"repo":"/repo","branch":"feature","input_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`))
+	_, err := runSubmitHandler(rm, nil, nil)(context.Background(), []byte(`{"repo":"/repo","branch":"feature","input_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`))
+	if err == nil || !strings.Contains(err.Error(), "gate_path") {
+		t.Fatalf("run.submit accepted a submission without executable gate metadata: %v", err)
+	}
+}
+
+func TestRunSubmit_ExecutesGatePipeline(t *testing.T) {
+	home := shortTempDir(t)
+	barePath, sourceDir := setupGateFixture(t, home)
+	testGit(t, sourceDir, "checkout", "-b", "feature-submit")
+	inputSHA := pushFeatureCommit(t, sourceDir, "feature-submit", "v1\n", "run submit")
+
+	spool, err := daemon.OpenGateSpool(filepath.Join(home, "gate.spool"))
+	if err != nil {
+		t.Fatalf("OpenGateSpool: %v", err)
+	}
+	rm := daemon.NewRunManager()
+	params, err := json.Marshal(runSubmitParams{
+		GatePath: barePath,
+		Ref:      "refs/heads/feature-submit",
+		OldSHA:   gitZeroSHA,
+		InputSHA: inputSHA,
+	})
+	if err != nil {
+		t.Fatalf("marshal run.submit params: %v", err)
+	}
+	result, err := runSubmitHandler(rm, daemon.NewReviewDecisions(), spool)(context.Background(), params)
 	if err != nil {
 		t.Fatalf("run.submit: %v", err)
 	}
 	report := result.(runActionReport)
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		snapshot, ok := rm.Snapshot(report.RunID)
-		if ok && snapshot.Status == daemon.RunFailed && snapshot.ExecutionFinished {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
+	if report.RunID == "" || report.InputSHA != inputSHA || (report.State != string(daemon.RunQueued) && report.State != string(daemon.RunRunning)) {
+		t.Fatalf("run.submit report = %+v, want exact queued immutable identity", report)
 	}
-	snapshot, _ := rm.Snapshot(report.RunID)
-	t.Fatalf("run.submit left an unexecutable run active: %+v", snapshot)
+	snapshot := waitForRunTerminal(t, rm, report.RunID, 10*time.Second)
+	if snapshot.StartedAt.IsZero() || len(snapshot.Stages) == 0 {
+		t.Fatalf("run.submit did not execute the gate pipeline: %+v", snapshot)
+	}
 }
 
 func TestStatusHandler_RequiresExactRunID(t *testing.T) {

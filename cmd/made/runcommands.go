@@ -33,8 +33,11 @@ func runCapabilitiesCommand(args []string, stdout, stderr *os.File) int {
 
 type runSubmitParams struct {
 	RunID     string `json:"run_id,omitempty"`
-	Repo      string `json:"repo"`
-	Branch    string `json:"branch"`
+	GatePath  string `json:"gate_path"`
+	Ref       string `json:"ref"`
+	OldSHA    string `json:"old_sha,omitempty"`
+	Repo      string `json:"repo,omitempty"`
+	Branch    string `json:"branch,omitempty"`
 	InputSHA  string `json:"input_sha"`
 	OutputSHA string `json:"output_sha,omitempty"`
 }
@@ -86,6 +89,9 @@ func runSubmitCommand(args []string, stdout, stderr *os.File) int {
 	fs := flag.NewFlagSet("made run submit", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	jsonOutput := fs.Bool("json", false, "output JSON")
+	gatePath := fs.String("gate", "", "bare Made gate repository path")
+	ref := fs.String("ref", "", "immutable branch ref")
+	oldSHA := fs.String("old-sha", "", "previous branch head SHA")
 	repo := fs.String("repo", "", "repository identity")
 	branch := fs.String("branch", "", "input branch")
 	inputSHA := fs.String("input-sha", "", "immutable input commit SHA")
@@ -108,7 +114,10 @@ func runSubmitCommand(args []string, stdout, stderr *os.File) int {
 	}
 	defer func() { _ = client.Close() }()
 	var result runActionReport
-	if err := client.CallInto("run.submit", runSubmitParams{Repo: *repo, Branch: *branch, InputSHA: *inputSHA, OutputSHA: *outputSHA}, &result); err != nil {
+	if err := client.CallInto("run.submit", runSubmitParams{
+		GatePath: *gatePath, Ref: *ref, OldSHA: *oldSHA,
+		Repo: *repo, Branch: *branch, InputSHA: *inputSHA, OutputSHA: *outputSHA,
+	}, &result); err != nil {
 		_, _ = fmt.Fprintln(stderr, "made run submit:", err)
 		return 1
 	}

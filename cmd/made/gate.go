@@ -71,20 +71,13 @@ func runGateNotifyPushCommand(args []string, stdout, stderr *os.File) int {
 
 	client, err := api.Dial(api.SocketPath(home))
 	if err != nil {
-		if *newSHA != gitZeroSHAValue {
-			spool, spoolErr := daemon.OpenGateSpool(filepath.Join(home, "gate.spool"))
-			if spoolErr == nil {
-				_, _, spoolErr = spool.Enqueue(daemon.GateSubmission{
-					Gate: *gatePath, Ref: *ref, SHA: *newSHA, RunID: daemon.NewRunID(),
-				})
-			}
-			if spoolErr != nil {
-				_, _ = fmt.Fprintln(stderr, "gate notify-push: dial daemon:", err, "; durable queue:", spoolErr)
-			} else {
-				_, _ = fmt.Fprintln(stderr, "gate notify-push: daemon unavailable; submission durably queued:", err)
-			}
-		} else {
+		queueErr := queueOfflineGateSubmission(home, *gatePath, *ref, *newSHA)
+		if queueErr != nil {
+			_, _ = fmt.Fprintln(stderr, "gate notify-push: dial daemon:", err, "; durable queue:", queueErr)
+		} else if *newSHA == gitZeroSHAValue {
 			_, _ = fmt.Fprintln(stderr, "gate notify-push: ref deletion does not require a run:", err)
+		} else {
+			_, _ = fmt.Fprintln(stderr, "gate notify-push: daemon unavailable; submission durably queued:", err)
 		}
 		return 0
 	}
@@ -97,7 +90,16 @@ func runGateNotifyPushCommand(args []string, stdout, stderr *os.File) int {
 		NewSHA:   *newSHA,
 		Ref:      *ref,
 	}, &result); err != nil {
-		_, _ = fmt.Fprintln(stderr, "gate notify-push:", err)
+		if *newSHA == gitZeroSHAValue {
+			_, _ = fmt.Fprintln(stderr, "gate notify-push:", err, "; ref deletion does not require a run")
+			return 0
+		}
+		queueErr := queueOfflineGateSubmission(home, *gatePath, *ref, *newSHA)
+		if queueErr != nil {
+			_, _ = fmt.Fprintln(stderr, "gate notify-push:", err, "; durable queue:", queueErr)
+		} else {
+			_, _ = fmt.Fprintln(stderr, "gate notify-push:", err, "; submission durably queued")
+		}
 		return 0
 	}
 
@@ -107,6 +109,18 @@ func runGateNotifyPushCommand(args []string, stdout, stderr *os.File) int {
 	}
 	_, _ = fmt.Fprintf(stdout, "gate notify-push: ok (run %s)\n", result.RunID)
 	return 0
+}
+
+func queueOfflineGateSubmission(home, gatePath, ref, newSHA string) error {
+	if newSHA == gitZeroSHAValue {
+		return nil
+	}
+	spool, err := daemon.OpenGateSpool(filepath.Join(home, "gate.spool"))
+	if err != nil {
+		return err
+	}
+	_, _, err = spool.Enqueue(daemon.GateSubmission{Gate: gatePath, Ref: ref, SHA: newSHA, RunID: daemon.NewRunID()})
+	return err
 }
 
 func runGateAdmitPushCommand(args []string, stdout, stderr *os.File) int {

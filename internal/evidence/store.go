@@ -42,6 +42,10 @@ type Store interface {
 	WriteEvidence(runID string, files map[string][]byte) error
 }
 
+type Publisher interface {
+	PublishEvidence(runID string) error
+}
+
 func NewStore(repoPath string, cfg Config) Store {
 	if cfg.StoreInRepo {
 		return &InRepoStore{RepoPath: repoPath, Dir: cfg.Dir}

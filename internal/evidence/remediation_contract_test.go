@@ -2,6 +2,7 @@ package evidence_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -28,7 +29,7 @@ func TestInRepoStore_RejectsPathTraversalAndOversizedEvidence(t *testing.T) {
 func TestInRepoStore_RedactsPublishedSecrets(t *testing.T) {
 	repo := t.TempDir()
 	store := &evidence.InRepoStore{RepoPath: repo, Dir: ".made/evidence"}
-	input := "Authorization: Bearer bearer-secret\napi_key=api-secret\n\"access_token\": \"json-secret\"\nx-api-key: header-secret\ntoken=query-secret&ok=1\nghp_1234567890abcdef\nAKIA1234567890ABCDEF\n-----BEGIN RSA PRIVATE KEY-----\nprivate-secret\n-----END RSA PRIVATE KEY-----\n"
+	input := "Authorization: Bearer bearer-secret\napi_key=api-secret\n\"access_token\": \"json-secret\"\nx-api-key: header-secret\ntoken=query-secret&ok=1\nAWS_SECRET_ACCESS_KEY=aws-secret\nOPENAI_API_KEY=openai-secret\nDATABASE_URL=postgres://user:password@db.example/app\nghp_1234567890abcdef\nAKIA1234567890ABCDEF\n-----BEGIN RSA PRIVATE KEY-----\nprivate-secret\n-----END RSA PRIVATE KEY-----\n"
 	if err := store.WriteEvidence("run-1", map[string][]byte{"log.txt": []byte(input)}); err != nil {
 		t.Fatalf("WriteEvidence: %v", err)
 	}
@@ -36,11 +37,45 @@ func TestInRepoStore_RedactsPublishedSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read evidence: %v", err)
 	}
-	for _, secret := range []string{"bearer-secret", "api-secret", "json-secret", "header-secret", "query-secret", "ghp_1234567890abcdef", "AKIA1234567890ABCDEF", "private-secret"} {
+	for _, secret := range []string{"bearer-secret", "api-secret", "json-secret", "header-secret", "query-secret", "aws-secret", "openai-secret", "postgres://user:password@db.example/app", "ghp_1234567890abcdef", "AKIA1234567890ABCDEF", "private-secret"} {
 		if strings.Contains(string(data), secret) {
 			t.Fatalf("published evidence retained %q: %q", secret, data)
 		}
 	}
+}
+
+func TestInRepoStore_PublishesEvidenceInAccessibleCommit(t *testing.T) {
+	repo := t.TempDir()
+	runEvidenceGit(t, repo, "init", "-q", "-b", "main")
+	runEvidenceGit(t, repo, "config", "user.name", "evidence-test")
+	runEvidenceGit(t, repo, "config", "user.email", "evidence-test@example.com")
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("fixture\n"), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	runEvidenceGit(t, repo, "add", "README.md")
+	runEvidenceGit(t, repo, "commit", "-q", "-m", "fixture")
+
+	store := &evidence.InRepoStore{RepoPath: repo, Dir: ".made/evidence"}
+	if err := store.WriteEvidence("run-1", map[string][]byte{"log.txt": []byte("visible evidence\n")}); err != nil {
+		t.Fatalf("WriteEvidence: %v", err)
+	}
+	if err := store.PublishEvidence("run-1"); err != nil {
+		t.Fatalf("PublishEvidence: %v", err)
+	}
+	if got := strings.TrimSpace(string(runEvidenceGit(t, repo, "show", "--format=", "--name-only", "HEAD"))); !strings.Contains(got, ".made/evidence/run-1/log.txt") {
+		t.Fatalf("published commit does not contain evidence path: %q", got)
+	}
+}
+
+func runEvidenceGit(t *testing.T, dir string, args ...string) []byte {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v: %s", args, err, out)
+	}
+	return out
 }
 
 func TestInRepoStore_UsesPrivateEvidencePermissions(t *testing.T) {

@@ -28,25 +28,59 @@ func runStatusHandler(rm *daemon.RunManager) api.HandlerFunc {
 	}
 }
 
-func runSubmitHandler(rm *daemon.RunManager, admission ...*sync.Mutex) api.HandlerFunc {
-	return func(_ context.Context, params json.RawMessage) (any, error) {
+func runSubmitHandler(rm *daemon.RunManager, reviewDecisions *daemon.ReviewDecisions, spool *daemon.GateSpool, admission ...*sync.Mutex) api.HandlerFunc {
+	return func(ctx context.Context, params json.RawMessage) (any, error) {
 		var p runSubmitParams
 		if err := json.Unmarshal(params, &p); err != nil {
 			return nil, fmt.Errorf("run.submit: invalid params: %w", err)
 		}
-		if strings.TrimSpace(p.Repo) == "" || strings.TrimSpace(p.Branch) == "" || !validSHA(p.InputSHA) || (p.OutputSHA != "" && !validSHA(p.OutputSHA)) {
-			return nil, fmt.Errorf("run.submit: repo, branch, input_sha, and optional output_sha must use valid 40-character SHAs")
+		if strings.TrimSpace(p.GatePath) == "" || strings.TrimSpace(p.Ref) == "" {
+			return nil, fmt.Errorf("run.submit: gate_path and ref are required to execute a gate pipeline")
 		}
-		unlock := lockAdmission(admission)
-		defer unlock()
-		if p.RunID == "" {
-			p.RunID = rm.NewRunID()
+		branch, ok := strings.CutPrefix(p.Ref, "refs/heads/")
+		if !ok || branch == "" {
+			return nil, fmt.Errorf("run.submit: ref must be a non-empty refs/heads branch")
 		}
-		snapshot, err := rm.SubmitWithMetadata(p.RunID, p.Repo, p.Branch, p.InputSHA, p.OutputSHA, func(context.Context, func(daemon.Event)) error {
-			return fmt.Errorf("run.submit: no executable gate work was supplied; submit through gate.notify-push")
+		if p.Branch != "" && p.Branch != branch {
+			return nil, fmt.Errorf("run.submit: branch %q does not match ref %q", p.Branch, p.Ref)
+		}
+		if p.Repo != "" && p.Repo != gateRepoIdentifier(p.GatePath) {
+			return nil, fmt.Errorf("run.submit: repo %q does not match the gate identity", p.Repo)
+		}
+		if !validSHA(p.InputSHA) || (p.OutputSHA != "" && !validSHA(p.OutputSHA)) || (p.OldSHA != "" && !validSHA(p.OldSHA)) {
+			return nil, fmt.Errorf("run.submit: input_sha, old_sha, and optional output_sha must use valid 40-character SHAs")
+		}
+		if p.OldSHA == "" {
+			p.OldSHA = gitZeroSHAValue
+		}
+		if reviewDecisions == nil || spool == nil {
+			return nil, fmt.Errorf("run.submit: executable gate dependencies are unavailable")
+		}
+		request, err := json.Marshal(gateNotifyPushParams{
+			GatePath:  p.GatePath,
+			OldSHA:    p.OldSHA,
+			NewSHA:    p.InputSHA,
+			Ref:       p.Ref,
+			RunID:     p.RunID,
+			OutputSHA: p.OutputSHA,
 		})
 		if err != nil {
+			return nil, fmt.Errorf("run.submit: encode gate request: %w", err)
+		}
+		result, err := gateNotifyPushHandler(rm, reviewDecisions, spool, admission...)(ctx, request)
+		if err != nil {
 			return nil, err
+		}
+		gateResult, ok := result.(gateNotifyPushResult)
+		if !ok {
+			return nil, fmt.Errorf("run.submit: unexpected gate submission response %T", result)
+		}
+		if gateResult.RunID == "" {
+			return nil, fmt.Errorf("run.submit: gate submission did not create a run")
+		}
+		snapshot, ok := rm.Snapshot(gateResult.RunID)
+		if !ok {
+			return nil, fmt.Errorf("run.submit: submitted run %q was not persisted", gateResult.RunID)
 		}
 		return runActionReport{
 			SchemaVersion: 1, ProtocolVersion: api.Version, RunID: snapshot.ID,

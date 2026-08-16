@@ -11,10 +11,11 @@ import (
 )
 
 type GateSubmission struct {
-	Gate  string `json:"gate"`
-	Ref   string `json:"ref"`
-	SHA   string `json:"sha"`
-	RunID string `json:"run_id"`
+	Gate      string `json:"gate"`
+	Ref       string `json:"ref"`
+	SHA       string `json:"sha"`
+	RunID     string `json:"run_id"`
+	OutputSHA string `json:"output_sha,omitempty"`
 }
 
 type spoolRecord struct {
@@ -27,6 +28,10 @@ type GateSpool struct {
 	mu      sync.Mutex
 	pending map[string]GateSubmission
 	seen    map[string]GateSubmission
+}
+
+func (s *GateSpool) Path() string {
+	return s.path
 }
 
 func OpenGateSpool(path string) (*GateSpool, error) {

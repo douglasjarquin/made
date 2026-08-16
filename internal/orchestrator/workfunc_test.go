@@ -38,6 +38,7 @@ func TestChain_RefusesDeliveryWhenRequiredStageDisabled(t *testing.T) {
 		t.Fatalf("Submit: %v", err)
 	}
 	c := &chain{rc: &RunContext{Config: config.Config{
+		Review: config.Review{Required: true},
 		Stages: map[string]config.Stage{stageNameReview: {Enabled: &disabled}},
 	}}, rm: rm, runID: runID}
 
@@ -248,6 +249,9 @@ func TestNewWorkFunc_FullPassEndsRunningWithAwaitingMergeMessage(t *testing.T) {
 	}
 	if !strings.Contains(snap.Message, "awaiting merge") {
 		t.Fatalf("expected final message to mention awaiting merge, got %q", snap.Message)
+	}
+	if len(snap.OutputSHA) != 40 {
+		t.Fatalf("expected durable output SHA after push preparation, got %q", snap.OutputSHA)
 	}
 	assertAllStagesPassed(t, snap.Stages)
 

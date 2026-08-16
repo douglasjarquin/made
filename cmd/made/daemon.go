@@ -183,11 +183,12 @@ func replayPendingSubmissions(ctx context.Context, rm *daemon.RunManager, review
 		}
 		for _, submission := range pending {
 			params, err := json.Marshal(gateNotifyPushParams{
-				GatePath: submission.Gate,
-				Ref:      submission.Ref,
-				NewSHA:   submission.SHA,
-				RunID:    submission.RunID,
-				Replay:   true,
+				GatePath:  submission.Gate,
+				Ref:       submission.Ref,
+				NewSHA:    submission.SHA,
+				RunID:     submission.RunID,
+				OutputSHA: submission.OutputSHA,
+				Replay:    true,
 			})
 			if err != nil {
 				return
@@ -261,7 +262,7 @@ const debugHandlersEnv = "MADE_DEBUG_HANDLERS"
 
 func registerDaemonHandlers(srv *api.Server, rm *daemon.RunManager, store *daemon.ReviewDecisions, spool *daemon.GateSpool, cancel context.CancelFunc, admission ...*sync.Mutex) {
 	srv.Handle("run.status", runStatusHandler(rm))
-	srv.Handle("run.submit", runSubmitHandler(rm, admission...))
+	srv.Handle("run.submit", runSubmitHandler(rm, store, spool, admission...))
 	srv.Handle("run.list", runListHandler(rm))
 	srv.Handle("run.cancel", runCancelHandler(rm))
 	srv.Handle("review.decide", reviewDecideRunHandler(rm, store))
@@ -336,12 +337,13 @@ func validateBareGateRepo(path string) error {
 const gateNotifyPushDefaultBranchTimeout = 10 * time.Second
 
 type gateNotifyPushParams struct {
-	GatePath string `json:"gate_path"`
-	OldSHA   string `json:"old_sha"`
-	NewSHA   string `json:"new_sha"`
-	Ref      string `json:"ref"`
-	RunID    string `json:"run_id,omitempty"`
-	Replay   bool   `json:"replay,omitempty"`
+	GatePath  string `json:"gate_path"`
+	OldSHA    string `json:"old_sha"`
+	NewSHA    string `json:"new_sha"`
+	Ref       string `json:"ref"`
+	RunID     string `json:"run_id,omitempty"`
+	OutputSHA string `json:"output_sha,omitempty"`
+	Replay    bool   `json:"replay,omitempty"`
 }
 
 type gateNotifyPushResult struct {
@@ -364,6 +366,30 @@ func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.Review
 		if p.GatePath == "" || p.Ref == "" || p.NewSHA == "" {
 			return nil, fmt.Errorf("gate.notifyPush: gate_path, ref, and new_sha are required")
 		}
+		if p.OldSHA != "" && !validSHA(p.OldSHA) {
+			return nil, fmt.Errorf("gate.notifyPush: old_sha must be a valid 40-character SHA")
+		}
+		if p.OutputSHA != "" && !validSHA(p.OutputSHA) {
+			return nil, fmt.Errorf("gate.notifyPush: output_sha must be a valid 40-character SHA")
+		}
+		if err := validateGateSubmission(ctx, spool.Path(), p.GatePath, p.Ref, p.NewSHA); err != nil {
+			return nil, fmt.Errorf("gate.notifyPush: %w", err)
+		}
+
+		var submission daemon.GateSubmission
+		var created bool
+		if p.NewSHA != gitZeroSHAValue {
+			if p.RunID == "" {
+				p.RunID = rm.NewRunID()
+			}
+			var err error
+			submission, created, err = spool.Enqueue(daemon.GateSubmission{
+				Gate: p.GatePath, Ref: p.Ref, SHA: p.NewSHA, RunID: p.RunID, OutputSHA: p.OutputSHA,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("gate.notifyPush: enqueue submission: %w", err)
+			}
+		}
 
 		branchCtx, cancel := context.WithTimeout(ctx, gateNotifyPushDefaultBranchTimeout)
 		defer cancel()
@@ -378,10 +404,12 @@ func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.Review
 
 		decision := gitgate.ClassifyRef(p.Ref, defaultBranch, p.OldSHA, p.NewSHA)
 		if !decision.Accept {
-			if p.Replay {
-				if err := spool.Drain(daemon.GateSubmission{Gate: p.GatePath, Ref: p.Ref, SHA: p.NewSHA, RunID: p.RunID}); err != nil {
+			if submission.RunID != "" {
+				if err := spool.Drain(submission); err != nil {
 					return nil, fmt.Errorf("gate.notifyPush: drain rejected replay: %w", err)
 				}
+			}
+			if p.Replay {
 				return gateNotifyPushResult{}, nil
 			}
 			return nil, fmt.Errorf("gate.notifyPush: %s", decision.Message)
@@ -402,14 +430,7 @@ func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.Review
 		gatePath := p.GatePath
 		worktreesDir := gitgate.WorktreesDir(gatePath)
 		newSHA := p.NewSHA
-		runID := p.RunID
-		if runID == "" {
-			runID = rm.NewRunID()
-		}
-		submission, created, err := spool.Enqueue(daemon.GateSubmission{Gate: p.GatePath, Ref: p.Ref, SHA: p.NewSHA, RunID: runID})
-		if err != nil {
-			return nil, fmt.Errorf("gate.notifyPush: enqueue submission: %w", err)
-		}
+		runID := submission.RunID
 		if !created {
 			if _, ok := rm.Snapshot(submission.RunID); ok {
 				if err := rm.AppendSubmissionEvent(submission.RunID, daemon.SubmissionEvent{Gate: p.GatePath, Ref: p.Ref, InputSHA: p.NewSHA, Kind: "push"}); err != nil {
@@ -431,7 +452,7 @@ func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.Review
 				orchestrator.NewWorkFunc(rm, reviewDecisions, emit, runID, defaultBranch, branch, orchestrator.Options{}))
 		}
 
-		if _, err := rm.SubmitWithMetadata(runID, repo, branch, p.NewSHA, "", work); err != nil {
+		if _, err := rm.SubmitWithMetadata(runID, repo, branch, p.NewSHA, p.OutputSHA, work); err != nil {
 			return nil, fmt.Errorf("gate.notifyPush: submit run: %w", err)
 		}
 		if err := rm.AppendSubmissionEvent(runID, daemon.SubmissionEvent{Gate: p.GatePath, Ref: p.Ref, InputSHA: p.NewSHA, Kind: "push"}); err != nil {
@@ -443,6 +464,82 @@ func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.Review
 
 		return gateNotifyPushResult{RunID: runID}, nil
 	}
+}
+
+func validateGateSubmission(ctx context.Context, spoolPath, gatePath, ref, newSHA string) error {
+	if !validSHA(newSHA) {
+		return fmt.Errorf("new_sha must be a valid 40-character SHA")
+	}
+	if !strings.HasPrefix(ref, "refs/heads/") {
+		return fmt.Errorf("ref %q is not a branch ref", ref)
+	}
+	home, err := filepath.Abs(filepath.Dir(spoolPath))
+	if err != nil {
+		return fmt.Errorf("resolve Made home: %w", err)
+	}
+	absGate, err := filepath.Abs(gatePath)
+	if err != nil {
+		return fmt.Errorf("resolve gate path: %w", err)
+	}
+	rel, err := filepath.Rel(filepath.Join(home, "gates"), absGate)
+	if err != nil {
+		return fmt.Errorf("inspect gate layout: %w", err)
+	}
+	parts := strings.Split(filepath.Clean(rel), string(filepath.Separator))
+	if len(parts) != 2 || parts[1] != "gate.git" || len(parts[0]) != 64 || !hexString(parts[0]) {
+		return fmt.Errorf("gate path %q is outside the Made-owned gate layout", gatePath)
+	}
+	info, err := os.Lstat(absGate)
+	if err != nil {
+		return fmt.Errorf("inspect gate path: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return fmt.Errorf("gate path %q is not an owned directory", gatePath)
+	}
+	realHome, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		return fmt.Errorf("resolve Made home: %w", err)
+	}
+	realGate, err := filepath.EvalSymlinks(absGate)
+	if err != nil {
+		return fmt.Errorf("resolve gate path: %w", err)
+	}
+	realRel, err := filepath.Rel(filepath.Join(realHome, "gates"), realGate)
+	if err != nil {
+		return fmt.Errorf("inspect resolved gate layout: %w", err)
+	}
+	if filepath.Clean(realRel) != filepath.Clean(rel) {
+		return fmt.Errorf("gate path %q resolves outside its Made-owned layout", gatePath)
+	}
+	if err := validateBareGateRepo(absGate); err != nil {
+		return err
+	}
+	if newSHA == gitZeroSHAValue {
+		return nil
+	}
+	res, err := exec.Run(ctx, exec.Command{
+		Name: "git",
+		Args: []string{"-C", absGate, "rev-parse", "--verify", ref + "^{commit}"},
+	})
+	if err != nil {
+		return fmt.Errorf("inspect pushed head: %w", err)
+	}
+	if res.ExitCode != 0 {
+		return fmt.Errorf("inspect pushed head failed: %s", strings.TrimSpace(string(res.Stderr)))
+	}
+	if strings.TrimSpace(string(res.Stdout)) != newSHA {
+		return fmt.Errorf("input SHA %s does not match gate head %s", newSHA, strings.TrimSpace(string(res.Stdout)))
+	}
+	return nil
+}
+
+func hexString(value string) bool {
+	for _, r := range value {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 type debugSubmitCancellableRunParams struct {

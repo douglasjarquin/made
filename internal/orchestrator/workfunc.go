@@ -7,6 +7,7 @@ import (
 
 	"github.com/douglasjarquin/made/internal/agent"
 	"github.com/douglasjarquin/made/internal/daemon"
+	"github.com/douglasjarquin/made/internal/evidence"
 	"github.com/douglasjarquin/made/internal/pipeline/ci"
 	"github.com/douglasjarquin/made/internal/pipeline/document"
 	"github.com/douglasjarquin/made/internal/pipeline/intent"
@@ -152,7 +153,7 @@ func (c *chain) requireDeliveryStages() error {
 		if c.rc.Config.StageResult(name) != "skipped" {
 			continue
 		}
-		if name == stageNameCI && c.rc.Config.NoCI {
+		if !c.rc.Config.StageRequired(name) {
 			continue
 		}
 		if err := c.finish(name, "skipped", "stage disabled"); err != nil {
@@ -347,6 +348,24 @@ func (c *chain) lintStage() error {
 
 func (c *chain) pushStage() error {
 	c.start(stageNamePush)
+	if publisher, ok := c.rc.Evidence.(evidence.Publisher); ok {
+		if err := publisher.PublishEvidence(c.runID); err != nil {
+			if finishErr := c.finish(stageNamePush, stageResultFail, err.Error()); finishErr != nil {
+				return finishErr
+			}
+			return c.stageFailure(stageNamePush, err.Error())
+		}
+	}
+	outputSHA, err := deriveOutputSHA(c.rc.Worktree.Path)
+	if err != nil {
+		if finishErr := c.finish(stageNamePush, stageResultFail, err.Error()); finishErr != nil {
+			return finishErr
+		}
+		return c.stageFailure(stageNamePush, err.Error())
+	}
+	if err := c.rm.SetOutputSHA(c.runID, outputSHA); err != nil {
+		return err
+	}
 	result, err := push.Run(c.ctx, c.rc.Worktree.Path, pushRemoteName, c.branch)
 	if err != nil {
 		return err
@@ -363,7 +382,6 @@ func (c *chain) pushStage() error {
 
 func (c *chain) prStage() (pr.Result, error) {
 	c.start(stageNamePR)
-
 	title, err := derivePRTitle(c.rc.Worktree.Path)
 	if err != nil {
 		return pr.Result{}, fmt.Errorf("orchestrator: derive PR title: %w", err)

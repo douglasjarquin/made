@@ -90,6 +90,37 @@ func TestSetupResolvesEmptyTrustedConfigWhenDefaultBranchNeverFetched(t *testing
 	}
 }
 
+func TestRefreshDefaultBranchClearsDeletedRemotePolicyRef(t *testing.T) {
+	dir := t.TempDir()
+	gatePath := filepath.Join(dir, "gate.git")
+	remotePath := filepath.Join(dir, "remote.git")
+	runGit(t, "", "init", "--bare", "-q", "-b", "main", remotePath)
+	if err := gitgate.InitBare(gatePath); err != nil {
+		t.Fatalf("InitBare gate: %v", err)
+	}
+	runGit(t, gatePath, "remote", "add", "origin", remotePath)
+
+	src := filepath.Join(dir, "src")
+	initSourceRepo(t, src)
+	sha := pushBranch(t, src, remotePath, "main")
+	if err := refreshDefaultBranch(context.Background(), gatePath, "main"); err != nil {
+		t.Fatalf("initial refreshDefaultBranch: %v", err)
+	}
+	if got := revParse(t, gatePath, "refs/heads/main"); got != sha {
+		t.Fatalf("fetched trusted ref = %s, want %s", got, sha)
+	}
+	runGit(t, remotePath, "update-ref", "-d", "refs/heads/main")
+
+	if err := refreshDefaultBranch(context.Background(), gatePath, "main"); err != nil {
+		t.Fatalf("refreshDefaultBranch after remote deletion: %v", err)
+	}
+	cmd := exec.Command("git", "rev-parse", "--verify", "refs/heads/main")
+	cmd.Dir = gatePath
+	if err := cmd.Run(); err == nil {
+		t.Fatal("refreshDefaultBranch retained a deleted remote trusted ref")
+	}
+}
+
 func TestSetupCutsWorktreeAtExactPushedSHANotBranchTip(t *testing.T) {
 	dir := t.TempDir()
 	barePath := filepath.Join(dir, "gate.git")

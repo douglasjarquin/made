@@ -153,6 +153,17 @@ func refreshDefaultBranch(ctx context.Context, gatePath, defaultBranch string) e
 	}
 	if fetch.ExitCode != 0 {
 		if strings.Contains(string(fetch.Stderr), "couldn't find remote ref") {
+			clear, clearErr := execpkg.Run(ctx, execpkg.Command{
+				Name: "git",
+				Args: []string{"update-ref", "-d", "refs/heads/" + defaultBranch},
+				Dir:  gatePath,
+			})
+			if clearErr != nil {
+				return fmt.Errorf("orchestrator: clear deleted default branch %s: %w", defaultBranch, clearErr)
+			}
+			if clear.ExitCode != 0 {
+				return fmt.Errorf("orchestrator: clear deleted default branch %s failed: %s", defaultBranch, string(clear.Stderr))
+			}
 			return nil
 		}
 		return fmt.Errorf("orchestrator: refresh default branch %s failed: %s", defaultBranch, string(fetch.Stderr))

@@ -9,6 +9,7 @@ import (
 	"os"
 	"sync"
 	"syscall"
+	"time"
 )
 
 type HandlerFunc func(ctx context.Context, params json.RawMessage) (any, error)
@@ -87,10 +88,29 @@ func PrepareSocket(socketPath string) error {
 	if !ok || uint32(stat.Uid) != uint32(os.Getuid()) {
 		return fmt.Errorf("api: refusing socket path %s owned by another user", socketPath)
 	}
+	live, err := socketIsLive(socketPath)
+	if err != nil {
+		return fmt.Errorf("api: cannot prove owner socket %s is stale: %w", socketPath, err)
+	}
+	if live {
+		return fmt.Errorf("api: refusing to replace live owner socket %s", socketPath)
+	}
 	if err := os.Remove(socketPath); err != nil {
 		return fmt.Errorf("api: remove stale owner socket %s: %w", socketPath, err)
 	}
 	return nil
+}
+
+func socketIsLive(socketPath string) (bool, error) {
+	conn, err := net.DialTimeout("unix", socketPath, 100*time.Millisecond)
+	if err == nil {
+		_ = conn.Close()
+		return true, nil
+	}
+	if errors.Is(err, syscall.ECONNREFUSED) {
+		return false, nil
+	}
+	return false, err
 }
 
 func (s *Server) Serve(ctx context.Context) error {
