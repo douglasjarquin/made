@@ -56,6 +56,8 @@ The evidence-only QA commit is `af5010d7bd910bfa829e030c0198cae909188e69` with s
 
 The final executable boundary-fix commit is `d45f5c518664db5f73f42d1d4db595216331f24b` with subject `fix: close final remediation boundary gaps`.
 
+The final boundary-completion commit is `da8f5653bc3e13877480728bc3dd2daf296e7dd2` with subject `fix: harden final remediation boundaries`.
+
 Those follow-ups harden Made home ownership and permissions, private evidence permissions, version-only configuration rejection, disabled-stage representation, environment-injected real Consigliere compatibility testing, and final review/API boundaries.
 
 The implementation acquires the singleton before socket preparation, uses `lstat`, removes only a stale owner-owned Unix socket, rejects regular files, symlinks, and directories, preserves duplicate owners, and authorizes shutdown through the owner-only socket.
@@ -80,7 +82,13 @@ Pending gate submissions are replayed on daemon startup and remain undrained whe
 
 The orchestrator records stages, disabled stages as `skipped`, findings, decisions, PR URL, errors, supersession, cancellation, and submission events.
 
-The direct `run.submit` record API now fails its execution promptly when no gate work specification is supplied, rather than leaving a cancellation-only worker active indefinitely; real pipeline execution remains owned by `gate.notify-push`.
+The direct `run.submit` API requires a Made-owned gate path, branch ref, and immutable input head, then executes the same real gate pipeline as `gate.notify-push`.
+
+Gate submissions are fsync-enqueued before default-branch refresh, so a reachable daemon cannot lose an accepted update when the external remote is unavailable.
+
+Gate RPCs validate the Made-owned gate layout, bare-repository identity, and exact pushed ref head before creating a run.
+
+The run manager persists the actual prepared output SHA before pushing, while the in-repository evidence mode commits bounded redacted evidence into the pushed branch for later access.
 
 ## Phase 3 implementation and GREEN
 
@@ -94,7 +102,13 @@ Auto-fixes require a clean state, require explicitly returned tracked paths, rej
 
 Rebase failures are classified as conflicts only when unmerged paths exist.
 
-Evidence is run- and stage-specific, bounded, redacted, symlink-safe, and published only through accessible paths.
+Evidence is run- and stage-specific, bounded, redacted for common credential assignments and URLs, symlink-safe, and published only through accessible paths.
+
+In-repository evidence is committed into the pushed branch before the push stage completes, while orphan evidence remains on its dedicated evidence branch.
+
+When a remote default ref disappears, Made deletes the cached trusted ref before resolving policy, preventing stale trusted configuration from surviving refresh.
+
+Trusted review and CI required settings control whether disabled review and CI stages block delivery, and `no_ci` explicitly disables the CI requirement.
 
 Pull request creation is idempotent by repository, base, and head.
 
@@ -106,7 +120,7 @@ The Made CI workflow validates the pinned Go version with race, vet, and pinned 
 
 ## Validation evidence
 
-The final executable source SHA covered by this validation section is `d45f5c518664db5f73f42d1d4db595216331f24b`.
+The final executable source SHA covered by this validation section is `da8f5653bc3e13877480728bc3dd2daf296e7dd2`.
 
 The evidence-only report commits before that SHA did not change executable source, tests, configuration, or CI.
 
@@ -114,11 +128,11 @@ The final validation set was `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign
 
 All final validation commands exited `0`, and golangci-lint reported `0 issues`.
 
-The full validation transcript is `/tmp/made-remediation-p1p3b-full-precommit.log`.
+The full validation transcript is `/tmp/made-remediation-p1p3b-full-final-precommit.log`.
 
-The fresh real-process manual QA transcript for the final executable SHA is `/tmp/made-remediation-p1p3b-manual-d45f5c5-final.log`, and its final marker was `manual-qa-d45f5c5=PASS` at that full SHA.
+The fresh real-process manual QA transcript for the final executable SHA is `/tmp/made-remediation-p1p3b-manual-da8f5653-final.log`, and its final marker was `manual-qa-da8f5653=PASS` at that full SHA.
 
-That scenario used a fresh binary and task-local Made homes to observe capabilities, doctor through the real Consigliere script, durable offline gate spooling, exact submission and SHA preservation, exact status and active-list queries, versioned review decision output, WAL restart, duplicate singleton start, stale PID handling, regular-file, symlink, and directory socket rejection, and predecessor command rejection.
+That scenario used a fresh final binary and task-local Made homes to observe capabilities, doctor through the real Consigliere script, real gate initialization and hook execution, native `run.submit` pipeline execution, durable offline gate spooling and replay, exact submission and SHA preservation, exact status and active-list queries, versioned review decision output, WAL restart, duplicate singleton start, and predecessor command rejection.
 
 The compatibility subscenario used the real `bin/cs-made-lib.sh` script, the real Made binary, a strict fake `gh auth status` boundary, a task-local unavailable Herdr socket, and accepted the expected nonzero health exit only after asserting valid versioned JSON and authenticated GitHub state.
 
@@ -130,11 +144,11 @@ The first full validation exposed a WAL replay ordering race where a stale `succ
 
 Serializing snapshot capture with WAL append removed that race, and `go test -shuffle=on -count=10 ./internal/daemon -run '^TestPersistentRunStateIncludesSubmissionAndDecisionData$'` passed afterward.
 
-The final changed-file authority is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..d45f5c518664db5f73f42d1d4db595216331f24b`, which reports the Made-only paths from the custody base.
+The final changed-file authority is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..da8f5653bc3e13877480728bc3dd2daf296e7dd2`, which reports the Made-only paths from the custody base.
 
 At directory level, the base-to-final diff is limited to `.github/workflows/ci.yml`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `cmd/made`, `docs/remediation`, `internal/agent`, `internal/api`, `internal/config`, `internal/daemon`, `internal/evidence`, `internal/exec`, `internal/github`, `internal/orchestrator`, `internal/pipeline`, `internal/skill`, and `skills/made/SKILL.md`.
 
-The final boundary-fix commit-only diff is `git diff --name-status af5010d7bd910bfa829e030c0198cae909188e69..d45f5c518664db5f73f42d1d4db595216331f24b` and contains only Made implementation and test files.
+The final boundary-fix commit-only diff is `git diff --name-status af5010d7bd910bfa829e030c0198cae909188e69..da8f5653bc3e13877480728bc3dd2daf296e7dd2` and contains only Made implementation and test files.
 
 The separate Made project plan `plans/made-rewrite.md` retains its broader F3 checkbox because that criterion requires running the full Consigliere `--mode made` soldier flow and changing shared Herdr lifecycle state.
 
