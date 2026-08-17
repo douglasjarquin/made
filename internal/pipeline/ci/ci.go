@@ -16,13 +16,6 @@ import (
 
 const (
 	defaultPollInterval = 2 * time.Second
-
-	// passingMergeState is the gh pr view mergeStateStatus value that means
-	// "all checks passed and the PR is clear to proceed". internal/github's
-	// Client exposes no separate check-listing endpoint, so this stage
-	// treats PR mergeability status as its check-status signal; any other
-	// state is treated as a (possibly transient) check failure.
-	passingMergeState = "CLEAN"
 )
 
 type Result struct {
@@ -58,11 +51,11 @@ func Run(ctx context.Context, ghClient *github.Client, prURL string, rerunBudget
 
 	reruns := 0
 	for {
-		state, err := ghClient.MergeableState(ctx, prURL)
+		checks, err := ghClient.PRChecks(ctx, prURL)
 		if err != nil {
-			return Result{OK: false, Message: err.Error(), RerunsUsed: reruns}, nil
+			return Result{}, err
 		}
-		if state == passingMergeState {
+		if checks.ExitCode == 0 {
 			return Result{
 				OK:         true,
 				Message:    fmt.Sprintf("checks passed for %s after %d rerun(s)", prURL, reruns),
@@ -71,20 +64,36 @@ func Run(ctx context.Context, ghClient *github.Client, prURL string, rerunBudget
 		}
 
 		if reruns >= rerunBudget {
-			excerpt, logErr := ghClient.CheckLogs(ctx, prURL)
+			runID := firstWorkflowRunID(checks.Checks)
+			if runID == "" {
+				return Result{
+					OK:         false,
+					Message:    fmt.Sprintf("checks failed for %s after exhausting rerun budget (%d), but no workflow run ID was present in gh pr checks output", prURL, rerunBudget),
+					RerunsUsed: reruns,
+				}, nil
+			}
+			excerpt, logErr := ghClient.CheckLogs(ctx, runID)
 			if logErr != nil {
-				excerpt = fmt.Sprintf("(failed to fetch check logs: %s)", logErr.Error())
+				return Result{}, logErr
 			}
 			return Result{
 				OK:         false,
-				Message:    fmt.Sprintf("checks still failing (%s) for %s after exhausting rerun budget (%d)", state, prURL, rerunBudget),
+				Message:    fmt.Sprintf("checks still failing for %s after exhausting rerun budget (%d)", prURL, rerunBudget),
 				RerunsUsed: reruns,
 				LogExcerpt: excerpt,
 			}, nil
 		}
 
-		if err := ghClient.RerunCheck(ctx, prURL); err != nil {
-			return Result{OK: false, Message: err.Error(), RerunsUsed: reruns}, nil
+		runID := firstWorkflowRunID(checks.Checks)
+		if runID == "" {
+			return Result{
+				OK:         false,
+				Message:    fmt.Sprintf("checks failed for %s but gh pr checks returned no workflow run ID for rerun", prURL),
+				RerunsUsed: reruns,
+			}, nil
+		}
+		if err := ghClient.RerunCheck(ctx, runID); err != nil {
+			return Result{}, err
 		}
 		reruns++
 
@@ -94,4 +103,13 @@ func Run(ctx context.Context, ghClient *github.Client, prURL string, rerunBudget
 		case <-time.After(pollInterval):
 		}
 	}
+}
+
+func firstWorkflowRunID(checks []github.CheckResult) string {
+	for _, check := range checks {
+		if check.RunID != "" {
+			return check.RunID
+		}
+	}
+	return ""
 }

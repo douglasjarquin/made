@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,6 +33,19 @@ type CreatePROptions struct {
 	Body  string
 	Base  string
 	Head  string
+}
+
+type CheckResult struct {
+	Name   string `json:"name"`
+	State  string `json:"state"`
+	Bucket string `json:"bucket"`
+	Link   string `json:"link"`
+	RunID  string `json:"-"`
+}
+
+type ChecksResult struct {
+	Checks   []CheckResult
+	ExitCode int
 }
 
 func (c *Client) AuthStatus(ctx context.Context) error {
@@ -67,29 +82,33 @@ func (c *Client) CreatePR(ctx context.Context, opts CreatePROptions) (string, er
 	return lastLine(res.Stdout), nil
 }
 
-func (c *Client) MergeableState(ctx context.Context, prURL string) (string, error) {
+func (c *Client) PRChecks(ctx context.Context, prURL string) (ChecksResult, error) {
 	if err := c.AuthStatus(ctx); err != nil {
-		return "", err
+		return ChecksResult{}, err
 	}
 
-	res, err := c.run(ctx, "pr", "view", prURL, "--json", "mergeStateStatus")
+	res, err := c.run(ctx, "pr", "checks", prURL, "--json", "name,state,bucket,link")
 	if err != nil {
-		return "", fmt.Errorf("github: run gh pr view: %w", err)
+		return ChecksResult{}, fmt.Errorf("github: run gh pr checks: %w", err)
 	}
-	if res.ExitCode != 0 {
-		return "", fmt.Errorf("github: gh pr view failed: %s", strings.TrimSpace(string(res.Stderr)))
+	if len(strings.TrimSpace(string(res.Stdout))) == 0 {
+		return ChecksResult{}, fmt.Errorf("github: gh pr checks returned no JSON (exit %d): %s", res.ExitCode, strings.TrimSpace(string(res.Stderr)))
 	}
 
-	var payload struct {
-		MergeStateStatus string `json:"mergeStateStatus"`
+	var checks []CheckResult
+	if err := json.Unmarshal(res.Stdout, &checks); err != nil {
+		return ChecksResult{}, fmt.Errorf("github: parse gh pr checks output: %w: stdout=%s", err, res.Stdout)
 	}
-	if err := json.Unmarshal(res.Stdout, &payload); err != nil {
-		return "", fmt.Errorf("github: parse gh pr view output: %w: stdout=%s", err, res.Stdout)
+	for i := range checks {
+		checks[i].RunID = workflowRunID(checks[i].Link)
 	}
-	return payload.MergeStateStatus, nil
+	return ChecksResult{Checks: checks, ExitCode: res.ExitCode}, nil
 }
 
 func (c *Client) CheckLogs(ctx context.Context, runID string) (string, error) {
+	if err := validateWorkflowRunID(runID); err != nil {
+		return "", err
+	}
 	if err := c.AuthStatus(ctx); err != nil {
 		return "", err
 	}
@@ -105,6 +124,9 @@ func (c *Client) CheckLogs(ctx context.Context, runID string) (string, error) {
 }
 
 func (c *Client) RerunCheck(ctx context.Context, runID string) error {
+	if err := validateWorkflowRunID(runID); err != nil {
+		return err
+	}
 	if err := c.AuthStatus(ctx); err != nil {
 		return err
 	}
@@ -140,4 +162,27 @@ func (c *Client) run(ctx context.Context, args ...string) (*exec.Result, error) 
 func lastLine(out []byte) string {
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	return strings.TrimSpace(lines[len(lines)-1])
+}
+
+func validateWorkflowRunID(runID string) error {
+	if _, err := strconv.ParseUint(runID, 10, 64); err != nil {
+		return fmt.Errorf("github: invalid workflow run ID %q: %w", runID, err)
+	}
+	return nil
+}
+
+func workflowRunID(link string) string {
+	parsed, err := url.Parse(link)
+	if err != nil {
+		return ""
+	}
+	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	for i := 0; i+1 < len(parts); i++ {
+		if parts[i] == "runs" {
+			if _, err := strconv.ParseUint(parts[i+1], 10, 64); err == nil {
+				return parts[i+1]
+			}
+		}
+	}
+	return ""
 }

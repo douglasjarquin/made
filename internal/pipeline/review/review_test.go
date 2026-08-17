@@ -29,9 +29,12 @@ func TestRun_AutoFixApplied(t *testing.T) {
 		},
 	})
 
-	result, err := review.Run(context.Background(), wt.Path, agent.KindClaude, review.Options{
+	result, err := review.Run(context.Background(), wt.Path, agent.KindCodex, review.Options{
 		BinaryPath: bin,
-		ExtraEnv:   []string{"FAKE_AGENT_SCENARIO=" + scenarioPath},
+		ExtraEnv: []string{
+			"FAKE_AGENT_KIND=codex",
+			"FAKE_AGENT_SCENARIO=" + scenarioPath,
+		},
 	})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -78,9 +81,12 @@ func TestRun_AskUserFindingQueued(t *testing.T) {
 		},
 	})
 
-	result, err := review.Run(context.Background(), wt.Path, agent.KindClaude, review.Options{
+	result, err := review.Run(context.Background(), wt.Path, agent.KindCodex, review.Options{
 		BinaryPath: bin,
-		ExtraEnv:   []string{"FAKE_AGENT_SCENARIO=" + scenarioPath},
+		ExtraEnv: []string{
+			"FAKE_AGENT_KIND=codex",
+			"FAKE_AGENT_SCENARIO=" + scenarioPath,
+		},
 	})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -125,7 +131,10 @@ func TestRun_BlockingFindingHaltsStage(t *testing.T) {
 
 	result, err := review.Run(context.Background(), wt.Path, agent.KindCodex, review.Options{
 		BinaryPath: bin,
-		ExtraEnv:   []string{"FAKE_AGENT_SCENARIO=" + scenarioPath},
+		ExtraEnv: []string{
+			"FAKE_AGENT_KIND=codex",
+			"FAKE_AGENT_SCENARIO=" + scenarioPath,
+		},
 	})
 	if err != nil {
 		t.Fatalf("Run: %v", err)

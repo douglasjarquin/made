@@ -34,10 +34,13 @@ func TestSpawn_ParsesFindingsFromFakeAgent(t *testing.T) {
 		},
 	})
 
-	findings, err := agent.Spawn(context.Background(), agent.KindClaude, agent.SpawnParams{
+	findings, err := agent.Spawn(context.Background(), agent.KindCodex, agent.SpawnParams{
 		WorktreePath: t.TempDir(),
 		BinaryPath:   bin,
-		ExtraEnv:     []string{"FAKE_AGENT_SCENARIO=" + scenarioPath},
+		ExtraEnv: []string{
+			"FAKE_AGENT_KIND=codex",
+			"FAKE_AGENT_SCENARIO=" + scenarioPath,
+		},
 	})
 	if err != nil {
 		t.Fatalf("Spawn: %v", err)
@@ -59,7 +62,10 @@ func TestSpawn_NonZeroExitReturnsError(t *testing.T) {
 	_, err := agent.Spawn(context.Background(), agent.KindCodex, agent.SpawnParams{
 		WorktreePath: t.TempDir(),
 		BinaryPath:   bin,
-		ExtraEnv:     []string{"FAKE_AGENT_EXIT_CODE=1"},
+		ExtraEnv: []string{
+			"FAKE_AGENT_KIND=codex",
+			"FAKE_AGENT_EXIT_CODE=1",
+		},
 	})
 	if err == nil {
 		t.Fatal("expected an error for a non-zero fakeagent exit")
@@ -74,10 +80,11 @@ func TestSpawn_LogsInvocation(t *testing.T) {
 	scenarioPath := writeScenario(t, agent.Findings{})
 	logPath := filepath.Join(t.TempDir(), "invocations.log")
 
-	if _, err := agent.Spawn(context.Background(), agent.KindClaude, agent.SpawnParams{
+	if _, err := agent.Spawn(context.Background(), agent.KindCodex, agent.SpawnParams{
 		WorktreePath: t.TempDir(),
 		BinaryPath:   bin,
 		ExtraEnv: []string{
+			"FAKE_AGENT_KIND=codex",
 			"FAKE_AGENT_SCENARIO=" + scenarioPath,
 			"FAKE_AGENT_LOG_FILE=" + logPath,
 		},
@@ -91,5 +98,16 @@ func TestSpawn_LogsInvocation(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "invoked:") {
 		t.Fatalf("expected invocation log entry, got %q", data)
+	}
+}
+
+func TestSpawn_RejectsUnsupportedClaudeContract(t *testing.T) {
+	bin := agenttest.Build(t)
+	_, err := agent.Spawn(context.Background(), agent.KindClaude, agent.SpawnParams{
+		WorktreePath: t.TempDir(),
+		BinaryPath:   bin,
+	})
+	if err == nil || !strings.Contains(err.Error(), "structured task contract is unsupported") {
+		t.Fatalf("expected explicit unsupported Claude error, got %v", err)
 	}
 }

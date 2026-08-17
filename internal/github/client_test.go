@@ -100,15 +100,18 @@ func TestCreatePR_SuccessReturnsURL(t *testing.T) {
 	}
 }
 
-func TestMergeableState_ParsesJSON(t *testing.T) {
-	c := newClient(t, []string{`FAKE_GH_PR_VIEW_JSON={"mergeStateStatus":"BEHIND"}`}, "")
+func TestPRChecks_ParsesJSON(t *testing.T) {
+	c := newClient(t, []string{`FAKE_GH_CHECKS_JSON=[{"name":"build","state":"COMPLETED","bucket":"pass","link":"https://github.com/example/repo/actions/runs/42"}]`}, "")
 
-	state, err := c.MergeableState(context.Background(), "https://github.com/example/repo/pull/42")
+	checks, err := c.PRChecks(context.Background(), "https://github.com/example/repo/pull/42")
 	if err != nil {
-		t.Fatalf("MergeableState: %v", err)
+		t.Fatalf("PRChecks: %v", err)
 	}
-	if state != "BEHIND" {
-		t.Fatalf("expected BEHIND, got %q", state)
+	if checks.ExitCode != 0 || len(checks.Checks) != 1 {
+		t.Fatalf("unexpected checks result: %+v", checks)
+	}
+	if checks.Checks[0].Bucket != "pass" || checks.Checks[0].RunID != "42" {
+		t.Fatalf("unexpected check fields: %+v", checks.Checks[0])
 	}
 }
 
@@ -116,7 +119,7 @@ func TestMergeableState_AuthFailurePreventsCall(t *testing.T) {
 	logPath := filepath.Join(t.TempDir(), "invocations.log")
 	c := newClient(t, []string{"FAKE_GH_AUTH_EXIT_CODE=1"}, logPath)
 
-	_, err := c.MergeableState(context.Background(), "https://github.com/example/repo/pull/42")
+	_, err := c.PRChecks(context.Background(), "https://github.com/example/repo/pull/42")
 	if err == nil {
 		t.Fatal("expected an error when auth fails")
 	}
@@ -124,8 +127,8 @@ func TestMergeableState_AuthFailurePreventsCall(t *testing.T) {
 	if readErr != nil {
 		t.Fatalf("read invocation log: %v", readErr)
 	}
-	if strings.Contains(string(data), "pr view") {
-		t.Fatalf("expected no pr view call after auth failure, log:\n%s", data)
+	if strings.Contains(string(data), "pr checks") {
+		t.Fatalf("expected no pr checks call after auth failure, log:\n%s", data)
 	}
 }
 

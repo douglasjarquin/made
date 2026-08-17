@@ -33,7 +33,7 @@ func TestRun_TransientFailureRecoversWithinBudget(t *testing.T) {
 	stateDir := t.TempDir()
 	logPath := filepath.Join(t.TempDir(), "invocations.log")
 	c := newClient(t, []string{
-		"FAKE_GH_PR_VIEW_STATES=UNSTABLE,CLEAN",
+		"FAKE_GH_CHECKS_BUCKETS=fail,pass",
 		"FAKE_GH_STATE_DIR=" + stateDir,
 	}, logPath)
 
@@ -60,7 +60,7 @@ func TestRun_TransientFailureRecoversWithinBudget(t *testing.T) {
 
 func TestRun_BudgetExhaustionSurfacesFinalFailure(t *testing.T) {
 	c := newClient(t, []string{
-		"FAKE_GH_PR_VIEW_STATES=UNSTABLE",
+		"FAKE_GH_CHECKS_BUCKETS=fail",
 		"FAKE_GH_RUN_LOG=build failed at step 3\n",
 	}, "")
 
@@ -101,7 +101,7 @@ func TestRun_RejectsNilClient(t *testing.T) {
 
 func TestRun_NeverExceedsBudgetEvenWithAlwaysFailingChecks(t *testing.T) {
 	c := newClient(t, []string{
-		"FAKE_GH_PR_VIEW_STATES=UNSTABLE",
+		"FAKE_GH_CHECKS_BUCKETS=fail",
 	}, "")
 
 	const rerunBudget = 3

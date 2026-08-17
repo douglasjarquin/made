@@ -181,7 +181,7 @@ func cleanReviewOptions(t *testing.T) review.Options {
 	scenarioPath := writeScenario(t, agent.Findings{})
 	return review.Options{
 		BinaryPath: bin,
-		ExtraEnv:   []string{"FAKE_AGENT_SCENARIO=" + scenarioPath},
+		ExtraEnv:   []string{"FAKE_AGENT_KIND=codex", "FAKE_AGENT_SCENARIO=" + scenarioPath},
 	}
 }
 
@@ -203,7 +203,7 @@ func TestNewWorkFunc_FullPassEndsRunningWithAwaitingMergeMessage(t *testing.T) {
 
 	ghBin := githubtest.Build(t)
 	cfg := config.Config{
-		Agent:    string(agent.KindClaude),
+		Agent:    string(agent.KindCodex),
 		Commands: config.Commands{Test: "true", Lint: "true"},
 		CI:       config.CI{RerunBudget: 1},
 	}
@@ -242,7 +242,7 @@ func TestNewWorkFunc_FullPassPRTitleMatchesPushedCommitSubject(t *testing.T) {
 	ghBin := githubtest.Build(t)
 	ghLog := filepath.Join(t.TempDir(), "gh-invocations.log")
 	cfg := config.Config{
-		Agent:    string(agent.KindClaude),
+		Agent:    string(agent.KindCodex),
 		Commands: config.Commands{Test: "true", Lint: "true"},
 		CI:       config.CI{RerunBudget: 1},
 	}
@@ -297,7 +297,7 @@ func TestNewWorkFunc_TestFailureHaltsBeforeLaterStages(t *testing.T) {
 	ghLog := filepath.Join(t.TempDir(), "gh-invocations.log")
 
 	cfg := config.Config{
-		Agent: string(agent.KindClaude),
+		Agent: string(agent.KindCodex),
 		Commands: config.Commands{
 			Test: "exit 1",
 			Lint: "touch " + lintMarker,
@@ -359,7 +359,7 @@ func TestNewWorkFunc_DocumentFindingParksThenRejectedFailsRun(t *testing.T) {
 
 	ghBin := githubtest.Build(t)
 	cfg := config.Config{
-		Agent:    string(agent.KindClaude),
+		Agent:    string(agent.KindCodex),
 		Commands: config.Commands{Test: "true", Lint: "true"},
 		CI:       config.CI{RerunBudget: 1},
 		Document: config.Document{Rules: []config.DocumentRule{
@@ -405,7 +405,7 @@ func TestNewWorkFunc_DocumentFindingParksThenApprovedResumesToCompletion(t *test
 
 	ghBin := githubtest.Build(t)
 	cfg := config.Config{
-		Agent:    string(agent.KindClaude),
+		Agent:    string(agent.KindCodex),
 		Commands: config.Commands{Test: "true", Lint: "true"},
 		CI:       config.CI{RerunBudget: 1},
 		Document: config.Document{Rules: []config.DocumentRule{
@@ -466,7 +466,7 @@ func TestNewWorkFunc_PushSucceedsThenPRFailsMessageNamesPushedBranch(t *testing.
 
 	ghBin := githubtest.Build(t)
 	cfg := config.Config{
-		Agent:    string(agent.KindClaude),
+		Agent:    string(agent.KindCodex),
 		Commands: config.Commands{Test: "true", Lint: "true"},
 		CI:       config.CI{RerunBudget: 1},
 	}

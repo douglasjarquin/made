@@ -1,5 +1,11 @@
 package agent
 
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+)
+
 type FindingKind string
 
 const (
@@ -14,6 +20,40 @@ type Finding struct {
 	Patch       string      `json:"patch,omitempty"`
 }
 
+func (f *Finding) UnmarshalJSON(data []byte) error {
+	var wire struct {
+		Kind        *FindingKind `json:"kind"`
+		Description *string      `json:"description"`
+		Patch       *string      `json:"patch"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&wire); err != nil {
+		return err
+	}
+	if wire.Kind == nil || wire.Description == nil {
+		return fmt.Errorf("finding requires kind and description")
+	}
+	f.Kind = *wire.Kind
+	f.Description = *wire.Description
+	f.Patch = ""
+	if wire.Patch != nil {
+		f.Patch = *wire.Patch
+	}
+	return nil
+}
+
 type Findings struct {
 	Findings []Finding `json:"findings"`
+}
+
+func (f Findings) MarshalJSON() ([]byte, error) {
+	findings := f.Findings
+	if findings == nil {
+		findings = []Finding{}
+	}
+	type payload struct {
+		Findings []Finding `json:"findings"`
+	}
+	return json.Marshal(payload{Findings: findings})
 }

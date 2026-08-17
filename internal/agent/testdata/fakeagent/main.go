@@ -10,9 +10,19 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 func main() {
+	if os.Getenv("FAKE_AGENT_KIND") != string(agentKindCodex) {
+		fmt.Fprintln(os.Stderr, "fakeagent: only the codex structured exec contract is supported")
+		os.Exit(2)
+	}
+	if err := validateInvocation(os.Args[1:]); err != nil {
+		fmt.Fprintf(os.Stderr, "fakeagent: invalid invocation: %v\n", err)
+		os.Exit(2)
+	}
+
 	if logPath := os.Getenv("FAKE_AGENT_LOG_FILE"); logPath != "" {
 		logInvocation(logPath)
 	}
@@ -34,10 +44,31 @@ func main() {
 		os.Exit(1)
 	}
 
-	if _, err := os.Stdout.Write(data); err != nil {
-		fmt.Fprintf(os.Stderr, "fakeagent: write stdout: %v\n", err)
+	args := os.Args[1:]
+	lastMessagePath := args[5]
+	if err := os.WriteFile(lastMessagePath, data, 0o600); err != nil {
+		fmt.Fprintf(os.Stderr, "fakeagent: write structured output %s: %v\n", lastMessagePath, err)
 		os.Exit(1)
 	}
+	_, _ = fmt.Fprintln(os.Stdout, `{"type":"turn.completed"}`)
+}
+
+const agentKindCodex = "codex"
+
+func validateInvocation(args []string) error {
+	if len(args) != 10 {
+		return fmt.Errorf("want 10 arguments, got %d", len(args))
+	}
+	if args[0] != "exec" || args[1] != "--json" || args[2] != "--output-schema" || args[4] != "--output-last-message" || args[6] != "--ephemeral" || args[7] != "-C" {
+		return fmt.Errorf("expected codex exec structured flags, got %v", args)
+	}
+	if filepath.IsAbs(args[3]) == false || filepath.IsAbs(args[5]) == false {
+		return fmt.Errorf("schema and output paths must be absolute")
+	}
+	if args[8] == "" || args[9] == "" {
+		return fmt.Errorf("worktree and task are required")
+	}
+	return nil
 }
 
 func logInvocation(logPath string) {
