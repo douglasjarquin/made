@@ -44,6 +44,9 @@ func (s *InRepoStore) WriteEvidenceContext(ctx context.Context, runID string, fi
 	if dir == "" {
 		dir = DefaultDir
 	}
+	if _, err := safePathComponents(dir); err != nil {
+		return fmt.Errorf("evidence: invalid directory: %w", err)
+	}
 	repoPath, err := filepath.Abs(s.RepoPath)
 	if err != nil {
 		return fmt.Errorf("evidence: resolve repository path: %w", err)
@@ -162,6 +165,20 @@ func (s *InRepoStore) PublishEvidenceContext(ctx context.Context, runID string) 
 	}
 	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
 		return fmt.Errorf("evidence: run path is not a directory")
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(evidenceRoot)
+	if err != nil {
+		return fmt.Errorf("evidence: resolve evidence directory: %w", err)
+	}
+	if resolvedRoot != evidenceRoot {
+		return fmt.Errorf("evidence: refusing symlinked evidence directory")
+	}
+	resolvedRun, err := filepath.EvalSymlinks(runDir)
+	if err != nil {
+		return fmt.Errorf("evidence: resolve run directory: %w", err)
+	}
+	if resolvedRun != runDir {
+		return fmt.Errorf("evidence: refusing symlinked run directory")
 	}
 	if err := sanitizePublishedEvidence(ctx, runDir, s.RetentionBytes); err != nil {
 		return err

@@ -127,14 +127,16 @@ func TestNewStatusReportRedactsAllExternallySuppliedRunFields(t *testing.T) {
 	secret := "token=public-secret"
 	report := newStatusReport(daemon.RunSnapshot{
 		ID:        "run-sensitive-fields",
+		InputSHA:  "0123456789abcdef0123456789abcdef01234567",
+		OutputSHA: "89abcdef0123456789abcdef0123456789abcdef",
 		PRURL:     "https://user:public-secret@example.com/repo/pull/1",
 		Findings:  []daemon.RunFinding{{Message: "finding", Paths: []string{secret}}},
 		Decisions: map[string]string{"review": secret},
 		SubmissionEvents: []daemon.SubmissionEvent{{
 			Gate:      secret,
 			Ref:       secret,
-			InputSHA:  secret,
-			OutputSHA: secret,
+			InputSHA:  "0123456789abcdef0123456789abcdef01234567",
+			OutputSHA: "89abcdef0123456789abcdef0123456789abcdef",
 			Kind:      secret,
 		}},
 		PendingFindings: []daemon.AskUserFinding{{Message: secret}},
@@ -145,6 +147,12 @@ func TestNewStatusReportRedactsAllExternallySuppliedRunFields(t *testing.T) {
 	}
 	if strings.Contains(string(encoded), "public-secret") {
 		t.Fatalf("status report retained sensitive externally supplied text: %s", encoded)
+	}
+	if report.RunID != "run-sensitive-fields" {
+		t.Fatalf("status report rewrote exact run ID: %q", report.RunID)
+	}
+	if report.InputSHA != "0123456789abcdef0123456789abcdef01234567" || report.OutputSHA != "89abcdef0123456789abcdef0123456789abcdef" {
+		t.Fatalf("status report rewrote exact SHA identity: input=%q output=%q", report.InputSHA, report.OutputSHA)
 	}
 }
 

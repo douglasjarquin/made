@@ -181,7 +181,7 @@ func persistSnapshot(snapshot RunSnapshot) persistedSnapshot {
 	}
 	decisions := make(map[string]string, len(snapshot.Decisions))
 	for key, value := range snapshot.Decisions {
-		decisions[evidence.RedactString(key)] = evidence.RedactString(value)
+		decisions[key] = evidence.RedactString(value)
 	}
 	findings := redactFindings(snapshot.Findings)
 	pendingFindings := redactPendingFindings(snapshot.PendingFindings)
@@ -192,7 +192,7 @@ func persistSnapshot(snapshot RunSnapshot) persistedSnapshot {
 		EndedAt: snapshot.EndedAt, ExecutionFinished: snapshot.ExecutionFinished,
 		Message: evidence.RedactString(snapshot.Message), Errors: errorsList,
 		Findings: findings, Decisions: decisions,
-		PRURL: evidence.RedactString(snapshot.PRURL), SupersededBy: evidence.RedactString(snapshot.SupersededBy),
+		PRURL: evidence.RedactString(snapshot.PRURL), SupersededBy: snapshot.SupersededBy,
 		CancelRequested:  snapshot.CancelRequested,
 		SubmissionEvents: redactSubmissionEvents(snapshot.SubmissionEvents),
 		Stages:           append([]StageResult(nil), snapshot.Stages...),
@@ -269,8 +269,6 @@ func redactSubmissionEvents(values []SubmissionEvent) []SubmissionEvent {
 	for i, value := range values {
 		value.Gate = evidence.RedactString(value.Gate)
 		value.Ref = evidence.RedactString(value.Ref)
-		value.InputSHA = evidence.RedactString(value.InputSHA)
-		value.OutputSHA = evidence.RedactString(value.OutputSHA)
 		value.Kind = evidence.RedactString(value.Kind)
 		redacted[i] = value
 	}

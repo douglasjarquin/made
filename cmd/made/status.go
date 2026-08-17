@@ -113,18 +113,18 @@ func newStatusReport(snap daemon.RunSnapshot) StatusReport {
 	return StatusReport{
 		SchemaVersion:     statusSchemaVersion,
 		ProtocolVersion:   api.Version,
-		RunID:             evidence.RedactString(snap.ID),
-		Repo:              evidence.RedactString(snap.Repo),
-		Branch:            evidence.RedactString(snap.Branch),
+		RunID:             snap.ID,
+		Repo:              snap.Repo,
+		Branch:            snap.Branch,
 		State:             string(snap.Status),
-		InputSHA:          evidence.RedactString(snap.InputSHA),
-		OutputSHA:         evidence.RedactString(snap.OutputSHA),
+		InputSHA:          snap.InputSHA,
+		OutputSHA:         snap.OutputSHA,
 		ExecutionFinished: snap.ExecutionFinished,
 		Findings:          redactedFindings(snap.Findings),
 		Decisions:         nonNilDecisions(snap.Decisions),
 		PRURL:             evidence.RedactString(snap.PRURL),
 		Errors:            redactedErrors(snap.Errors, snap.Err),
-		SupersededBy:      evidence.RedactString(snap.SupersededBy),
+		SupersededBy:      snap.SupersededBy,
 		CancelRequested:   snap.CancelRequested,
 		SubmissionEvents:  nonNilSubmissionEvents(snap.SubmissionEvents),
 		QueuedAt:          timePtr(snap.QueuedAt),
@@ -160,7 +160,7 @@ func nonNilDecisions(decisions map[string]string) map[string]string {
 	}
 	redacted := make(map[string]string, len(decisions))
 	for key, value := range decisions {
-		redacted[evidence.RedactString(key)] = evidence.RedactString(value)
+		redacted[key] = evidence.RedactString(value)
 	}
 	return redacted
 }
@@ -187,8 +187,6 @@ func nonNilSubmissionEvents(events []daemon.SubmissionEvent) []daemon.Submission
 	for i, event := range events {
 		event.Gate = evidence.RedactString(event.Gate)
 		event.Ref = evidence.RedactString(event.Ref)
-		event.InputSHA = evidence.RedactString(event.InputSHA)
-		event.OutputSHA = evidence.RedactString(event.OutputSHA)
 		event.Kind = evidence.RedactString(event.Kind)
 		redacted[i] = event
 	}

@@ -201,3 +201,25 @@ func TestInRepoStore_RejectsSymlinkedEvidenceDirectory(t *testing.T) {
 		t.Fatalf("evidence escaped through symlink: %+v", entries)
 	}
 }
+
+func TestInRepoStore_PublishRejectsSymlinkedEvidenceRoot(t *testing.T) {
+	repo := initTargetRepo(t)
+	outside := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(outside, "run-escape"), 0o700); err != nil {
+		t.Fatalf("create outside run: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(outside, "run-escape", "leak.log"), []byte("token=outside-secret\n"), 0o600); err != nil {
+		t.Fatalf("write outside evidence: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, ".made"), 0o700); err != nil {
+		t.Fatalf("create evidence parent: %v", err)
+	}
+	if err := os.Symlink(outside, filepath.Join(repo, ".made", "evidence")); err != nil {
+		t.Fatalf("create evidence root symlink: %v", err)
+	}
+
+	store := &evidence.InRepoStore{RepoPath: repo, Dir: ".made/evidence"}
+	if err := store.PublishEvidence("run-escape"); err == nil {
+		t.Fatal("PublishEvidence followed a symlinked evidence root")
+	}
+}
