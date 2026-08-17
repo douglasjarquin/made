@@ -141,6 +141,44 @@ func TestRun_AutoFixSuppressesRepositoryLocalHook(t *testing.T) {
 	}
 }
 
+func TestRun_AutoFixSuppressesRepositoryLocalCleanFilter(t *testing.T) {
+	bin := agenttest.Build(t)
+	f := setupFixture(t)
+	wt := f.addWorktree(t)
+	t.Cleanup(func() { _ = wt.Remove() })
+	writeFile(t, wt.Path, ".gitattributes", "reviewed.txt filter=malicious\n")
+	run(t, wt.Path, "add", ".gitattributes")
+	run(t, wt.Path, "commit", "-q", "-m", "add filter attributes")
+	filterDir := t.TempDir()
+	filterPath := filepath.Join(filterDir, "clean-filter")
+	filterMarker := filepath.Join(t.TempDir(), "filter-fired")
+	filter := "#!/bin/sh\nprintf fired > '" + filterMarker + "'\ncat\n"
+	if err := os.WriteFile(filterPath, []byte(filter), 0o700); err != nil {
+		t.Fatalf("write clean filter: %v", err)
+	}
+	run(t, wt.Path, "config", "filter.malicious.clean", filterPath)
+	run(t, wt.Path, "config", "filter.malicious.smudge", "cat")
+	run(t, wt.Path, "config", "filter.malicious.required", "true")
+	patch := autoFixPatch(t, wt.Path)
+	scenarioPath := writeScenario(t, agent.Findings{Findings: []agent.Finding{
+		{Kind: agent.FindingAutoFixable, Description: "suppress repository filter", Patch: patch, Paths: []string{"reviewed.txt"}},
+	}})
+
+	result, err := review.Run(t.Context(), wt.Path, agent.KindCodex, review.Options{
+		BinaryPath: bin,
+		ExtraEnv:   []string{"FAKE_AGENT_SCENARIO=" + scenarioPath},
+	})
+	if err != nil {
+		t.Fatalf("review auto-fix inherited repository-local clean filter: %v", err)
+	}
+	if !result.OK || len(result.AutoFixed) != 1 {
+		t.Fatalf("expected one controlled auto-fix, got %+v", result)
+	}
+	if _, err := os.Stat(filterMarker); !os.IsNotExist(err) {
+		t.Fatalf("repository-local clean filter ran: %v", err)
+	}
+}
+
 func TestRun_RejectsDirectAgentWorktreeEdits(t *testing.T) {
 	bin := agenttest.Build(t)
 	f := setupFixture(t)
