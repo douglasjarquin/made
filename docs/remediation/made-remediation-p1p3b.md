@@ -104,6 +104,10 @@ The final review-boundary follow-up is `c3b002e1faa4fccb20fc4f9f63600a425b5c5e52
 
 The final strict-boundary follow-up is `3fc98f031613e7be77abf0152cb1eb5b3d1baeaf` with subject `fix: isolate rebase and no-param API`.
 
+The review-containment follow-up is `f94306655d32e74c4cdff73c5ebbd349b73ad2c9` with subject `fix: contain review agents at OS boundary`.
+
+The final lint follow-up is `ed9009251e9754b137dc0719352b525aad880e1b` with subject `fix: satisfy containment lint`.
+
 Those follow-ups harden Made home ownership and permissions, private evidence permissions, version-only configuration rejection, disabled-stage representation, environment-injected real Consigliere compatibility testing, final review/API boundaries, bounded configuration and socket input, torn-tail WAL recovery, replacement-safe config reads, exact-cap durable replay, stalled-input resource bounds, review-agent isolation, evidence publication, subprocess timeouts, and public-field redaction.
 
 The implementation acquires the singleton before socket preparation, uses `lstat`, removes only a stale owner-owned Unix socket, rejects regular files, symlinks, and directories, preserves duplicate owners, and authorizes shutdown through the owner-only socket.
@@ -127,6 +131,8 @@ Cancellation requires an exact run ID, is idempotent for an already canceled run
 Restored queued, running, and awaiting-review snapshots are reconciled to durable failed state after a daemon restart because no worker can safely resume execution without a durable work specification.
 
 Review agents run against a detached clone made without local hardlinks, with the exact source HEAD verified before launch, the clone and Git metadata made non-writable, escaping symlinks rejected, and delivery-path Git environment variables removed.
+
+Review processes are additionally contained with macOS `sandbox-exec` or Linux `bubblewrap`, denying reads and writes to the source worktree and common Git directory while binding the detached review tree read-only.
 
 Review setup removes all inherited `GIT_*` injection variables, disables global and system Git configuration for clone and checkout, and tests template hooks, injected config, exact HEAD, cleanup, and escaping symlinks.
 
@@ -180,11 +186,13 @@ Pull-request GitHub authentication and API failures now remain infrastructure er
 
 The Made CI workflow validates the pinned Go version with race, vet, and pinned lint jobs.
 
+The CI job installs the pinned-environment reviewer containment prerequisite `bubblewrap` before running the Made tests.
+
 The CI portability fix uses Go's platform-independent Unix-socket mode inspection instead of Darwin-only `stat -f` flags, and clean rebase execution supplies deterministic committer identity, disabled signing, and disabled hooks at the Git boundary.
 
 ## Validation evidence
 
-The final executable source SHA covered by this validation section is `3fc98f031613e7be77abf0152cb1eb5b3d1baeaf`.
+The final executable source SHA covered by this validation section is `ed9009251e9754b137dc0719352b525aad880e1b`.
 
 The config descriptor-boundary commit adds replacement-safe reads from one opened descriptor and a regression proving a replaced path cannot bypass the byte cap.
 
@@ -232,6 +240,8 @@ The full validation command was rerun at the final executable SHA `c3b002e1faa4f
 
 The full validation command was rerun at the final executable SHA `3fc98f031613e7be77abf0152cb1eb5b3d1baeaf`, and `/tmp/made-remediation-p1p3b-3fc98f0-validation.log` ends with `validation-3fc98f0=PASS` and the pinned lint result `0 issues.`.
 
+The full validation command was rerun at the final executable SHA `ed9009251e9754b137dc0719352b525aad880e1b`, and `/tmp/made-remediation-p1p3b-ed90092-validation.log` ends with `validation-ed90092=PASS` and the pinned lint result `0 issues.`.
+
 The fresh real-process manual QA transcript for the final executable SHA is `/tmp/made-remediation-p1p3b-manual-e9aa0dd.log`, and its final marker was `manual-qa-e9aa0dd=PASS` at that full SHA.
 
 The exact current lifecycle and restart contract transcript is `/tmp/made-remediation-p1p3b-manual-contract-e9aa0dd.log`, and its final marker was `manual-contract-e9aa0dd=PASS`.
@@ -266,9 +276,15 @@ The final executable exact-tip transcript is `/tmp/made-remediation-p1p3b-manual
 
 The final executable exact-tip focused API, evidence, agent, rebase, and review transcript is `/tmp/made-remediation-p1p3b-manual-review-3fc98f0.log`, and its final marker is `manual-review-3fc98f0=PASS`.
 
+The final executable real-process transcript is `/tmp/made-remediation-p1p3b-manual-ed90092.log`, and its final marker is `manual-qa-ed90092=PASS`.
+
+The final executable focused API, evidence, containment, agent, rebase, and review transcript is `/tmp/made-remediation-p1p3b-manual-review-ed90092.log`, and its final marker is `manual-review-ed90092=PASS`.
+
 The exact-tip API and evidence RED log is `/tmp/made-remediation-p1p3b-strict-boundary-red.log`, and the green rerun is covered by `/tmp/made-remediation-p1p3b-c3b002e-validation.log` plus the evidence-focused `/tmp/made-remediation-p1p3b-manual-review-c3b002e.log`.
 
 The no-parameter API and ambient-rebase RED log is `/tmp/made-remediation-p1p3b-strict-no-params-red.log` plus `/tmp/made-remediation-p1p3b-rebase-boundary-red.log`, and the focused green rerun is the exact-tip rebase/API test pass immediately before commit `3fc98f031613e7be77abf0152cb1eb5b3d1baeaf`.
+
+The reviewer-containment RED log is `/tmp/made-remediation-p1p3b-review-containment-red.log`, where the fake reviewer escaped through the source worktree before the OS boundary was added; `TestSpawn_ContainsReviewerFromSourceWorktree` passes at the final executable SHA.
 
 That exact-SHA scenario used a fresh final binary and task-local Made homes to observe daemon cancellation through a real process and doctor through the real Consigliere script.
 
@@ -294,7 +310,7 @@ The first full validation exposed a WAL replay ordering race where a stale `succ
 
 Serializing snapshot capture with WAL append removed that race, and `go test -shuffle=on -count=10 ./internal/daemon -run '^TestPersistentRunStateIncludesSubmissionAndDecisionData$'` passed afterward.
 
-The final changed-file authority is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..3fc98f031613e7be77abf0152cb1eb5b3d1baeaf`, which reports the Made-only paths from the custody base.
+The final changed-file authority is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..ed9009251e9754b137dc0719352b525aad880e1b`, which reports the Made-only paths from the custody base.
 
 At directory level, the base-to-final diff is limited to `.github/workflows/ci.yml`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `cmd/made`, `docs/remediation`, `internal/agent`, `internal/api`, `internal/config`, `internal/daemon`, `internal/evidence`, `internal/exec`, `internal/github`, `internal/orchestrator`, `internal/pipeline`, `internal/skill`, and `skills/made/SKILL.md`.
 
