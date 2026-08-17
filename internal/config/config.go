@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -198,22 +199,12 @@ func loadConfigFile(path string) (cfg Config, exists bool, err error) {
 		return Config{}, false, nil
 	}
 
-	info, statErr := os.Stat(path)
-	if statErr != nil {
-		if os.IsNotExist(statErr) {
-			return Config{}, false, nil
-		}
-		return Config{}, false, statErr
-	}
-	if info.Size() > maxConfigBytes {
-		return Config{}, true, fmt.Errorf("config: %s exceeds %d bytes", path, maxConfigBytes)
-	}
-	data, err := os.ReadFile(path)
+	data, exists, err := readConfigBytes(path, nil)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return Config{}, false, nil
-		}
-		return Config{}, false, err
+		return Config{}, exists, err
+	}
+	if !exists {
+		return Config{}, false, nil
 	}
 
 	if filepath.Base(path) == ".made.yml" || strings.HasSuffix(filepath.Base(path), ".made.yml") {
@@ -254,6 +245,39 @@ func loadConfigFile(path string) (cfg Config, exists bool, err error) {
 	}
 
 	return cfg, true, nil
+}
+
+func readConfigBytes(path string, beforeRead func()) ([]byte, bool, error) {
+	file, err := os.Open(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	defer func() { _ = file.Close() }()
+
+	info, err := file.Stat()
+	if err != nil {
+		return nil, true, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, true, fmt.Errorf("config: %s is not a regular file", path)
+	}
+	if info.Size() > maxConfigBytes {
+		return nil, true, fmt.Errorf("config: %s exceeds %d bytes", path, maxConfigBytes)
+	}
+	if beforeRead != nil {
+		beforeRead()
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxConfigBytes+1))
+	if err != nil {
+		return nil, true, err
+	}
+	if len(data) > maxConfigBytes {
+		return nil, true, fmt.Errorf("config: %s exceeds %d bytes", path, maxConfigBytes)
+	}
+	return data, true, nil
 }
 
 func (c Config) hasConfiguredValue() bool {

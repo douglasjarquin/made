@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +19,29 @@ func TestLoadConfigRejectsOversizedMadeYML(t *testing.T) {
 	path := writeConfigFile(t, t.TempDir(), ".made.yml", "version: 1\nagent: "+strings.Repeat("a", 1<<20)+"\n")
 	if _, _, err := loadConfigFile(path); err == nil {
 		t.Fatal("loadConfigFile accepted an oversized .made.yml")
+	}
+}
+
+func TestConfigReadUsesOpenedDescriptorWhenPathIsReplaced(t *testing.T) {
+	dir := t.TempDir()
+	path := writeConfigFile(t, dir, ".made.yml", "version: 1\nagent: original\n")
+	replacement := path + ".replacement"
+	original := "version: 1\nagent: original\n"
+	oversized := "version: 1\nagent: " + strings.Repeat("x", 1<<20) + "\n"
+
+	data, exists, err := readConfigBytes(path, func() {
+		if err := os.WriteFile(replacement, []byte(oversized), 0o600); err != nil {
+			t.Fatalf("write replacement config: %v", err)
+		}
+		if err := os.Rename(replacement, path); err != nil {
+			t.Fatalf("replace config path: %v", err)
+		}
+	})
+	if err != nil {
+		t.Fatalf("readConfigBytes: %v", err)
+	}
+	if !exists || string(data) != original {
+		t.Fatalf("readConfigBytes read replaced path: exists=%v data prefix=%q", exists, string(data)[:min(len(data), 32)])
 	}
 }
 
