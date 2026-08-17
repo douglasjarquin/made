@@ -110,6 +110,8 @@ The final lint follow-up is `ed9009251e9754b137dc0719352b525aad880e1b` with subj
 
 The CI containment portability follow-up is `7e61074e03da212da04c517ccbb23a5e0899d05f` with subject `fix: make reviewer containment portable in CI`.
 
+The read-only reviewer-mask follow-up is `0e8f4c41b1104c20bc4e40604ded49c37d65e9fb` with subject `fix: make reviewer masks read-only`.
+
 Those follow-ups harden Made home ownership and permissions, private evidence permissions, version-only configuration rejection, disabled-stage representation, environment-injected real Consigliere compatibility testing, final review/API boundaries, bounded configuration and socket input, torn-tail WAL recovery, replacement-safe config reads, exact-cap durable replay, stalled-input resource bounds, review-agent isolation, evidence publication, subprocess timeouts, and public-field redaction.
 
 The implementation acquires the singleton before socket preparation, uses `lstat`, removes only a stale owner-owned Unix socket, rejects regular files, symlinks, and directories, preserves duplicate owners, and authorizes shutdown through the owner-only socket.
@@ -194,7 +196,7 @@ The CI portability fix uses Go's platform-independent Unix-socket mode inspectio
 
 ## Validation evidence
 
-The final executable source SHA covered by this validation section is `7e61074e03da212da04c517ccbb23a5e0899d05f`.
+The final executable source SHA covered by this validation section is `0e8f4c41b1104c20bc4e40604ded49c37d65e9fb`.
 
 The config descriptor-boundary commit adds replacement-safe reads from one opened descriptor and a regression proving a replaced path cannot bypass the byte cap.
 
@@ -244,7 +246,9 @@ The full validation command was rerun at the final executable SHA `3fc98f031613e
 
 The full validation command was rerun at the final executable SHA `ed9009251e9754b137dc0719352b525aad880e1b`, and `/tmp/made-remediation-p1p3b-ed90092-validation.log` ends with `validation-ed90092=PASS` and the pinned lint result `0 issues.`.
 
-At executable source SHA `7e61074e03da212da04c517ccbb23a5e0899d05f`, the deterministic full suite, race suite, build, vet, and pinned lint all passed; the focused containment, API, evidence, rebase, and review suites passed; and `TestHermeticCompatibility_RealMadeBinaryThroughConsigliereScript` passed with the real Consigliere script and strict external fakes.
+At executable source SHA `0e8f4c41b1104c20bc4e40604ded49c37d65e9fb`, the deterministic full suite, race suite, build, vet, and pinned lint all passed; the focused containment, API, evidence, rebase, and review suites passed; and `TestHermeticCompatibility_RealMadeBinaryThroughConsigliereScript` passed with the real Consigliere script and strict external fakes.
+
+The final Linux containment correction masks protected paths with non-writable `0555` tmpfs mounts, preventing a reviewer from recreating files at a masked source path.
 
 The fresh real-process manual QA transcript for the final executable SHA is `/tmp/made-remediation-p1p3b-manual-e9aa0dd.log`, and its final marker was `manual-qa-e9aa0dd=PASS` at that full SHA.
 
@@ -314,7 +318,7 @@ The first full validation exposed a WAL replay ordering race where a stale `succ
 
 Serializing snapshot capture with WAL append removed that race, and `go test -shuffle=on -count=10 ./internal/daemon -run '^TestPersistentRunStateIncludesSubmissionAndDecisionData$'` passed afterward.
 
-The final changed-file authority through the implementation SHA is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..7e61074e03da212da04c517ccbb23a5e0899d05f`, which reports the Made-only paths from the custody base.
+The final changed-file authority through the implementation SHA is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..0e8f4c41b1104c20bc4e40604ded49c37d65e9fb`, which reports the Made-only paths from the custody base.
 
 At directory level, the base-to-final diff is limited to `.github/workflows/ci.yml`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `cmd/made`, `docs/remediation`, `internal/agent`, `internal/api`, `internal/config`, `internal/daemon`, `internal/evidence`, `internal/exec`, `internal/github`, `internal/orchestrator`, `internal/pipeline`, `internal/skill`, and `skills/made/SKILL.md`.
 
