@@ -114,6 +114,8 @@ The read-only reviewer-mask follow-up is `0e8f4c41b1104c20bc4e40604ded49c37d65e9
 
 The final containment and submission-identity follow-up is `f2bac112fd2b91eb3bd1396878da21273961cbe0` with subject `fix: harden containment and submit identity`.
 
+The lint-action compatibility follow-up is `463e5805d8ba4eac8d6e72e5315cfc43f2c7782b` with subject `fix: pin golangci action for lint v2`.
+
 Those follow-ups harden Made home ownership and permissions, private evidence permissions, version-only configuration rejection, disabled-stage representation, environment-injected real Consigliere compatibility testing, final review/API boundaries, bounded configuration and socket input, torn-tail WAL recovery, replacement-safe config reads, exact-cap durable replay, stalled-input resource bounds, review-agent isolation, evidence publication, subprocess timeouts, and public-field redaction.
 
 The implementation acquires the singleton before socket preparation, uses `lstat`, removes only a stale owner-owned Unix socket, rejects regular files, symlinks, and directories, preserves duplicate owners, and authorizes shutdown through the owner-only socket.
@@ -192,7 +194,7 @@ Pull-request GitHub authentication and API failures now remain infrastructure er
 
 The Made CI workflow validates the pinned Go version with race, vet, and pinned lint jobs.
 
-The CI job installs the pinned-environment reviewer containment prerequisite `bubblewrap` and enables its documented setuid execution mode before running the Made tests.
+The CI job installs the pinned-environment reviewer containment prerequisite `bubblewrap` and enables its documented setuid execution mode before running the Made tests, while the pinned lint action uses v7.0.1 for golangci-lint v2.
 
 The CI portability fix uses Go's platform-independent Unix-socket mode inspection instead of Darwin-only `stat -f` flags, and clean rebase execution supplies deterministic committer identity, disabled signing, and disabled hooks at the Git boundary.
 
@@ -249,6 +251,8 @@ The full validation command was rerun at the final executable SHA `3fc98f031613e
 The full validation command was rerun at the final executable SHA `ed9009251e9754b137dc0719352b525aad880e1b`, and `/tmp/made-remediation-p1p3b-ed90092-validation.log` ends with `validation-ed90092=PASS` and the pinned lint result `0 issues.`.
 
 At executable source SHA `f2bac112fd2b91eb3bd1396878da21273961cbe0`, the deterministic full suite, race suite, build, vet, and pinned lint all passed; the focused containment, API, evidence, rebase, and review suites passed; `TestRunSubmit_ExecutesGatePipeline` passed with a stable queued identity; and `TestHermeticCompatibility_RealMadeBinaryThroughConsigliereScript` passed with the real Consigliere script and strict external fakes.
+
+The final CI configuration pins `golangci/golangci-lint-action` v7.0.1 at `9fae48acfc02a90574d7c304a1758ef9895495fa` so the workflow accepts the required golangci-lint v2.11.2.
 
 The final Linux containment correction uses read-only binds from private empty directories inside the detached review clone, preventing a reviewer from recreating files at a masked source path or reaching a writable mask through `/tmp`.
 
@@ -320,7 +324,7 @@ The first full validation exposed a WAL replay ordering race where a stale `succ
 
 Serializing snapshot capture with WAL append removed that race, and `go test -shuffle=on -count=10 ./internal/daemon -run '^TestPersistentRunStateIncludesSubmissionAndDecisionData$'` passed afterward.
 
-The final changed-file authority through the implementation SHA is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..f2bac112fd2b91eb3bd1396878da21273961cbe0`, which reports the Made-only paths from the custody base.
+The final changed-file authority through the delivery implementation and CI SHA is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..463e5805d8ba4eac8d6e72e5315cfc43f2c7782b`, which reports the Made-only paths from the custody base.
 
 At directory level, the base-to-final diff is limited to `.github/workflows/ci.yml`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `cmd/made`, `docs/remediation`, `internal/agent`, `internal/api`, `internal/config`, `internal/daemon`, `internal/evidence`, `internal/exec`, `internal/github`, `internal/orchestrator`, `internal/pipeline`, `internal/skill`, and `skills/made/SKILL.md`.
 
