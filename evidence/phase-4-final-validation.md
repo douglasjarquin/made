@@ -2,9 +2,9 @@
 
 The earlier ledger receipt was recorded at
 `afea024e1da9f59be9181c18f18b11793a782f36`.
-After the final managed-gate, cancellation, and durable-publication
-corrections, the source and test validation candidate is
-`60420902ea5b1ed434f57c86ebb0e85be7be5281`.
+After the final managed-gate, cancellation, durable-publication, and review
+environment corrections, the source and test validation candidate is
+`910fc54a98e7da644bc5e170281fd935e429692f`.
 The exact base remains
 `3e19ed9d598a68149da5a73949533e8095ca4403`.
 
@@ -27,7 +27,7 @@ env SSH_AUTH_SOCK= GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null go te
 ```
 
 Result: exit code 0 at source and test validation candidate
-`60420902ea5b1ed434f57c86ebb0e85be7be5281`.
+`910fc54a98e7da644bc5e170281fd935e429692f`.
 Every package completed with `ok`, including `cmd/made`, `internal/agent`,
 `internal/api`, `internal/config`, `internal/daemon`, `internal/evidence`,
 `internal/github`, `internal/orchestrator`, and every pipeline package.
@@ -62,7 +62,7 @@ Results:
 
 ```text
 git diff --check: exit code 0
-HEAD before this documentation refresh: 60420902ea5b1ed434f57c86ebb0e85be7be5281
+HEAD before this documentation refresh: 910fc54a98e7da644bc5e170281fd935e429692f
 base: 3e19ed9d598a68149da5a73949533e8095ca4403
 ```
 

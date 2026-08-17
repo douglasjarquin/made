@@ -219,3 +219,41 @@ made: status is obsolete; use made run status <exact-run-id>
 The disposable daemon was stopped and its home was moved to recoverable
 temporary trash at
 `/tmp/.made-remediation-qa-604-trash.qkeAfA/qa-home`.
+
+## Final source candidate
+
+Source and test commit:
+`910fc54a98e7da644bc5e170281fd935e429692f`.
+
+The current `./cmd/made` binary was built into a fresh disposable home at
+`/tmp/made-remediation-qa-910.WcgMFi`.
+
+The real binary returned a spooled `run-1` with exact repository, branch, ref,
+old SHA, input SHA, submission ID, gate path, `state=queued`,
+`execution_finished=false`, and all nine ordered pending stages.
+
+`made run cancel run-1 --json` returned `{"ok":true}`.
+The exact status immediately after cancellation returned
+`state=canceled`, `execution_finished=true`, the same identity fields, and
+`error=context canceled`.
+
+After the disposable daemon stopped and restarted, exact `run-1` status
+restored the same canceled terminal state and identity fields.
+
+`doctor --json` returned `healthy=true` with
+`daemon=reachable`, `gate=not_initialized`, `github=authenticated`, and
+`herdr=unavailable`.
+
+The invalid public-boundary checks returned exit code 2:
+
+```text
+made run status run-1 unexpected
+usage: made run status <exact-run-id> [--json]
+
+made status --json
+made: status is obsolete; use made run status <exact-run-id>
+```
+
+The disposable daemon was stopped and its home was moved to recoverable
+temporary trash at
+`/tmp/.made-remediation-qa-910-trash.KmgO42/qa-home`.

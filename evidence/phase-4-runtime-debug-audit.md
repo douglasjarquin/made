@@ -1,7 +1,7 @@
 # Phase 4 runtime and security audit
 
 This audit covers the Made source candidate
-`60420902ea5b1ed434f57c86ebb0e85be7be5281`.
+`910fc54a98e7da644bc5e170281fd935e429692f`.
 
 The exact merge-base is
 `3e19ed9d598a68149da5a73949533e8095ca4403`.
@@ -162,10 +162,10 @@ Result: `No diagnostics found` for every checked file.
 The review-work lanes and final ledger update remain separate final-delivery
 receipts and are bound to the same exact source SHA.
 
-## Follow-up RED-to-GREEN results at the final source candidate
+## Follow-up RED-to-GREEN results at the 604 source candidate
 
-The three follow-up RED tests were fixed in Made and rerun at the exact source
-candidate above.
+The three follow-up RED tests were fixed in Made and rerun at source candidate
+`60420902ea5b1ed434f57c86ebb0e85be7be5281`.
 
 Command:
 
@@ -252,27 +252,44 @@ The real binary scenario in `evidence/phase-4-manual-qa.md` additionally
 proved public spooled cancellation and durable terminal-state recovery after
 graceful daemon restart.
 
-
-## Final boundary audit at the delivery source candidate
-
-The following exact-candidate focused checks all exited `0`:
+The final review-agent environment boundary also exited `0`:
 
 ```text
-env SSH_AUTH_SOCK= GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null go test -race ./internal/daemon -run "Test(RunManager_FindSubmissionDoesNotCrossRepositoryBoundary|ReviewDecisions_RejectsDecisionWithoutPendingFinding|RunManager_FailsRunWhenFinalPersistenceFails|OpenRunManager_PreservesStateAfterRecoveryFailure)" -count=5
-ok github.com/douglasjarquin/made/internal/daemon 13.192s
-
-env SSH_AUTH_SOCK= GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null go test -race ./internal/github -run TestPRChecks_RejectsEmptySuccessfulPayload -count=5
-ok github.com/douglasjarquin/made/internal/github 1.452s
-
-env SSH_AUTH_SOCK= GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null go test -race ./internal/agent -run TestSpawn_DoesNotPassSensitiveEnvironmentToCodex -count=5
-ok github.com/douglasjarquin/made/internal/agent 1.925s
-
-env SSH_AUTH_SOCK= GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null go test -race ./cmd/made -run 'TestGateNotifyPushRPC_(NormalFeatureBranchPushCreatesRun|RejectsNewSHAThatIsNotTheReceivedRef|RejectsExistingUnrelatedSHA|SupersededPushValidatesNewestSHA)' -count=5
-ok github.com/douglasjarquin/made/cmd/made 10.699s
-
-env SSH_AUTH_SOCK= GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null go test -race ./internal/daemon -run "Test(RunManager_FailsRunWhenFinalPersistenceFails|OpenRunManager_PreservesStateAfterRecoveryFailure)" -count=5
-ok github.com/douglasjarquin/made/internal/daemon 13.192s
+env SSH_AUTH_SOCK= GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null go test -race ./internal/agent -run 'TestSpawn_(CodexUsesStructuredExecContract|DoesNotPassSensitiveEnvironmentToCodex|RejectsStructuredOutputWithoutFindingsField|ParsesFindingsFromFakeAgent|NonZeroExitReturnsError|LogsInvocation)' -count=5
+ok github.com/douglasjarquin/made/internal/agent 1.971s
 ```
 
-The strict external rerun exited `0` for `internal/agent`,
-`internal/github`, `internal/pipeline/ci`, and `internal/pipeline/review`.
+The allowlist source fix is committed at
+`910fc54a98e7da644bc5e170281fd935e429692f`.
+
+
+## Final boundary audit at source candidate 910fc54
+
+The following focused checks all exited `0` at the final source candidate
+`910fc54a98e7da644bc5e170281fd935e429692f`:
+
+```text
+env SSH_AUTH_SOCK= GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null go test -race ./internal/daemon -run 'Test(RunManager_CancelQueuedRunNeverStartsWork|RunManager_CancelSpooledQueuedRunTransitionsTerminal|RunManager_RestoresDurableSnapshotAfterRestart|RunManager_IgnoresTornFinalWALRecord|RunManager_WALRetentionIsBounded|ReviewDecisions_RestoreAndRejectConflict|RunManager_FindSubmissionDoesNotCrossRepositoryBoundary|ReviewDecisions_RejectsDecisionWithoutPendingFinding|RunManager_CloseDoesNotDiscardConcurrentDurableMutation|RunManager_FailsRunWhenFinalPersistenceFails|OpenRunManager_PreservesStateAfterRecoveryFailure)' -count=5
+ok github.com/douglasjarquin/made/internal/daemon 13.774s
+
+env SSH_AUTH_SOCK= GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null go test -race ./internal/evidence -run TestOrphanBranchStore_ConcurrentWritesRetainBothRuns -count=10
+ok github.com/douglasjarquin/made/internal/evidence 2.472s
+
+env SSH_AUTH_SOCK= GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null go test ./internal/agent ./internal/github ./internal/pipeline/ci ./internal/pipeline/review -run 'Test(Spawn_|StrictFakeGH|PRChecks|Run_)' -count=3
+ok github.com/douglasjarquin/made/internal/agent 1.760s
+ok github.com/douglasjarquin/made/internal/github 2.326s
+ok github.com/douglasjarquin/made/internal/pipeline/ci 9.152s
+ok github.com/douglasjarquin/made/internal/pipeline/review 4.995s
+
+env SSH_AUTH_SOCK= GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null go test -race ./cmd/made -run 'TestGateNotifyPushRPC_(NormalFeatureBranchPushCreatesRun|RejectsNewSHAThatIsNotTheReceivedRef|RejectsExistingUnrelatedSHA|RejectsStaleAncestorSHA|SupersededPushValidatesNewestSHA)' -count=5
+ok github.com/douglasjarquin/made/cmd/made 12.831s
+
+env SSH_AUTH_SOCK= GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null go test -race ./internal/agent -run 'TestSpawn_(CodexUsesStructuredExecContract|DoesNotPassSensitiveEnvironmentToCodex|RejectsStructuredOutputWithoutFindingsField|ParsesFindingsFromFakeAgent|NonZeroExitReturnsError|LogsInvocation)' -count=5
+ok github.com/douglasjarquin/made/internal/agent 1.971s
+
+env SSH_AUTH_SOCK= GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null go test -race ./internal/github -run TestPRChecks_RejectsEmptySuccessfulPayload -count=5
+ok github.com/douglasjarquin/made/internal/github 1.862s
+```
+
+The reviewer containment source check also exited `0` with
+`no broad reviewer staging invocation`.

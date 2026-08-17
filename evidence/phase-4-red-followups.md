@@ -330,6 +330,42 @@ env SSH_AUTH_SOCK= GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null go te
 Exit code: `0` at source commit
 `60420902ea5b1ed434f57c86ebb0e85be7be5281`.
 
+## Review-agent environment allowlist
+
+Trigger: the daemon environment contains a credential-bearing variable whose
+name does not contain the old denylist fragments, such as `DATABASE_URL`,
+`COOKIE`, `JWT_KEY`, or `KUBECONFIG`.
+
+Masking condition: the strict fake only rejects the earlier
+`MADE_TEST_SECRET` marker, so a substring denylist appears complete while
+unrecognized secret names still cross the Codex process boundary.
+
+Visible symptom: a strict external fake observes a sensitive value inherited
+by the read-only Codex review process.
+
+The RED command ran at the committed pre-allowlist source
+`51063e8b724160c04f392cc5413d0d5b53e3082e`:
+
+```text
+env SSH_AUTH_SOCK= GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null go test ./internal/agent -run TestSpawn_DoesNotPassSensitiveEnvironmentToCodex -count=1
+```
+
+Exit code: `1`.
+
+Relevant output: `fakeagent: sensitive environment DATABASE_URL was exposed`.
+
+The GREEN fix replaces the denylist with an explicit minimal allowlist for
+process basics, locale variables, and the four named strict-fake controls.
+
+```text
+env SSH_AUTH_SOCK= GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null go test ./internal/agent -run 'TestSpawn_(CodexUsesStructuredExecContract|DoesNotPassSensitiveEnvironmentToCodex|RejectsStructuredOutputWithoutFindingsField|ParsesFindingsFromFakeAgent|NonZeroExitReturnsError|LogsInvocation)' -count=1
+```
+
+Exit code: `0`.
+
+The fix is committed in source candidate
+`910fc54a98e7da644bc5e170281fd935e429692f`.
+
 ## Managed gate path containment
 
 Trigger: a socket caller submits a valid bare Git repository outside the
