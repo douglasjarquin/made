@@ -58,7 +58,9 @@ The final executable boundary-fix commit is `d45f5c518664db5f73f42d1d4db59521633
 
 The final boundary-completion commit is `da8f5653bc3e13877480728bc3dd2daf296e7dd2` with subject `fix: harden final remediation boundaries`.
 
-Those follow-ups harden Made home ownership and permissions, private evidence permissions, version-only configuration rejection, disabled-stage representation, environment-injected real Consigliere compatibility testing, and final review/API boundaries.
+The final input-boundary commit is `8d196c4af539c6cae53fb308c029fb7c700b992f` with subject `fix: bound durable and socket inputs`.
+
+Those follow-ups harden Made home ownership and permissions, private evidence permissions, version-only configuration rejection, disabled-stage representation, environment-injected real Consigliere compatibility testing, final review/API boundaries, bounded configuration and socket input, and torn-tail WAL recovery.
 
 The implementation acquires the singleton before socket preparation, uses `lstat`, removes only a stale owner-owned Unix socket, rejects regular files, symlinks, and directories, preserves duplicate owners, and authorizes shutdown through the owner-only socket.
 
@@ -120,19 +122,25 @@ The Made CI workflow validates the pinned Go version with race, vet, and pinned 
 
 ## Validation evidence
 
-The final executable source SHA covered by this validation section is `da8f5653bc3e13877480728bc3dd2daf296e7dd2`.
+The final executable source SHA covered by this validation section is `8d196c4af539c6cae53fb308c029fb7c700b992f`.
 
-The evidence-only report commits before that SHA did not change executable source, tests, configuration, or CI.
+The report update after that SHA changes documentation only.
 
-The final validation set was `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false GOTOOLCHAIN=local MADE_CONSIGLIERE_ROOT=/Users/douglasjarquin/github/consigliere go build ./...`, `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false GOTOOLCHAIN=local MADE_CONSIGLIERE_ROOT=/Users/douglasjarquin/github/consigliere go test -count=1 ./...`, `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false GOTOOLCHAIN=local MADE_CONSIGLIERE_ROOT=/Users/douglasjarquin/github/consigliere go test -race -shuffle=on -count=1 ./...`, `GOTOOLCHAIN=local MADE_CONSIGLIERE_ROOT=/Users/douglasjarquin/github/consigliere go vet ./...`, and `GOTOOLCHAIN=local MADE_CONSIGLIERE_ROOT=/Users/douglasjarquin/github/consigliere golangci-lint run --timeout=5m --max-issues-per-linter=0 --max-same-issues=0 ./...`.
+The validation shell exported `GIT_CONFIG_GLOBAL=/dev/null`, `GIT_CONFIG_SYSTEM=/dev/null`, `GOTOOLCHAIN=local`, and deterministic Git author and committer identities for the fixture rebase commits.
+
+It ran `gofmt -l internal cmd`, `go build ./...`, `go test -count=1 -timeout=10m ./...`, `go test -race -shuffle=on -count=1 -timeout=10m ./...`, `go vet ./...`, and `golangci-lint run --timeout=5m --max-issues-per-linter=0 --max-same-issues=0 ./...`.
 
 All final validation commands exited `0`, and golangci-lint reported `0 issues`.
 
-The full validation transcript is `/tmp/made-remediation-p1p3b-full-final-precommit.log`.
+The full validation transcript is `/tmp/made-remediation-p1p3b-8d196c4-validation.log`.
 
-The fresh real-process manual QA transcript for the final executable SHA is `/tmp/made-remediation-p1p3b-manual-da8f5653-final.log`, and its final marker was `manual-qa-da8f5653=PASS` at that full SHA.
+The fresh real-process manual QA transcript for the final executable SHA is `/tmp/made-remediation-p1p3b-manual-8d196c4.log`, and its final marker was `manual-qa-8d196c4=PASS` at that full SHA.
 
-That scenario used a fresh final binary and task-local Made homes to observe capabilities, doctor through the real Consigliere script, real gate initialization and hook execution, native `run.submit` pipeline execution, durable offline gate spooling and replay, exact submission and SHA preservation, exact status and active-list queries, versioned review decision output, WAL restart, duplicate singleton start, and predecessor command rejection.
+That exact-SHA scenario used a fresh final binary and task-local Made homes to observe daemon cancellation through a real process, doctor through the real Consigliere script, oversized socket rejection, duplicate singleton ownership, raw protocol-version rejection, and preserved socket ownership.
+
+The preceding full-pipeline manual scenario at `a724f6c857e903ce52d62d803c540b27a221d6f3` observed real gate initialization and hook execution, native `run.submit` pipeline execution, durable offline gate spooling and replay, exact submission and SHA preservation, exact status and active-list queries, versioned review decision output, WAL restart, duplicate singleton start, and predecessor command rejection.
+
+The `8d196c4` changes are limited to input bounds and durable tail recovery, and their exact-SHA focused scenario covers those changed runtime surfaces while preserving the full-pipeline evidence from the unchanged executable ancestor.
 
 The compatibility subscenario used the real `bin/cs-made-lib.sh` script, the real Made binary, a strict fake `gh auth status` boundary, a task-local unavailable Herdr socket, and accepted the expected nonzero health exit only after asserting valid versioned JSON and authenticated GitHub state.
 
@@ -144,11 +152,11 @@ The first full validation exposed a WAL replay ordering race where a stale `succ
 
 Serializing snapshot capture with WAL append removed that race, and `go test -shuffle=on -count=10 ./internal/daemon -run '^TestPersistentRunStateIncludesSubmissionAndDecisionData$'` passed afterward.
 
-The final changed-file authority is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..da8f5653bc3e13877480728bc3dd2daf296e7dd2`, which reports the Made-only paths from the custody base.
+The final changed-file authority is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..8d196c4af539c6cae53fb308c029fb7c700b992f`, which reports the Made-only paths from the custody base.
 
 At directory level, the base-to-final diff is limited to `.github/workflows/ci.yml`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `cmd/made`, `docs/remediation`, `internal/agent`, `internal/api`, `internal/config`, `internal/daemon`, `internal/evidence`, `internal/exec`, `internal/github`, `internal/orchestrator`, `internal/pipeline`, `internal/skill`, and `skills/made/SKILL.md`.
 
-The final boundary-fix commit-only diff is `git diff --name-status af5010d7bd910bfa829e030c0198cae909188e69..da8f5653bc3e13877480728bc3dd2daf296e7dd2` and contains only Made implementation and test files.
+The final boundary-fix commit-only diff is `git diff --name-status da8f5653bc3e13877480728bc3dd2daf296e7dd2..8d196c4af539c6cae53fb308c029fb7c700b992f` and contains only Made implementation and test files.
 
 The separate Made project plan `plans/made-rewrite.md` retains its broader F3 checkbox because that criterion requires running the full Consigliere `--mode made` soldier flow and changing shared Herdr lifecycle state.
 
