@@ -61,7 +61,7 @@ func Spawn(ctx context.Context, kind Kind, params SpawnParams) (Findings, error)
 			task,
 		},
 		Dir:     params.WorktreePath,
-		Env:     append(os.Environ(), params.ExtraEnv...),
+		Env:     reviewEnvironment(params.ExtraEnv),
 		Timeout: params.Timeout,
 	})
 	if err != nil {
@@ -80,6 +80,29 @@ func Spawn(ctx context.Context, kind Kind, params SpawnParams) (Findings, error)
 		return Findings{}, fmt.Errorf("agent: parse structured findings from %s: %w", kind, err)
 	}
 	return findings, nil
+}
+
+func reviewEnvironment(extra []string) []string {
+	entries := append(os.Environ(), extra...)
+	env := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		key, _, ok := strings.Cut(entry, "=")
+		if !ok || sensitiveEnvironmentKey(key) {
+			continue
+		}
+		env = append(env, entry)
+	}
+	return env
+}
+
+func sensitiveEnvironmentKey(key string) bool {
+	key = strings.ToUpper(key)
+	for _, fragment := range []string{"TOKEN", "SECRET", "PASSWORD", "PRIVATE", "API_KEY", "AUTH", "CREDENTIAL", "SSH_", "AWS_", "AZURE_", "GITHUB", "GH_"} {
+		if strings.Contains(key, fragment) {
+			return true
+		}
+	}
+	return false
 }
 
 func writeCodexSchema(path string) error {

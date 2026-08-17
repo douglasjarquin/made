@@ -397,7 +397,8 @@ func (rm *RunManager) FindSubmission(submission RunSubmission) (RunSnapshot, boo
 	rm.mu.Unlock()
 	for _, r := range runs {
 		snapshot := r.snapshot()
-		if submission.SubmissionID != "" && snapshot.SubmissionID == submission.SubmissionID {
+		if submission.SubmissionID != "" && snapshot.SubmissionID == submission.SubmissionID &&
+			snapshot.Repo == submission.Repo && snapshot.Branch == submission.Branch {
 			return snapshot, true
 		}
 		if submission.InputSHA != "" && submission.Repo != "" && snapshot.Repo == submission.Repo &&

@@ -43,6 +43,27 @@ func TestSpawn_CodexUsesStructuredExecContract(t *testing.T) {
 	}
 }
 
+func TestSpawn_DoesNotPassSensitiveEnvironmentToCodex(t *testing.T) {
+	bin := agenttest.Build(t)
+	worktree := t.TempDir()
+	scenarioPath := filepath.Join(t.TempDir(), "scenario.json")
+	if err := os.WriteFile(scenarioPath, []byte(`{"findings":[]}`), 0o644); err != nil {
+		t.Fatalf("write scenario: %v", err)
+	}
+
+	if _, err := agent.Spawn(context.Background(), agent.KindCodex, agent.SpawnParams{
+		WorktreePath: worktree,
+		BinaryPath:   bin,
+		ExtraEnv: []string{
+			"FAKE_AGENT_KIND=codex",
+			"FAKE_AGENT_SCENARIO=" + scenarioPath,
+			"MADE_TEST_SECRET=must-not-reach-review-agent",
+		},
+	}); err != nil {
+		t.Fatalf("Spawn exposed sensitive environment: %v", err)
+	}
+}
+
 func TestSpawn_RejectsStructuredOutputWithoutFindingsField(t *testing.T) {
 	bin := agenttest.Build(t)
 	scenarioPath := filepath.Join(t.TempDir(), "invalid.json")

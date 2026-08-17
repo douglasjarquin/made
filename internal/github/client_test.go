@@ -115,6 +115,14 @@ func TestPRChecks_ParsesJSON(t *testing.T) {
 	}
 }
 
+func TestPRChecks_RejectsEmptySuccessfulPayload(t *testing.T) {
+	c := newClient(t, []string{"FAKE_GH_CHECKS_JSON=[]"}, "")
+
+	if _, err := c.PRChecks(context.Background(), "https://github.com/example/repo/pull/42"); err == nil {
+		t.Fatal("PRChecks accepted an empty successful payload")
+	}
+}
+
 func TestMergeableState_AuthFailurePreventsCall(t *testing.T) {
 	logPath := filepath.Join(t.TempDir(), "invocations.log")
 	c := newClient(t, []string{"FAKE_GH_AUTH_EXIT_CODE=1"}, logPath)

@@ -52,6 +52,25 @@ func (d *ReviewDecisions) Set(runID, stage, decision string) error {
 	if _, exists := d.Get(runID, stage); exists {
 		return fmt.Errorf("%w for %s/%s", ErrDecisionAlreadyRecorded, runID, stage)
 	}
+	if d.manager != nil {
+		snapshot, ok := d.manager.Snapshot(runID)
+		if !ok {
+			return fmt.Errorf("daemon: cannot decide unknown run %q", runID)
+		}
+		if snapshot.Status != RunRunning {
+			return fmt.Errorf("daemon: run %q is %s, not awaiting a review decision", runID, snapshot.Status)
+		}
+		pending := false
+		for _, finding := range snapshot.PendingFindings {
+			if finding.Stage == stage {
+				pending = true
+				break
+			}
+		}
+		if !pending {
+			return fmt.Errorf("daemon: run %q has no pending %s finding", runID, stage)
+		}
+	}
 
 	d.mu.Lock()
 	if _, exists := d.entries[key]; exists {

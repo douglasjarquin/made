@@ -167,21 +167,23 @@ func TestReviewDecisions_RestoreAndRejectConflict(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenRunManager: %v", err)
 	}
-	if _, err := rm.Submit("run-decision", "repo", "branch", func(context.Context, func(Event)) error { return nil }); err != nil {
+	release := make(chan struct{})
+	if _, err := rm.Submit("run-decision", "repo", "branch", func(context.Context, func(Event)) error {
+		<-release
+		return nil
+	}); err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
-		snapshot, _ := rm.Snapshot("run-decision")
-		if snapshot.Status == RunSucceeded {
-			break
-		}
-		time.Sleep(time.Millisecond)
+	waitForStatus(t, rm, "run-decision", RunRunning, time.Second)
+	if err := rm.UpdatePendingFindings("run-decision", []AskUserFinding{{Stage: "review", Message: "finding"}}); err != nil {
+		t.Fatalf("UpdatePendingFindings: %v", err)
 	}
 	decisions := NewReviewDecisionsForManager(rm)
 	if err := decisions.Set("run-decision", "review", ReviewRejected); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
+	close(release)
+	waitForStatus(t, rm, "run-decision", RunSucceeded, time.Second)
 	if err := rm.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
@@ -307,5 +309,40 @@ func TestOpenRunManager_PreservesStateAfterRecoveryFailure(t *testing.T) {
 	}
 	if !strings.Contains(string(walData), "not-valid-json") {
 		t.Fatalf("failed recovery truncated the corrupt WAL for diagnosis: %s", walData)
+	}
+}
+
+func TestRunManager_FindSubmissionDoesNotCrossRepositoryBoundary(t *testing.T) {
+	rm := NewRunManager()
+	if _, err := rm.SubmitSubmission(RunSubmission{
+		ID:           "run-repo-a",
+		Repo:         "repo-a",
+		Branch:       "feature",
+		SubmissionID: "same-submission",
+	}, nil); err != nil {
+		t.Fatalf("submit repo-a: %v", err)
+	}
+
+	if _, found := rm.FindSubmission(RunSubmission{
+		Repo:         "repo-b",
+		Branch:       "feature",
+		SubmissionID: "same-submission",
+	}); found {
+		t.Fatal("FindSubmission matched a submission from another repository")
+	}
+}
+
+func TestReviewDecisions_RejectsDecisionWithoutPendingFinding(t *testing.T) {
+	rm := NewRunManager()
+	if _, err := rm.SubmitSubmission(RunSubmission{
+		ID:     "run-no-finding",
+		Repo:   "repo",
+		Branch: "feature",
+	}, nil); err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	decisions := NewReviewDecisionsForManager(rm)
+	if err := decisions.Set("run-no-finding", "review", ReviewApproved); err == nil {
+		t.Fatal("accepted a review decision without a pending finding")
 	}
 }

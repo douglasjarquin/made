@@ -99,8 +99,19 @@ func (c *Client) PRChecks(ctx context.Context, prURL string) (ChecksResult, erro
 	if err := json.Unmarshal(res.Stdout, &checks); err != nil {
 		return ChecksResult{}, fmt.Errorf("github: parse gh pr checks output: %w: stdout=%s", err, res.Stdout)
 	}
+	if len(checks) == 0 {
+		return ChecksResult{}, fmt.Errorf("github: gh pr checks returned an empty check set")
+	}
 	for i := range checks {
 		checks[i].RunID = workflowRunID(checks[i].Link)
+	}
+	if res.ExitCode == 0 {
+		for _, check := range checks {
+			bucket := strings.ToLower(strings.TrimSpace(check.Bucket))
+			if bucket != "pass" && bucket != "skipping" && bucket != "neutral" {
+				return ChecksResult{}, fmt.Errorf("github: gh pr checks exit 0 with non-success bucket %q for %q", check.Bucket, check.Name)
+			}
+		}
 	}
 	return ChecksResult{Checks: checks, ExitCode: res.ExitCode}, nil
 }

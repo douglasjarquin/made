@@ -55,13 +55,6 @@ func Run(ctx context.Context, ghClient *github.Client, prURL string, rerunBudget
 		if err != nil {
 			return Result{}, err
 		}
-		if checks.ExitCode == 0 {
-			return Result{
-				OK:         true,
-				Message:    fmt.Sprintf("checks passed for %s after %d rerun(s)", prURL, reruns),
-				RerunsUsed: reruns,
-			}, nil
-		}
 		if hasPendingChecks(checks.Checks) {
 			select {
 			case <-ctx.Done():
@@ -69,6 +62,13 @@ func Run(ctx context.Context, ghClient *github.Client, prURL string, rerunBudget
 			case <-time.After(pollInterval):
 				continue
 			}
+		}
+		if checks.ExitCode == 0 {
+			return Result{
+				OK:         true,
+				Message:    fmt.Sprintf("checks passed for %s after %d rerun(s)", prURL, reruns),
+				RerunsUsed: reruns,
+			}, nil
 		}
 
 		if reruns >= rerunBudget {

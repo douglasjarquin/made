@@ -22,6 +22,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "fakeagent: invalid invocation: %v\n", err)
 		os.Exit(2)
 	}
+	if os.Getenv("MADE_TEST_SECRET") != "" {
+		fmt.Fprintln(os.Stderr, "fakeagent: sensitive environment was exposed")
+		os.Exit(3)
+	}
 
 	if logPath := os.Getenv("FAKE_AGENT_LOG_FILE"); logPath != "" {
 		logInvocation(logPath)

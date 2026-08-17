@@ -325,6 +325,9 @@ func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.Review
 		if !decision.CreateRun {
 			return gateNotifyPushResult{}, nil
 		}
+		if err := validateReceivedPush(branchCtx, p.GatePath, p.Ref, p.OldSHA, p.NewSHA); err != nil {
+			return nil, fmt.Errorf("gate.notifyPush: validate received push: %w", err)
+		}
 
 		branch := strings.TrimPrefix(p.Ref, "refs/heads/")
 		repo := gateRepoIdentifier(p.GatePath)
@@ -374,6 +377,41 @@ func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.Review
 
 		return gateNotifyPushResult{RunID: runID}, nil
 	}
+}
+
+func validateReceivedPush(ctx context.Context, gatePath, ref, oldSHA, newSHA string) error {
+	if !validGitSHA(oldSHA) || !validGitSHA(newSHA) {
+		return fmt.Errorf("old_sha and new_sha must be 40-character hexadecimal SHAs")
+	}
+	if newSHA == strings.Repeat("0", 40) {
+		return nil
+	}
+	result, err := exec.Run(ctx, exec.Command{
+		Name: "git",
+		Args: []string{"-C", gatePath, "rev-parse", "--verify", newSHA + "^{commit}"},
+	})
+	if err != nil {
+		return fmt.Errorf("read received ref: %w", err)
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("new_sha %s for ref %s is unavailable: %s", newSHA, ref, strings.TrimSpace(string(result.Stderr)))
+	}
+	if !strings.EqualFold(strings.TrimSpace(string(result.Stdout)), newSHA) {
+		return fmt.Errorf("received ref %s points to %q, not new_sha %q", ref, strings.TrimSpace(string(result.Stdout)), newSHA)
+	}
+	return nil
+}
+
+func validGitSHA(value string) bool {
+	if len(value) != 40 {
+		return false
+	}
+	for _, char := range value {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') && (char < 'A' || char > 'F') {
+			return false
+		}
+	}
+	return true
 }
 
 type debugSubmitCancellableRunParams struct {

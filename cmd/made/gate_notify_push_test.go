@@ -143,6 +143,24 @@ func TestGateNotifyPushRPC_RejectedRefCreatesNoRun(t *testing.T) {
 	}
 }
 
+func TestGateNotifyPushRPC_RejectsNewSHAThatIsNotTheReceivedRef(t *testing.T) {
+	home := shortTempDir(t)
+	rm, client := startTestDaemon(t, home)
+	barePath, sourceDir := setupGateFixture(t, home)
+
+	testGit(t, sourceDir, "checkout", "-b", "feature-forged")
+	_ = pushFeatureCommit(t, sourceDir, "feature-forged", "v1\n", "feature commit")
+	_, err := client.Call("gate.notifyPush", gateNotifyPushParams{
+		GatePath: barePath,
+		OldSHA:   gitZeroSHA,
+		NewSHA:   strings.Repeat("a", 40),
+		Ref:      "refs/heads/feature-forged",
+	})
+	if err == nil {
+		t.Fatalf("accepted forged new SHA; runs=%+v", rm.List())
+	}
+}
+
 func TestGateNotifyPushRPC_RefDeletionCreatesNoRun(t *testing.T) {
 	home := shortTempDir(t)
 	rm, client := startTestDaemon(t, home)
