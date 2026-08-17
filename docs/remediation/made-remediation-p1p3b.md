@@ -160,6 +160,12 @@ The `8d196c4` changes are limited to input bounds and durable tail recovery, the
 
 The compatibility subscenario used the real `bin/cs-made-lib.sh` script, the real Made binary, a strict fake `gh auth status` boundary, a task-local unavailable Herdr socket, and accepted the expected nonzero health exit only after asserting valid versioned JSON and authenticated GitHub state.
 
+Final QA also observed that the real Consigliere `cs_made_status` helper still invokes the intentionally removed predecessor command `made status --json` at `/Users/douglasjarquin/github/consigliere/bin/cs-made-lib.sh:57-63`.
+
+That helper returns exit `2` with `made: unknown command "status"`, while `cs_made_doctor --json` passes.
+
+This is an external, out-of-scope compatibility finding: this task forbids Consigliere edits and forbids a Made compatibility layer for obsolete commands, so the Made implementation deliberately preserves the rejection.
+
 The first manual cancellation run returned `running` before the worker completed, which falsified the CLI response contract.
 
 The cancellation wait fix returned `canceled` with `execution_finished=true` in the counterfactual rerun.
