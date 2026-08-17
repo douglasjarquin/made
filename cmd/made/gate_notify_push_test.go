@@ -187,6 +187,29 @@ func TestGateNotifyPushRPC_RejectsExistingUnrelatedSHA(t *testing.T) {
 	}
 }
 
+func TestGateNotifyPushRPC_RejectsStaleAncestorSHA(t *testing.T) {
+	home := shortTempDir(t)
+	rm, client := startTestDaemon(t, home)
+	barePath, sourceDir := setupGateFixture(t, home)
+
+	testGit(t, sourceDir, "checkout", "-b", "feature-stale")
+	sha1 := pushFeatureCommit(t, sourceDir, "feature-stale", "v1\n", "feature commit 1")
+	_ = pushFeatureCommit(t, sourceDir, "feature-stale", "v2\n", "feature commit 2")
+
+	_, err := client.Call("gate.notifyPush", gateNotifyPushParams{
+		GatePath: barePath,
+		OldSHA:   gitZeroSHA,
+		NewSHA:   sha1,
+		Ref:      "refs/heads/feature-stale",
+	})
+	if err == nil {
+		t.Fatalf("accepted stale ancestor SHA %s for advanced feature ref; runs=%+v", sha1, rm.List())
+	}
+	if runs := rm.List(); len(runs) != 0 {
+		t.Fatalf("stale notification created runs: %+v", runs)
+	}
+}
+
 func TestGateNotifyPushRPC_RefDeletionCreatesNoRun(t *testing.T) {
 	home := shortTempDir(t)
 	rm, client := startTestDaemon(t, home)
@@ -217,10 +240,6 @@ func TestGateNotifyPushRPC_SupersededPushValidatesNewestSHA(t *testing.T) {
 
 	testGit(t, sourceDir, "checkout", "-b", "feature-x")
 	sha1 := pushFeatureCommit(t, sourceDir, "feature-x", "v1\n", "feature commit 1")
-	sha2 := pushFeatureCommit(t, sourceDir, "feature-x", "v2\n", "feature commit 2")
-	if sha1 == sha2 {
-		t.Fatal("test setup bug: expected two distinct commits")
-	}
 
 	repo := gateRepoIdentifier(barePath)
 
@@ -251,6 +270,11 @@ func TestGateNotifyPushRPC_SupersededPushValidatesNewestSHA(t *testing.T) {
 
 	if snap, ok := rm.Snapshot(result1.RunID); !ok || snap.Status != daemon.RunQueued {
 		t.Fatalf("expected first run still queued behind the blocker, got %+v (ok=%v)", snap, ok)
+	}
+
+	sha2 := pushFeatureCommit(t, sourceDir, "feature-x", "v2\n", "feature commit 2")
+	if sha1 == sha2 {
+		t.Fatal("test setup bug: expected two distinct commits")
 	}
 
 	var result2 gateNotifyPushResult

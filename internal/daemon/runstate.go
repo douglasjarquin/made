@@ -28,10 +28,9 @@ func (rm *RunManager) UpdateStages(id string, stages []StageResult) error {
 	candidate := r.snapshot()
 	candidate.Stages = cloneStageResults(stages)
 	candidate.CurrentStage = currentStage(candidate.Stages)
-	if err := rm.persistSnapshot(candidate); err != nil {
+	if err := rm.persistAndReplace(r, candidate); err != nil {
 		return err
 	}
-	r.replace(candidate)
 	return nil
 }
 
@@ -44,10 +43,9 @@ func (rm *RunManager) UpdatePendingFindings(id string, findings []AskUserFinding
 	defer r.persistMu.Unlock()
 	candidate := r.snapshot()
 	candidate.PendingFindings = append([]AskUserFinding(nil), findings...)
-	if err := rm.persistSnapshot(candidate); err != nil {
+	if err := rm.persistAndReplace(r, candidate); err != nil {
 		return err
 	}
-	r.replace(candidate)
 	return nil
 }
 
@@ -60,10 +58,9 @@ func (rm *RunManager) SetCurrentStage(id, stage string) error {
 	defer r.persistMu.Unlock()
 	candidate := r.snapshot()
 	candidate.CurrentStage = stage
-	if err := rm.persistSnapshot(candidate); err != nil {
+	if err := rm.persistAndReplace(r, candidate); err != nil {
 		return err
 	}
-	r.replace(candidate)
 	return nil
 }
 
@@ -78,10 +75,9 @@ func (rm *RunManager) AddEvidenceRef(id, ref string) error {
 	if !slices.Contains(candidate.EvidenceRefs, ref) {
 		candidate.EvidenceRefs = append(candidate.EvidenceRefs, ref)
 	}
-	if err := rm.persistSnapshot(candidate); err != nil {
+	if err := rm.persistAndReplace(r, candidate); err != nil {
 		return err
 	}
-	r.replace(candidate)
 	return nil
 }
 
@@ -94,10 +90,9 @@ func (rm *RunManager) UpdateSubmissionOutput(id, outputSHA string) error {
 	defer r.persistMu.Unlock()
 	candidate := r.snapshot()
 	candidate.OutputSHA = outputSHA
-	if err := rm.persistSnapshot(candidate); err != nil {
+	if err := rm.persistAndReplace(r, candidate); err != nil {
 		return err
 	}
-	r.replace(candidate)
 	return nil
 }
 

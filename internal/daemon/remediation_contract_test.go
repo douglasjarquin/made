@@ -53,6 +53,32 @@ func TestRunManager_CancelQueuedRunNeverStartsWork(t *testing.T) {
 	}
 }
 
+func TestRunManager_CancelSpooledQueuedRunTransitionsTerminal(t *testing.T) {
+	rm := NewRunManager()
+	const runID = "run-cancel-spooled"
+	if _, err := rm.SubmitSubmission(RunSubmission{
+		ID:     runID,
+		Repo:   "repo-cancel-spooled",
+		Branch: "feature",
+	}, nil); err != nil {
+		t.Fatalf("submit spooled run: %v", err)
+	}
+
+	if err := rm.Cancel(runID); err != nil {
+		t.Fatalf("cancel spooled run: %v", err)
+	}
+	snapshot, ok := rm.Snapshot(runID)
+	if !ok {
+		t.Fatal("cancelled spooled run disappeared")
+	}
+	if snapshot.Status != RunCanceled || !snapshot.ExecutionFinished {
+		t.Fatalf("cancelled spooled run lifecycle = %+v, want canceled and execution_finished", snapshot)
+	}
+	if !errors.Is(snapshot.Err, context.Canceled) {
+		t.Fatalf("cancelled spooled run error = %v, want context.Canceled", snapshot.Err)
+	}
+}
+
 func TestRunManager_AwaitingMergeDoesNotEmitTerminalCompletion(t *testing.T) {
 	rm := NewRunManager()
 	runID := rm.NewRunID()

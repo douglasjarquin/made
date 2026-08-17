@@ -72,12 +72,6 @@ func (r *run) snapshot() RunSnapshot {
 	return cloneSnapshot(r.snap)
 }
 
-func (r *run) update(fn func(*RunSnapshot)) {
-	r.mu.Lock()
-	fn(&r.snap)
-	r.mu.Unlock()
-}
-
 func (r *run) replace(snapshot RunSnapshot) {
 	r.mu.Lock()
 	r.snap = cloneSnapshot(snapshot)
@@ -103,6 +97,9 @@ type RunManager struct {
 	mailbox  *Mailbox
 	activity chan struct{}
 	store    *runStore
+
+	beforeCloseCompact func()
+	durableMu          sync.Mutex
 
 	mu      sync.Mutex
 	repos   map[string]*repoQueue
@@ -159,13 +156,16 @@ func (rm *RunManager) SubmitSubmission(submission RunSubmission, work WorkFunc) 
 	}
 	queuedSnapshot := cloneSnapshot(r.snap)
 
+	rm.durableMu.Lock()
 	rm.mu.Lock()
 	if _, exists := rm.runs[submission.ID]; exists {
 		rm.mu.Unlock()
+		rm.durableMu.Unlock()
 		return RunSnapshot{}, ErrRunIDExists
 	}
 	if err := rm.persistSnapshotLocked(r.snap); err != nil {
 		rm.mu.Unlock()
+		rm.durableMu.Unlock()
 		cancel()
 		return RunSnapshot{}, fmt.Errorf("daemon: persist submission: %w", err)
 	}
@@ -176,6 +176,7 @@ func (rm *RunManager) SubmitSubmission(submission RunSubmission, work WorkFunc) 
 		rm.repos[submission.Repo] = rq
 	}
 	rm.mu.Unlock()
+	rm.durableMu.Unlock()
 	if work == nil {
 		return queuedSnapshot, nil
 	}
@@ -256,12 +257,11 @@ func (rm *RunManager) execute(r *run, work WorkFunc) {
 	}
 	startedSnapshot.Status = RunRunning
 	startedSnapshot.StartedAt = started
-	if err := rm.persistSnapshot(startedSnapshot); err != nil {
+	if err := rm.persistAndReplace(r, startedSnapshot); err != nil {
 		r.persistMu.Unlock()
 		rm.failAfterPersistenceError(r, err)
 		return
 	}
-	r.replace(startedSnapshot)
 	r.persistMu.Unlock()
 	rm.mailbox.Publish(Event{RunID: id, Kind: EventRunStarted, Time: started})
 	rm.signalActivity()
@@ -302,12 +302,11 @@ func (rm *RunManager) execute(r *run, work WorkFunc) {
 			finishedSnapshot.Status = RunSucceeded
 		}
 	}
-	if err := rm.persistSnapshot(finishedSnapshot); err != nil {
+	if err := rm.persistAndReplace(r, finishedSnapshot); err != nil {
 		r.persistMu.Unlock()
 		rm.failAfterPersistenceError(r, err)
 		return
 	}
-	r.replace(finishedSnapshot)
 	r.persistMu.Unlock()
 
 	snapshot := r.snapshot()
@@ -392,10 +391,9 @@ func (rm *RunManager) Finish(id string, status RunStatus, message string) error 
 	candidate.Message = message
 	candidate.ExecutionFinished = status == RunAwaitingMerge || isTerminalRunStatus(status)
 	candidate.finalized = true
-	if err := rm.persistSnapshot(candidate); err != nil {
+	if err := rm.persistAndReplace(r, candidate); err != nil {
 		return err
 	}
-	r.replace(candidate)
 	return nil
 }
 
@@ -404,21 +402,19 @@ func (rm *RunManager) failAfterPersistenceError(r *run, persistErr error) {
 	defer r.persistMu.Unlock()
 	failure := fmt.Errorf("daemon: durable run state unavailable: %w", persistErr)
 	ended := time.Now()
-	r.update(func(s *RunSnapshot) {
-		s.Status = RunFailed
-		s.Err = failure
-		s.Error = failure.Error()
-		s.Message = "run state persistence failed"
-		s.EndedAt = ended
-		s.ExecutionFinished = true
-		s.finalized = true
-	})
-	if retryErr := rm.persistRun(r); retryErr != nil {
+	candidate := r.snapshot()
+	candidate.Status = RunFailed
+	candidate.Err = failure
+	candidate.Error = failure.Error()
+	candidate.Message = "run state persistence failed"
+	candidate.EndedAt = ended
+	candidate.ExecutionFinished = true
+	candidate.finalized = true
+	if retryErr := rm.persistAndReplace(r, candidate); retryErr != nil {
 		failure = fmt.Errorf("%w; retrying failed state also failed: %v", failure, retryErr)
-		r.update(func(s *RunSnapshot) {
-			s.Err = failure
-			s.Error = failure.Error()
-		})
+		candidate.Err = failure
+		candidate.Error = failure.Error()
+		r.replace(candidate)
 	}
 	snapshot := r.snapshot()
 	rm.mailbox.Publish(Event{RunID: snapshot.ID, Kind: EventRunFailed, Time: ended, Err: failure})
@@ -457,14 +453,16 @@ func (rm *RunManager) SupersedeQueued(repo, branch string) error {
 	now := time.Now()
 	var firstErr error
 	for _, j := range dropped {
-		j.run.update(func(s *RunSnapshot) {
-			s.Status = RunSuperseded
-			s.Err = ErrRunSuperseded
-			s.Error = ErrRunSuperseded.Error()
-			s.ExecutionFinished = true
-			s.EndedAt = now
-		})
-		if err := rm.persistRun(j.run); err != nil {
+		j.run.persistMu.Lock()
+		candidate := j.run.snapshot()
+		candidate.Status = RunSuperseded
+		candidate.Err = ErrRunSuperseded
+		candidate.Error = ErrRunSuperseded.Error()
+		candidate.ExecutionFinished = true
+		candidate.EndedAt = now
+		err := rm.persistAndReplace(j.run, candidate)
+		j.run.persistMu.Unlock()
+		if err != nil {
 			if firstErr == nil {
 				firstErr = err
 			}
@@ -483,7 +481,7 @@ func (rm *RunManager) cancelQueued(target *run) (bool, error) {
 	rq := rm.repos[snapshot.Repo]
 	rm.mu.Unlock()
 	if rq == nil {
-		return false, nil
+		return rm.cancelQueuedRun(target)
 	}
 	rq.mu.Lock()
 	removed := false
@@ -494,20 +492,36 @@ func (rm *RunManager) cancelQueued(target *run) (bool, error) {
 			break
 		}
 	}
-	rq.mu.Unlock()
 	if !removed {
+		active := rq.active
+		rq.mu.Unlock()
+		if active {
+			return false, nil
+		}
+		return rm.cancelQueuedRun(target)
+	}
+	rq.mu.Unlock()
+	return rm.cancelQueuedRun(target)
+}
+
+func (rm *RunManager) cancelQueuedRun(target *run) (bool, error) {
+	snapshot := target.snapshot()
+	now := time.Now()
+	target.persistMu.Lock()
+	candidate := target.snapshot()
+	if candidate.Status != RunQueued {
+		target.persistMu.Unlock()
 		return false, nil
 	}
-	now := time.Now()
 	target.cancel()
-	target.update(func(s *RunSnapshot) {
-		s.Status = RunCanceled
-		s.Err = context.Canceled
-		s.Error = context.Canceled.Error()
-		s.EndedAt = now
-		s.ExecutionFinished = true
-	})
-	if err := rm.persistRun(target); err != nil {
+	candidate.Status = RunCanceled
+	candidate.Err = context.Canceled
+	candidate.Error = context.Canceled.Error()
+	candidate.EndedAt = now
+	candidate.ExecutionFinished = true
+	err := rm.persistAndReplace(target, candidate)
+	target.persistMu.Unlock()
+	if err != nil {
 		rm.failAfterPersistenceError(target, err)
 		return true, err
 	}
@@ -516,14 +530,17 @@ func (rm *RunManager) cancelQueued(target *run) (bool, error) {
 	return true, nil
 }
 
-func (rm *RunManager) persistRun(r *run) error {
-	return rm.persistSnapshot(r.snapshot())
-}
-
-func (rm *RunManager) persistSnapshot(snapshot RunSnapshot) error {
+func (rm *RunManager) persistAndReplace(r *run, snapshot RunSnapshot) error {
+	rm.durableMu.Lock()
+	defer rm.durableMu.Unlock()
 	rm.mu.Lock()
-	defer rm.mu.Unlock()
-	return rm.persistSnapshotLocked(snapshot)
+	err := rm.persistSnapshotLocked(snapshot)
+	rm.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	r.replace(snapshot)
+	return nil
 }
 
 func (rm *RunManager) HasActiveRuns() bool {

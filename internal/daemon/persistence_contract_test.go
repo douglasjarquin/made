@@ -161,6 +161,60 @@ func TestRunManager_WALRetentionIsBounded(t *testing.T) {
 	}
 }
 
+func TestRunManager_CloseDoesNotDiscardConcurrentDurableMutation(t *testing.T) {
+	stateDir := t.TempDir()
+	rm, err := OpenRunManager(stateDir)
+	if err != nil {
+		t.Fatalf("OpenRunManager: %v", err)
+	}
+	const runID = "run-close-race"
+	if _, err := rm.SubmitSubmission(RunSubmission{ID: runID, Repo: "repo", Branch: "branch"}, nil); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+
+	snapshotCaptured := make(chan struct{})
+	allowCompact := make(chan struct{})
+	rm.beforeCloseCompact = func() {
+		close(snapshotCaptured)
+		<-allowCompact
+	}
+	closeErr := make(chan error, 1)
+	go func() { closeErr <- rm.Close() }()
+	<-snapshotCaptured
+
+	updateErr := make(chan error, 1)
+	go func() {
+		updateErr <- rm.UpdateStages(runID, []StageResult{{Name: "intent", Result: "pass"}})
+	}()
+	var updateCompletedBeforeRelease bool
+	var updateResult error
+	select {
+	case updateResult = <-updateErr:
+		updateCompletedBeforeRelease = true
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(allowCompact)
+	if err := <-closeErr; err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if !updateCompletedBeforeRelease {
+		updateResult = <-updateErr
+	}
+	if updateResult != nil {
+		return
+	}
+
+	restarted, err := OpenRunManager(stateDir)
+	if err != nil {
+		t.Fatalf("OpenRunManager after close: %v", err)
+	}
+	snapshot, ok := restarted.Snapshot(runID)
+	_ = restarted.Close()
+	if !ok || len(snapshot.Stages) != 1 || snapshot.Stages[0].Result != "pass" {
+		t.Fatalf("concurrent durable mutation was lost: %+v (ok=%v)", snapshot, ok)
+	}
+}
+
 func TestReviewDecisions_RestoreAndRejectConflict(t *testing.T) {
 	stateDir := t.TempDir()
 	rm, err := OpenRunManager(stateDir)

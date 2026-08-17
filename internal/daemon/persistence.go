@@ -347,9 +347,11 @@ func OpenRunManager(stateDir string) (*RunManager, error) {
 			rm.repos[snapshot.Repo] = &repoQueue{}
 		}
 		if snapshot.Status == RunFailed && snapshot.Error == "daemon restarted before run execution finished" {
+			rm.durableMu.Lock()
 			rm.mu.Lock()
 			err := rm.persistSnapshotLocked(snapshot)
 			rm.mu.Unlock()
+			rm.durableMu.Unlock()
 			if err != nil {
 				cancel()
 				return nil, err
@@ -363,7 +365,12 @@ func (rm *RunManager) Close() error {
 	if rm.store == nil {
 		return nil
 	}
+	rm.durableMu.Lock()
+	defer rm.durableMu.Unlock()
 	runs := rm.List()
+	if rm.beforeCloseCompact != nil {
+		rm.beforeCloseCompact()
+	}
 	return rm.store.close(runs, rm.counter.Load())
 }
 
@@ -422,10 +429,9 @@ func (rm *RunManager) UpdateDecision(id, stage, decision string) error {
 		candidate.Decisions = make(map[string]string)
 	}
 	candidate.Decisions[stage] = decision
-	err := rm.persistSnapshot(candidate)
+	err := rm.persistAndReplace(r, candidate)
 	if err != nil {
 		return err
 	}
-	r.replace(candidate)
 	return err
 }
