@@ -121,8 +121,12 @@ func TestRunManager_SnapshotDoesNotAliasStageSlices(t *testing.T) {
 
 func TestReviewDecisions_FirstDecisionWins(t *testing.T) {
 	d := NewReviewDecisions()
-	d.Set("run-conflict", "review", ReviewRejected)
-	d.Set("run-conflict", "review", ReviewApproved)
+	if err := d.Set("run-conflict", "review", ReviewRejected); err != nil {
+		t.Fatalf("first decision: %v", err)
+	}
+	if err := d.Set("run-conflict", "review", ReviewApproved); err == nil {
+		t.Fatal("expected conflicting decision to be rejected")
+	}
 	decision, ok := d.Get("run-conflict", "review")
 	if !ok {
 		t.Fatal("expected first decision to be recorded")

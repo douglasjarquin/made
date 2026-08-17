@@ -22,7 +22,9 @@ func TestReviewDecisions_WaitUnblocksOnSet(t *testing.T) {
 
 	waitForWaiterRegistered(t, d, "run-1", "review")
 
-	d.Set("run-1", "review", ReviewApproved)
+	if err := d.Set("run-1", "review", ReviewApproved); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
 
 	select {
 	case got := <-resultCh:
@@ -39,7 +41,9 @@ func TestReviewDecisions_WaitUnblocksOnSet(t *testing.T) {
 
 func TestReviewDecisions_WaitReturnsImmediatelyIfAlreadyRecorded(t *testing.T) {
 	d := NewReviewDecisions()
-	d.Set("run-2", "document", ReviewRejected)
+	if err := d.Set("run-2", "document", ReviewRejected); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
 
 	resultCh := make(chan string, 1)
 	errCh := make(chan error, 1)

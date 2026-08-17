@@ -385,7 +385,9 @@ func TestNewWorkFunc_DocumentFindingParksThenRejectedFailsRun(t *testing.T) {
 		t.Fatalf("expected one pending finding on stage %q, got %+v", stageNameDocument, parked.PendingFindings)
 	}
 
-	reviewDecisions.Set(runID, stageNameDocument, daemon.ReviewRejected)
+	if err := reviewDecisions.Set(runID, stageNameDocument, daemon.ReviewRejected); err != nil {
+		t.Fatalf("set rejection: %v", err)
+	}
 
 	snap := waitForRunEnded(t, rm, runID, 30*time.Second)
 	if snap.Status != daemon.RunFailed {
@@ -428,7 +430,9 @@ func TestNewWorkFunc_DocumentFindingParksThenApprovedResumesToCompletion(t *test
 		t.Fatalf("expected parked run to stay RunRunning, got %v", parked.Status)
 	}
 
-	reviewDecisions.Set(runID, stageNameDocument, daemon.ReviewApproved)
+	if err := reviewDecisions.Set(runID, stageNameDocument, daemon.ReviewApproved); err != nil {
+		t.Fatalf("set approval: %v", err)
+	}
 
 	snap := waitForRunEnded(t, rm, runID, 30*time.Second)
 	if snap.Status != daemon.RunAwaitingMerge {
