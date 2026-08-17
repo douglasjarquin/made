@@ -30,7 +30,7 @@ func Spawn(ctx context.Context, kind Kind, params SpawnParams) (Findings, error)
 		binary = kind.binaryName()
 	}
 
-	reviewPath, protectedPaths, cleanupReview, err := prepareReviewWorktree(ctx, params.WorktreePath)
+	reviewPath, protectedPaths, maskPaths, cleanupReview, err := prepareReviewWorktree(ctx, params.WorktreePath)
 	if err != nil {
 		return Findings{}, fmt.Errorf("agent: prepare read-only review worktree: %w", err)
 	}
@@ -41,7 +41,7 @@ func Spawn(ctx context.Context, kind Kind, params SpawnParams) (Findings, error)
 		return Findings{}, err
 	}
 	defer cleanup()
-	commandName, commandArgs, err := containedInvocation(binary, args, reviewPath, protectedPaths)
+	commandName, commandArgs, err := containedInvocation(binary, args, reviewPath, protectedPaths, maskPaths)
 	if err != nil {
 		return Findings{}, fmt.Errorf("agent: contain review process: %w", err)
 	}

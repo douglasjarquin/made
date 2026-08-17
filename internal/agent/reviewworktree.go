@@ -18,37 +18,37 @@ const (
 	reviewPreparationLimit   = 1 << 20
 )
 
-func prepareReviewWorktree(ctx context.Context, source string) (string, []string, func(), error) {
+func prepareReviewWorktree(ctx context.Context, source string) (string, []string, []string, func(), error) {
 	source, err := filepath.Abs(source)
 	if err != nil {
-		return "", nil, nil, fmt.Errorf("resolve source worktree: %w", err)
+		return "", nil, nil, nil, fmt.Errorf("resolve source worktree: %w", err)
 	}
 	headResult, err := runReviewGit(ctx, source, "rev-parse", "--verify", "HEAD^{commit}")
 	if err != nil {
-		return "", nil, nil, fmt.Errorf("read source HEAD: %w", err)
+		return "", nil, nil, nil, fmt.Errorf("read source HEAD: %w", err)
 	}
 	if headResult.ExitCode != 0 {
-		return "", nil, nil, commandFailure("read source HEAD", headResult)
+		return "", nil, nil, nil, commandFailure("read source HEAD", headResult)
 	}
 	head := strings.TrimSpace(string(headResult.Stdout))
 	if head == "" {
-		return "", nil, nil, fmt.Errorf("read source HEAD returned an empty SHA")
+		return "", nil, nil, nil, fmt.Errorf("read source HEAD returned an empty SHA")
 	}
 	commonResult, err := runReviewGit(ctx, source, "rev-parse", "--git-common-dir")
 	if err != nil {
-		return "", nil, nil, fmt.Errorf("read source Git common directory: %w", err)
+		return "", nil, nil, nil, fmt.Errorf("read source Git common directory: %w", err)
 	}
 	if commonResult.ExitCode != 0 {
-		return "", nil, nil, commandFailure("read source Git common directory", commonResult)
+		return "", nil, nil, nil, commandFailure("read source Git common directory", commonResult)
 	}
 	protectedPaths, err := reviewProtectedPaths(source, strings.TrimSpace(string(commonResult.Stdout)))
 	if err != nil {
-		return "", nil, nil, fmt.Errorf("resolve review protected paths: %w", err)
+		return "", nil, nil, nil, fmt.Errorf("resolve review protected paths: %w", err)
 	}
 
 	tempRoot, err := os.MkdirTemp("", "made-review-worktree-")
 	if err != nil {
-		return "", nil, nil, fmt.Errorf("create review worktree directory: %w", err)
+		return "", nil, nil, nil, fmt.Errorf("create review worktree directory: %w", err)
 	}
 	reviewPath := filepath.Join(tempRoot, "repo")
 	cleanupTemp := func() { _ = os.RemoveAll(tempRoot) }
@@ -56,44 +56,58 @@ func prepareReviewWorktree(ctx context.Context, source string) (string, []string
 	cloneResult, err := runReviewGit(ctx, "", "clone", "--no-local", "--no-hardlinks", "--no-checkout", source, reviewPath)
 	if err != nil {
 		cleanupTemp()
-		return "", nil, nil, fmt.Errorf("clone review worktree: %w", err)
+		return "", nil, nil, nil, fmt.Errorf("clone review worktree: %w", err)
 	}
 	if cloneResult.ExitCode != 0 {
 		cleanupTemp()
-		return "", nil, nil, commandFailure("clone review worktree", cloneResult)
+		return "", nil, nil, nil, commandFailure("clone review worktree", cloneResult)
 	}
 	checkoutResult, err := runReviewGit(ctx, reviewPath, "checkout", "--detach", "--quiet", head)
 	if err != nil {
 		cleanupTemp()
-		return "", nil, nil, fmt.Errorf("checkout review HEAD: %w", err)
+		return "", nil, nil, nil, fmt.Errorf("checkout review HEAD: %w", err)
 	}
 	if checkoutResult.ExitCode != 0 {
 		cleanupTemp()
-		return "", nil, nil, commandFailure("checkout review HEAD", checkoutResult)
+		return "", nil, nil, nil, commandFailure("checkout review HEAD", checkoutResult)
 	}
 	clonedHead, err := runReviewGit(ctx, reviewPath, "rev-parse", "--verify", "HEAD^{commit}")
 	if err != nil {
 		cleanupTemp()
-		return "", nil, nil, fmt.Errorf("verify review HEAD: %w", err)
+		return "", nil, nil, nil, fmt.Errorf("verify review HEAD: %w", err)
 	}
 	if clonedHead.ExitCode != 0 || strings.TrimSpace(string(clonedHead.Stdout)) != head {
 		cleanupTemp()
-		return "", nil, nil, fmt.Errorf("review clone HEAD %q does not match source HEAD %q", strings.TrimSpace(string(clonedHead.Stdout)), head)
+		return "", nil, nil, nil, fmt.Errorf("review clone HEAD %q does not match source HEAD %q", strings.TrimSpace(string(clonedHead.Stdout)), head)
 	}
 	if err := rejectEscapingSymlinks(reviewPath); err != nil {
 		cleanupTemp()
-		return "", nil, nil, fmt.Errorf("validate review worktree links: %w", err)
+		return "", nil, nil, nil, fmt.Errorf("validate review worktree links: %w", err)
+	}
+	maskRoot, err := os.MkdirTemp(reviewPath, ".made-review-masks-")
+	if err != nil {
+		cleanupTemp()
+		return "", nil, nil, nil, fmt.Errorf("create review mask directory: %w", err)
+	}
+	maskPaths := make([]string, 0, len(protectedPaths))
+	for index := range protectedPaths {
+		maskPath := filepath.Join(maskRoot, fmt.Sprintf("%d", index))
+		if err := os.Mkdir(maskPath, 0o700); err != nil {
+			cleanupTemp()
+			return "", nil, nil, nil, fmt.Errorf("create review mask %d: %w", index, err)
+		}
+		maskPaths = append(maskPaths, maskPath)
 	}
 	restoreModes, err := makeReviewTreeReadOnly(reviewPath)
 	if err != nil {
 		cleanupTemp()
-		return "", nil, nil, fmt.Errorf("make review worktree read-only: %w", err)
+		return "", nil, nil, nil, fmt.Errorf("make review worktree read-only: %w", err)
 	}
 	cleanup := func() {
 		restoreModes()
 		cleanupTemp()
 	}
-	return reviewPath, protectedPaths, cleanup, nil
+	return reviewPath, protectedPaths, maskPaths, cleanup, nil
 }
 
 func reviewProtectedPaths(source, commonDir string) ([]string, error) {

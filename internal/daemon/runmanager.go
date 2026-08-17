@@ -258,12 +258,13 @@ func (rm *RunManager) SubmitWithMetadata(id, repo, branch, inputSHA, outputSHA s
 	startDrain := !rq.active
 	rq.active = true
 	rq.mu.Unlock()
+	queuedSnapshot := r.snapshot()
 
 	if startDrain {
 		go rm.drain(rq)
 	}
 
-	return r.snapshot(), nil
+	return queuedSnapshot, nil
 }
 
 func (rm *RunManager) BeginShutdown() error {

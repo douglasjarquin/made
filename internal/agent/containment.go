@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-func containedInvocation(binary string, args []string, reviewPath string, protectedPaths []string) (string, []string, error) {
+func containedInvocation(binary string, args []string, reviewPath string, protectedPaths, maskPaths []string) (string, []string, error) {
 	switch runtime.GOOS {
 	case "darwin":
 		const sandboxExec = "/usr/bin/sandbox-exec"
@@ -25,7 +25,7 @@ func containedInvocation(binary string, args []string, reviewPath string, protec
 		if err != nil {
 			return "", nil, fmt.Errorf("bubblewrap is required for reviewer containment: %w", err)
 		}
-		return bwrap, bubblewrapReviewArgs(binary, args, reviewPath, protectedPaths), nil
+		return bwrap, bubblewrapReviewArgs(binary, args, reviewPath, protectedPaths, maskPaths), nil
 	default:
 		return "", nil, fmt.Errorf("reviewer containment is unsupported on %s", runtime.GOOS)
 	}
@@ -46,8 +46,12 @@ func darwinReviewProfile(protectedPaths []string) string {
 	return profile.String()
 }
 
-func bubblewrapReviewArgs(binary string, args []string, reviewPath string, protectedPaths []string) []string {
+func bubblewrapReviewArgs(binary string, args []string, reviewPath string, protectedPaths, maskPaths []string) []string {
 	paths := append([]string(nil), protectedPaths...)
+	maskByPath := make(map[string]string, len(protectedPaths))
+	for index, path := range protectedPaths {
+		maskByPath[path] = maskPaths[index]
+	}
 	sort.Slice(paths, func(i, j int) bool { return len(paths[i]) > len(paths[j]) })
 	commandArgs := []string{
 		"--die-with-parent",
@@ -61,7 +65,7 @@ func bubblewrapReviewArgs(binary string, args []string, reviewPath string, prote
 		"--ro-bind", reviewPath, reviewPath,
 	}
 	for _, path := range paths {
-		commandArgs = append(commandArgs, "--perms", "0555", "--tmpfs", path)
+		commandArgs = append(commandArgs, "--ro-bind", maskByPath[path], path)
 	}
 	commandArgs = append(commandArgs, "--chdir", reviewPath)
 	commandArgs = append(commandArgs, "--", binary)

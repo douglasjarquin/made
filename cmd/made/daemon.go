@@ -347,7 +347,8 @@ type gateNotifyPushParams struct {
 }
 
 type gateNotifyPushResult struct {
-	RunID string `json:"run_id,omitempty"`
+	RunID    string             `json:"run_id,omitempty"`
+	Snapshot daemon.RunSnapshot `json:"-"`
 }
 
 // gateNotifyPushHandler is the post-receive-driven counterpart to
@@ -432,14 +433,14 @@ func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.Review
 		newSHA := p.NewSHA
 		runID := submission.RunID
 		if !created {
-			if _, ok := rm.Snapshot(submission.RunID); ok {
+			if existingSnapshot, ok := rm.Snapshot(submission.RunID); ok {
 				if err := rm.AppendSubmissionEvent(submission.RunID, daemon.SubmissionEvent{Gate: p.GatePath, Ref: p.Ref, InputSHA: p.NewSHA, Kind: "push"}); err != nil {
 					return nil, fmt.Errorf("gate.notifyPush: persist replayed submission event: %w", err)
 				}
 				if err := spool.Drain(submission); err != nil {
 					return nil, fmt.Errorf("gate.notifyPush: drain replayed submission: %w", err)
 				}
-				return gateNotifyPushResult{RunID: submission.RunID}, nil
+				return gateNotifyPushResult{RunID: submission.RunID, Snapshot: existingSnapshot}, nil
 			}
 			runID = submission.RunID
 		}
@@ -452,7 +453,8 @@ func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.Review
 				orchestrator.NewWorkFunc(rm, reviewDecisions, emit, runID, defaultBranch, branch, orchestrator.Options{}))
 		}
 
-		if _, err := rm.SubmitWithMetadata(runID, repo, branch, p.NewSHA, p.OutputSHA, work); err != nil {
+		snapshot, err := rm.SubmitWithMetadata(runID, repo, branch, p.NewSHA, p.OutputSHA, work)
+		if err != nil {
 			return nil, fmt.Errorf("gate.notifyPush: submit run: %w", err)
 		}
 		if err := rm.AppendSubmissionEvent(runID, daemon.SubmissionEvent{Gate: p.GatePath, Ref: p.Ref, InputSHA: p.NewSHA, Kind: "push"}); err != nil {
@@ -462,7 +464,7 @@ func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.Review
 			return nil, fmt.Errorf("gate.notifyPush: drain submission: %w", err)
 		}
 
-		return gateNotifyPushResult{RunID: runID}, nil
+		return gateNotifyPushResult{RunID: runID, Snapshot: snapshot}, nil
 	}
 }
 

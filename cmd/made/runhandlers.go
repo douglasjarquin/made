@@ -78,9 +78,13 @@ func runSubmitHandler(rm *daemon.RunManager, reviewDecisions *daemon.ReviewDecis
 		if gateResult.RunID == "" {
 			return nil, fmt.Errorf("run.submit: gate submission did not create a run")
 		}
-		snapshot, ok := rm.Snapshot(gateResult.RunID)
-		if !ok {
-			return nil, fmt.Errorf("run.submit: submitted run %q was not persisted", gateResult.RunID)
+		snapshot := gateResult.Snapshot
+		if snapshot.ID == "" {
+			var ok bool
+			snapshot, ok = rm.Snapshot(gateResult.RunID)
+			if !ok {
+				return nil, fmt.Errorf("run.submit: submitted run %q was not persisted", gateResult.RunID)
+			}
 		}
 		return runActionReport{
 			SchemaVersion: 1, ProtocolVersion: api.Version, RunID: snapshot.ID,
