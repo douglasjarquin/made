@@ -161,6 +161,32 @@ func TestGateNotifyPushRPC_RejectsNewSHAThatIsNotTheReceivedRef(t *testing.T) {
 	}
 }
 
+func TestGateNotifyPushRPC_RejectsExistingUnrelatedSHA(t *testing.T) {
+	home := shortTempDir(t)
+	rm, client := startTestDaemon(t, home)
+	barePath, sourceDir := setupGateFixture(t, home)
+
+	testGit(t, sourceDir, "checkout", "-b", "feature-forged")
+	featureSHA := pushFeatureCommit(t, sourceDir, "feature-forged", "v1\n", "feature commit")
+
+	unrelatedDir := shortTempDir(t)
+	testGit(t, "", "init", "-b", "unrelated-history", unrelatedDir)
+	writeAndCommit(t, unrelatedDir, "unrelated.txt", "unrelated\n", "unrelated commit")
+	unrelatedSHA := strings.TrimSpace(testGitOutput(t, unrelatedDir, "rev-parse", "HEAD"))
+	testGit(t, unrelatedDir, "remote", "add", "origin", "file://"+barePath)
+	testGit(t, unrelatedDir, "push", "origin", "HEAD:refs/heads/unrelated-history")
+
+	_, err := client.Call("gate.notifyPush", gateNotifyPushParams{
+		GatePath: barePath,
+		OldSHA:   gitZeroSHA,
+		NewSHA:   unrelatedSHA,
+		Ref:      "refs/heads/feature-forged",
+	})
+	if err == nil {
+		t.Fatalf("accepted existing unrelated SHA %s for feature SHA %s; runs=%+v", unrelatedSHA, featureSHA, rm.List())
+	}
+}
+
 func TestGateNotifyPushRPC_RefDeletionCreatesNoRun(t *testing.T) {
 	home := shortTempDir(t)
 	rm, client := startTestDaemon(t, home)

@@ -399,6 +399,16 @@ func validateReceivedPush(ctx context.Context, gatePath, ref, oldSHA, newSHA str
 	if !strings.EqualFold(strings.TrimSpace(string(result.Stdout)), newSHA) {
 		return fmt.Errorf("received ref %s points to %q, not new_sha %q", ref, strings.TrimSpace(string(result.Stdout)), newSHA)
 	}
+	ancestry, err := exec.Run(ctx, exec.Command{
+		Name: "git",
+		Args: []string{"-C", gatePath, "merge-base", "--is-ancestor", newSHA, ref},
+	})
+	if err != nil {
+		return fmt.Errorf("check received ref ancestry: %w", err)
+	}
+	if ancestry.ExitCode != 0 {
+		return fmt.Errorf("new_sha %s is not an ancestor of received ref %s", newSHA, ref)
+	}
 	return nil
 }
 
