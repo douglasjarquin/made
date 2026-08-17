@@ -54,7 +54,6 @@ func bubblewrapReviewArgs(binary string, args []string, reviewPath string, prote
 		"--unshare-pid",
 		"--unshare-ipc",
 		"--unshare-uts",
-		"--unshare-user-try",
 		"--ro-bind", "/", "/",
 		"--bind", "/tmp", "/tmp",
 		"--dev", "/dev",

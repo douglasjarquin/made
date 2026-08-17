@@ -186,7 +186,7 @@ Pull-request GitHub authentication and API failures now remain infrastructure er
 
 The Made CI workflow validates the pinned Go version with race, vet, and pinned lint jobs.
 
-The CI job installs the pinned-environment reviewer containment prerequisite `bubblewrap` before running the Made tests.
+The CI job installs the pinned-environment reviewer containment prerequisite `bubblewrap` and enables its documented setuid execution mode before running the Made tests.
 
 The CI portability fix uses Go's platform-independent Unix-socket mode inspection instead of Darwin-only `stat -f` flags, and clean rebase execution supplies deterministic committer identity, disabled signing, and disabled hooks at the Git boundary.
 
