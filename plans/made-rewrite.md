@@ -1445,12 +1445,12 @@ Historical task claims above remain unchanged.
 
 - [ ] Final validation and delivery: run the Made-only build, race/shuffle test, vet, configured lint, changed-file diagnostics, final branch scope review, review-work/runtime audit, direct branch push, and direct PR creation.
 
-  **References**: `evidence/phase-1-red-made-remediation-continuation.md`, `evidence/phase-2-external-contracts.md`, `evidence/phase-3-lifecycle-durability.md`, and `evidence/phase-4-manual-qa.md`.
+  **References**: `evidence/phase-1-red-made-remediation-continuation.md`, `evidence/phase-2-external-contracts.md`, `evidence/phase-3-lifecycle-durability.md`, `evidence/phase-4-manual-qa.md`, and `evidence/phase-4-final-validation.md`.
 
   **Acceptance Criteria**: The final commit list starts at the exact base SHA; only Made files and linked evidence/plan records are changed; all authorized local validation is green; the PR is open on `cs/made-remediation-continuation`; no default branch push or merge occurs.
 
   **QA Scenarios**: Execute the final Made-only validation commands, inspect the exact full SHA and changed-file list, perform required review audits, and open the direct PR with `gh-axi`.
 
-  **Evidence**: Add the final validation, audit, cleanup, commit, push, and PR receipts under `evidence/` before marking this checkbox complete.
+  **Evidence**: `evidence/phase-4-final-validation.md`, plus final audit, cleanup, commit, push, and PR receipts under `evidence/` before marking this checkbox complete.
 
   **Commit**: YES | Message: `fix(made): complete remediation continuation from exact base` | Files: Made source, Made tests, `plans/made-rewrite.md`, and phase-scoped evidence only.

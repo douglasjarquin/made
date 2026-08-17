@@ -89,6 +89,9 @@ disposable real-binary QA and final validation remain.
 - The isolated Herdr helper probe confirmed named session
   `cs-lab-made-remediation-9714-1438` is running and compatible; final teardown
   remains pending until all validation and delivery work is complete.
+- Final local build, race/shuffle suite, vet, lint, changed-Go-file diagnostics,
+  and diff checks passed; the receipts are in
+  `evidence/phase-4-final-validation.md`.
 - LSP diagnostics for the changed GitHub/CI production files and focused tests
   reported no errors or warnings; one non-blocking `stringsseq` hint remains in
   `internal/pipeline/ci/ci_contract_test.go`.
