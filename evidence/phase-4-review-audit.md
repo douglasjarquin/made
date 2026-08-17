@@ -102,4 +102,4 @@ The branch was pushed only to `origin/cs/made-remediation-continuation`.
 
 The final review artifacts were moved to recoverable temporary storage and are not part of the Made branch.
 
-The review lane source receipt is intentionally bound to `12b83a6649b5e198049754f1cb6427d7b0dc51a0`; the pending follow-up commit contains only this evidence/ledger update and no source or test changes.
+The review lane source receipt is intentionally bound to `12b83a6649b5e198049754f1cb6427d7b0dc51a0`; follow-up commit `e7cb50ab363da748a04f6c47c4a4b4cc7123d614` contains only this evidence/ledger update and no source or test changes.
