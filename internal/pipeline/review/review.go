@@ -165,6 +165,7 @@ func applyAutoFix(ctx context.Context, worktreePath string, finding agent.Findin
 		"-c", "user.name=made-review",
 		"-c", "user.email=made-review@local",
 		"-c", "commit.gpgsign=false",
+		"-c", "core.hooksPath=/dev/null",
 		"commit", "-m", message,
 	}, nil); err != nil {
 		return "", "", fmt.Errorf("git commit: %w", err)
