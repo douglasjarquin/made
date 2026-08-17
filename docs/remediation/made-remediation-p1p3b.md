@@ -96,6 +96,8 @@ The controlled auto-fix Git follow-up is `5e263785b7313523fdeec648ea3475ac9d4465
 
 The repository-hook follow-up is `a81179eae674b45e4086e8d758e8aac36bd4f92c` with subject `fix: disable repository hooks for auto-fixes`.
 
+The clean-filter follow-up is `738cc55b2d4b4dbdaadc05eb351f612be0eafcd5` with subject `fix: neutralize repository clean filters`.
+
 Those follow-ups harden Made home ownership and permissions, private evidence permissions, version-only configuration rejection, disabled-stage representation, environment-injected real Consigliere compatibility testing, final review/API boundaries, bounded configuration and socket input, torn-tail WAL recovery, replacement-safe config reads, exact-cap durable replay, stalled-input resource bounds, review-agent isolation, evidence publication, subprocess timeouts, and public-field redaction.
 
 The implementation acquires the singleton before socket preparation, uses `lstat`, removes only a stale owner-owned Unix socket, rejects regular files, symlinks, and directories, preserves duplicate owners, and authorizes shutdown through the owner-only socket.
@@ -123,6 +125,8 @@ Review setup removes all inherited `GIT_*` injection variables, disables global 
 Controlled auto-fix Git commands use the same bounded execution contract with all ambient `GIT_*` routing and hook configuration removed before status, apply, add, commit, and validation operations.
 
 Auto-fix commits explicitly set `core.hooksPath=/dev/null`, so repository-local hooks cannot execute during controlled mutations.
+
+Controlled Git also neutralizes repository-local clean, smudge, and process filters before any auto-fix status, apply, add, commit, or validation command.
 
 Pending gate submissions are replayed on daemon startup and remain undrained when their external boundary is unavailable.
 
@@ -166,7 +170,7 @@ The Made CI workflow validates the pinned Go version with race, vet, and pinned 
 
 ## Validation evidence
 
-The final executable source SHA covered by this validation section is `a81179eae674b45e4086e8d758e8aac36bd4f92c`.
+The final executable source SHA covered by this validation section is `738cc55b2d4b4dbdaadc05eb351f612be0eafcd5`.
 
 The config descriptor-boundary commit adds replacement-safe reads from one opened descriptor and a regression proving a replaced path cannot bypass the byte cap.
 
@@ -186,6 +190,8 @@ The controlled auto-fix Git follow-up adds the RED/GREEN contract for ambient `G
 
 The repository-hook follow-up adds the RED/GREEN contract for local `core.hooksPath` suppression during auto-fix commits.
 
+The clean-filter follow-up adds the RED/GREEN contract for repository-local executable `filter.*.clean` suppression during staging.
+
 The validation shell exported `GIT_CONFIG_COUNT=1`, `GIT_CONFIG_KEY_0=commit.gpgsign`, `GIT_CONFIG_VALUE_0=false`, `SSH_AUTH_SOCK=`, and `GOTOOLCHAIN=local` for deterministic fixture commits and toolchain selection.
 
 It ran `gofmt -l internal cmd`, `go build ./...`, `go test -count=1 -timeout=10m ./...`, `go test -race -shuffle=on -count=1 -timeout=10m ./...`, `go vet ./...`, and `golangci-lint run --timeout=5m --max-issues-per-linter=0 --max-same-issues=0 ./...` at the exact final source SHA.
@@ -203,6 +209,8 @@ The full validation command was rerun at the final executable SHA `a51dbec4e97a9
 The full validation command was rerun at the final executable SHA `5e263785b7313523fdeec648ea3475ac9d446543`, and `/tmp/made-remediation-p1p3b-5e26378-validation.log` ends with `validation-5e26378=PASS`.
 
 The full validation command was rerun at the final executable SHA `a81179eae674b45e4086e8d758e8aac36bd4f92c`, and `/tmp/made-remediation-p1p3b-a81179e-validation.log` ends with `validation-a81179e=PASS`.
+
+The full validation command was rerun at the final executable SHA `738cc55b2d4b4dbdaadc05eb351f612be0eafcd5`, and `/tmp/made-remediation-p1p3b-738cc55-validation.log` ends with `validation-738cc55=PASS`.
 
 The fresh real-process manual QA transcript for the final executable SHA is `/tmp/made-remediation-p1p3b-manual-e9aa0dd.log`, and its final marker was `manual-qa-e9aa0dd=PASS` at that full SHA.
 
@@ -223,6 +231,10 @@ The fresh controlled auto-fix transcript is `/tmp/made-remediation-p1p3b-manual-
 The fresh real-process manual transcript at the final executable SHA is `/tmp/made-remediation-p1p3b-manual-a81179e.log`, and its final marker was `manual-qa-a81179e=PASS`.
 
 The fresh controlled auto-fix transcript is `/tmp/made-remediation-p1p3b-manual-review-a81179e.log`, and its final marker was `manual-review-a81179e=PASS`.
+
+The fresh real-process manual transcript at the final executable SHA is `/tmp/made-remediation-p1p3b-manual-738cc55.log`, and its final marker was `manual-qa-738cc55=PASS`.
+
+The fresh controlled auto-fix transcript is `/tmp/made-remediation-p1p3b-manual-review-738cc55.log`, and its final marker was `manual-review-738cc55=PASS`.
 
 That exact-SHA scenario used a fresh final binary and task-local Made homes to observe daemon cancellation through a real process and doctor through the real Consigliere script.
 
@@ -248,7 +260,7 @@ The first full validation exposed a WAL replay ordering race where a stale `succ
 
 Serializing snapshot capture with WAL append removed that race, and `go test -shuffle=on -count=10 ./internal/daemon -run '^TestPersistentRunStateIncludesSubmissionAndDecisionData$'` passed afterward.
 
-The final changed-file authority is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..a81179eae674b45e4086e8d758e8aac36bd4f92c`, which reports the Made-only paths from the custody base.
+The final changed-file authority is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..738cc55b2d4b4dbdaadc05eb351f612be0eafcd5`, which reports the Made-only paths from the custody base.
 
 At directory level, the base-to-final diff is limited to `.github/workflows/ci.yml`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `cmd/made`, `docs/remediation`, `internal/agent`, `internal/api`, `internal/config`, `internal/daemon`, `internal/evidence`, `internal/exec`, `internal/github`, `internal/orchestrator`, `internal/pipeline`, `internal/skill`, and `skills/made/SKILL.md`.
 
