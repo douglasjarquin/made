@@ -1443,14 +1443,14 @@ Historical task claims above remain unchanged.
 
   **Evidence**: `evidence/phase-4-manual-qa.md`.
 
-- [ ] Final validation and delivery: run the Made-only build, race/shuffle test, vet, configured lint, changed-file diagnostics, final branch scope review, review-work/runtime audit, direct branch push, and direct PR creation.
+- [x] Final validation and delivery: run the Made-only build, race/shuffle test, vet, configured lint, changed-file diagnostics, final branch scope review, review-work/runtime audit, direct branch push, and direct PR creation.
 
-  **References**: `evidence/phase-1-red-made-remediation-continuation.md`, `evidence/phase-2-external-contracts.md`, `evidence/phase-3-lifecycle-durability.md`, `evidence/phase-4-manual-qa.md`, and `evidence/phase-4-final-validation.md`.
+  **References**: `evidence/phase-1-red-made-remediation-continuation.md`, `evidence/phase-2-external-contracts.md`, `evidence/phase-3-lifecycle-durability.md`, `evidence/phase-4-manual-qa.md`, `evidence/phase-4-final-validation.md`, `evidence/phase-4-review-audit.md`, and `evidence/phase-4-herdr-cleanup.md`.
 
-  **Acceptance Criteria**: The final commit list starts at the exact base SHA; only Made files and linked evidence/plan records are changed; all authorized local validation is green; the PR is open on `cs/made-remediation-continuation`; no default branch push or merge occurs.
+  **Acceptance Criteria**: The final commit list starts at the exact base SHA `3e19ed9d598a68149da5a73949533e8095ca4403`; only Made files and linked evidence/plan records are changed; all authorized local validation is green; PR [#2](https://github.com/douglasjarquin/made/pull/2) is open on `cs/made-remediation-continuation`; no default branch push or merge occurs.
 
-  **QA Scenarios**: Execute the final Made-only validation commands, inspect the exact full SHA and changed-file list, perform required review audits, and open the direct PR with `gh-axi`.
+  **QA Scenarios**: Execute the final Made-only validation commands, inspect the exact full SHA and changed-file list, perform required review audits, push only the direct branch, and open the direct PR with `gh-axi`.
 
-  **Evidence**: `evidence/phase-4-final-validation.md`, plus final audit, cleanup, commit, push, and PR receipts under `evidence/` before marking this checkbox complete.
+  **Evidence**: `evidence/phase-4-final-validation.md`, `evidence/phase-4-review-audit.md`, `evidence/phase-4-herdr-cleanup.md`, the final commit list, the branch push receipt, and PR [#2](https://github.com/douglasjarquin/made/pull/2).
 
   **Commit**: YES | Message: `fix(made): complete remediation continuation from exact base` | Files: Made source, Made tests, `plans/made-rewrite.md`, and phase-scoped evidence only.
