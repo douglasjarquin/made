@@ -10,6 +10,9 @@ import (
 )
 
 func TestRun_CleanRebaseProceeds(t *testing.T) {
+	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+	t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+	t.Setenv("SSH_AUTH_SOCK", "")
 	f := setupFixture(t, "", "", "")
 	wt := f.addWorktree(t)
 	defer func() {

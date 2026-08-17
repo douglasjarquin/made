@@ -29,7 +29,13 @@ func Run(worktreePath, defaultBranch string) (Result, error) {
 }
 
 func RunContext(ctx context.Context, worktreePath, defaultBranch string) (Result, error) {
-	cmd := exec.CommandContext(ctx, "git", "-C", worktreePath, "rebase", defaultBranch)
+	cmd := exec.CommandContext(ctx, "git", "-C", worktreePath,
+		"-c", "user.name=made-rebase",
+		"-c", "user.email=made-rebase@local",
+		"-c", "commit.gpgsign=false",
+		"-c", "core.hooksPath=/dev/null",
+		"rebase", defaultBranch,
+	)
 	out, rebaseErr := cmd.CombinedOutput()
 	if rebaseErr == nil {
 		return Result{
@@ -50,7 +56,7 @@ func RunContext(ctx context.Context, worktreePath, defaultBranch string) (Result
 		if err := abortRebase(ctx, worktreePath); err != nil {
 			return Result{}, fmt.Errorf("rebase: failed without unmerged paths and abort failed: %w", err)
 		}
-		return Result{}, fmt.Errorf("rebase: git rebase %s failed without unmerged paths", defaultBranch)
+		return Result{}, fmt.Errorf("rebase: git rebase %s failed without unmerged paths: %s", defaultBranch, strings.TrimSpace(string(out)))
 	}
 
 	// A halted stage must never leave the worktree mid-rebase, so whatever
