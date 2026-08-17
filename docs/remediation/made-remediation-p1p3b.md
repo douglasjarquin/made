@@ -42,6 +42,8 @@ The stalled-input RED regression timed out against the unbounded reader; `/tmp/m
 
 The security RED regression for direct review-agent edits was a behavioral failure because the fake agent created an untracked worktree file and `review.Run` still returned success.
 
+The final review-isolation RED regression was behavioral because the strict Codex fake received the delivery worktree and the fake reviewer left `unreviewed.txt` in that worktree even though the stage returned an error.
+
 The security RED regressions for evidence publication were behavioral failures because `PublishEvidence` staged a symlink, published an injected secret unchanged, and accepted an injected file beyond the configured retention bound.
 
 The security RED regressions for status and API errors were behavioral failures because public JSON retained an externally supplied token in paths, decisions, submission fields, and the PR URL, while the socket error response retained a token in its handler message.
@@ -84,6 +86,8 @@ The security-boundary follow-up commit is `42ddaef20e59bc42ede3863aecd1d7b2ef59f
 
 The exact-identity follow-up commit is `e9aa0ddd72e38d2625cd37e95e7968d8c1d7dc61` with subject `fix: preserve exact run identities during redaction`.
 
+The review-isolation commit is `6f7d25458177f8b17271a28e7953ebc5c69a9fac` with subject `fix: isolate review agents from delivery worktrees`.
+
 Those follow-ups harden Made home ownership and permissions, private evidence permissions, version-only configuration rejection, disabled-stage representation, environment-injected real Consigliere compatibility testing, final review/API boundaries, bounded configuration and socket input, torn-tail WAL recovery, replacement-safe config reads, exact-cap durable replay, stalled-input resource bounds, review-agent isolation, evidence publication, subprocess timeouts, and public-field redaction.
 
 The implementation acquires the singleton before socket preparation, uses `lstat`, removes only a stale owner-owned Unix socket, rejects regular files, symlinks, and directories, preserves duplicate owners, and authorizes shutdown through the owner-only socket.
@@ -103,6 +107,8 @@ Execution completion is represented separately by `execution_finished`.
 Cancellation requires an exact run ID, is idempotent for an already canceled run, waits for cooperative execution to finish at the CLI boundary, and refuses unknown or unrelated runs.
 
 Restored queued, running, and awaiting-review snapshots are reconciled to durable failed state after a daemon restart because no worker can safely resume execution without a durable work specification.
+
+Review agents run against a detached clone made without local hardlinks, with the exact source HEAD verified before launch, the clone and Git metadata made non-writable, escaping symlinks rejected, and delivery-path Git environment variables removed.
 
 Pending gate submissions are replayed on daemon startup and remain undrained when their external boundary is unavailable.
 
@@ -146,7 +152,7 @@ The Made CI workflow validates the pinned Go version with race, vet, and pinned 
 
 ## Validation evidence
 
-The final executable source SHA covered by this validation section is `e9aa0ddd72e38d2625cd37e95e7968d8c1d7dc61`.
+The final executable source SHA covered by this validation section is `6f7d25458177f8b17271a28e7953ebc5c69a9fac`.
 
 The config descriptor-boundary commit adds replacement-safe reads from one opened descriptor and a regression proving a replaced path cannot bypass the byte cap.
 
@@ -158,6 +164,8 @@ The security-boundary commit rejects direct agent worktree edits, filters secret
 
 The exact-identity follow-up preserves valid run IDs, repository identity, refs, and SHA fields while still redacting untrusted messages, paths, decisions, event labels, PR URLs, and errors, and it rejects symlinked configured evidence roots before publication.
 
+The review-isolation commit adds the final RED/GREEN contract for the supported Codex invocation, delivery-worktree preservation, detached exact-HEAD review input, non-writable review files, and scrubbed inherited Git path state.
+
 The validation shell exported `GIT_CONFIG_COUNT=1`, `GIT_CONFIG_KEY_0=commit.gpgsign`, `GIT_CONFIG_VALUE_0=false`, `SSH_AUTH_SOCK=`, and `GOTOOLCHAIN=local` for deterministic fixture commits and toolchain selection.
 
 It ran `gofmt -l internal cmd`, `go build ./...`, `go test -count=1 -timeout=10m ./...`, `go test -race -shuffle=on -count=1 -timeout=10m ./...`, `go vet ./...`, and `golangci-lint run --timeout=5m --max-issues-per-linter=0 --max-same-issues=0 ./...` at the exact final source SHA.
@@ -168,9 +176,15 @@ The full validation transcript for the unchanged executable ancestor is `/tmp/ma
 
 The same full validation command was rerun after the exact-identity follow-up at executable SHA `e9aa0ddd72e38d2625cd37e95e7968d8c1d7dc61`, and `/tmp/made-remediation-p1p3b-e9aa0dd-validation.log` ends with `validation-e9aa0dd=PASS`.
 
+The full validation command was rerun at the final executable SHA `6f7d25458177f8b17271a28e7953ebc5c69a9fac`, and `/tmp/made-remediation-p1p3b-6f7d254-validation.log` ends with `validation-6f7d254=PASS`.
+
 The fresh real-process manual QA transcript for the final executable SHA is `/tmp/made-remediation-p1p3b-manual-e9aa0dd.log`, and its final marker was `manual-qa-e9aa0dd=PASS` at that full SHA.
 
 The exact current lifecycle and restart contract transcript is `/tmp/made-remediation-p1p3b-manual-contract-e9aa0dd.log`, and its final marker was `manual-contract-e9aa0dd=PASS`.
+
+The fresh real-process manual transcript at the final executable SHA is `/tmp/made-remediation-p1p3b-manual-6f7d254.log`, and its final marker was `manual-qa-6f7d254=PASS`.
+
+The fresh review-isolation manual contract transcript is `/tmp/made-remediation-p1p3b-manual-review-6f7d254.log`, and its final marker was `manual-review-6f7d254=PASS`.
 
 That exact-SHA scenario used a fresh final binary and task-local Made homes to observe daemon cancellation through a real process and doctor through the real Consigliere script.
 
@@ -196,7 +210,7 @@ The first full validation exposed a WAL replay ordering race where a stale `succ
 
 Serializing snapshot capture with WAL append removed that race, and `go test -shuffle=on -count=10 ./internal/daemon -run '^TestPersistentRunStateIncludesSubmissionAndDecisionData$'` passed afterward.
 
-The final changed-file authority is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..e9aa0ddd72e38d2625cd37e95e7968d8c1d7dc61`, which reports the Made-only paths from the custody base.
+The final changed-file authority is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..6f7d25458177f8b17271a28e7953ebc5c69a9fac`, which reports the Made-only paths from the custody base.
 
 At directory level, the base-to-final diff is limited to `.github/workflows/ci.yml`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `cmd/made`, `docs/remediation`, `internal/agent`, `internal/api`, `internal/config`, `internal/daemon`, `internal/evidence`, `internal/exec`, `internal/github`, `internal/orchestrator`, `internal/pipeline`, `internal/skill`, and `skills/made/SKILL.md`.
 
