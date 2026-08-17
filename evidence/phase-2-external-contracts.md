@@ -83,6 +83,6 @@ adapter, strict fake, and focused contract tests.
 
 Result: no errors or warnings were reported.
 
-The CI contract test emitted one non-blocking `stringsseq` efficiency hint at
-`internal/pipeline/ci/ci_contract_test.go:56`; it does not affect correctness
-or the focused GREEN result.
+The initial focused CI diagnostic emitted one non-blocking `stringsseq`
+efficiency hint at `internal/pipeline/ci/ci_contract_test.go:56`.
+That hint was cleared before the final all-changed-Go-file diagnostic pass.

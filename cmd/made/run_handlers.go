@@ -38,9 +38,7 @@ func runSubmitHandler(rm *daemon.RunManager) api.HandlerFunc {
 		if existing, ok := rm.FindSubmission(submission); ok {
 			return newStatusReport(existing), nil
 		}
-		snapshot, err := rm.SubmitSubmission(submission, func(context.Context, func(daemon.Event)) error {
-			return nil
-		})
+		snapshot, err := rm.SubmitSubmission(submission, nil)
 		if err != nil {
 			return nil, fmt.Errorf("run.submit: %w", err)
 		}

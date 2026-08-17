@@ -53,8 +53,9 @@ The real binary returned the exact queued identity before drain with
 `run_id=run-1`, `state=queued`, the supplied input SHA, submission ID, gate
 path, and all nine ordered pending stages.
 
-The immediate exact-ID status returned `state=succeeded` and
-`execution_finished=true` without changing the identity fields.
+The immediate exact-ID status remained `state=queued` with
+`execution_finished=false` and the same identity fields, proving the public
+surface spools work without claiming that remediation executed.
 
 Command:
 
@@ -73,7 +74,7 @@ made: status is obsolete; use made run status <exact-run-id>
 
 The daemon was stopped through the same disposable Made home, restarted, and
 the exact `run-1` status was restored from durable state with
-`state=succeeded` and the same SHA/submission identity.
+`state=queued` and the same SHA/submission identity.
 
 ## Doctor JSON
 

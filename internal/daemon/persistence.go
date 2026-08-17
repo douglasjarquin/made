@@ -6,12 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -301,9 +301,7 @@ func cloneSnapshot(snapshot RunSnapshot) RunSnapshot {
 	copy.EvidenceRefs = append([]string(nil), snapshot.EvidenceRefs...)
 	if snapshot.Decisions != nil {
 		copy.Decisions = make(map[string]string, len(snapshot.Decisions))
-		for key, value := range snapshot.Decisions {
-			copy.Decisions[key] = value
-		}
+		maps.Copy(copy.Decisions, snapshot.Decisions)
 	}
 	return copy
 }
@@ -332,7 +330,7 @@ func OpenRunManager(stateDir string) (*RunManager, error) {
 		_ = store.close(nil, 0)
 		return nil, err
 	}
-	atomic.StoreUint64(&rm.counter, counter)
+	rm.counter.Store(counter)
 	for _, snapshot := range runs {
 		if snapshot.Status == RunRunning {
 			snapshot.Status = RunFailed
@@ -368,7 +366,7 @@ func (rm *RunManager) Close() error {
 		return nil
 	}
 	runs := rm.List()
-	return rm.store.close(runs, atomic.LoadUint64(&rm.counter))
+	return rm.store.close(runs, rm.counter.Load())
 }
 
 func (rm *RunManager) persistSnapshotLocked(snapshot RunSnapshot) error {
@@ -379,7 +377,7 @@ func (rm *RunManager) persistSnapshotLocked(snapshot RunSnapshot) error {
 		return err
 	}
 	if rm.store.shouldCompact() {
-		return rm.store.compact(rm.snapshotsLocked(), atomic.LoadUint64(&rm.counter))
+		return rm.store.compact(rm.snapshotsLocked(), rm.counter.Load())
 	}
 	return nil
 }
@@ -418,6 +416,7 @@ func (rm *RunManager) UpdateDecision(id, stage, decision string) error {
 	if !ok {
 		return fmt.Errorf("daemon: no run %q", id)
 	}
+	previous := r.snapshot()
 	r.update(func(snapshot *RunSnapshot) {
 		if snapshot.Decisions == nil {
 			snapshot.Decisions = make(map[string]string)
@@ -427,5 +426,8 @@ func (rm *RunManager) UpdateDecision(id, stage, decision string) error {
 	rm.mu.Lock()
 	err := rm.persistSnapshotLocked(r.snapshot())
 	rm.mu.Unlock()
+	if err != nil {
+		r.replace(previous)
+	}
 	return err
 }

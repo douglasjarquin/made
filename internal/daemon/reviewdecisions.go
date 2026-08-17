@@ -60,14 +60,15 @@ func (d *ReviewDecisions) Set(runID, stage, decision string) error {
 	}
 	d.entries[key] = decision
 	waiters := d.waiters[key]
-	delete(d.waiters, key)
-	d.mu.Unlock()
-
 	if d.persist != nil {
 		if err := d.persist(runID, stage, decision); err != nil {
+			delete(d.entries, key)
+			d.mu.Unlock()
 			return fmt.Errorf("daemon: persist review decision: %w", err)
 		}
 	}
+	delete(d.waiters, key)
+	d.mu.Unlock()
 
 	for _, ch := range waiters {
 		ch <- decision

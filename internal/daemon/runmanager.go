@@ -36,8 +36,8 @@ type RunSnapshot struct {
 	GatePath          string            `json:"gate_path,omitempty"`
 	Status            RunStatus         `json:"state"`
 	QueuedAt          time.Time         `json:"queued_at"`
-	StartedAt         time.Time         `json:"started_at,omitempty"`
-	EndedAt           time.Time         `json:"ended_at,omitempty"`
+	StartedAt         time.Time         `json:"started_at"`
+	EndedAt           time.Time         `json:"ended_at"`
 	Err               error             `json:"-"`
 	Error             string            `json:"error,omitempty"`
 	Message           string            `json:"message,omitempty"`
@@ -77,6 +77,12 @@ func (r *run) update(fn func(*RunSnapshot)) {
 	r.mu.Unlock()
 }
 
+func (r *run) replace(snapshot RunSnapshot) {
+	r.mu.Lock()
+	r.snap = cloneSnapshot(snapshot)
+	r.mu.Unlock()
+}
+
 type queuedJob struct {
 	run  *run
 	work WorkFunc
@@ -100,7 +106,7 @@ type RunManager struct {
 	mu      sync.Mutex
 	repos   map[string]*repoQueue
 	runs    map[string]*run
-	counter uint64
+	counter atomic.Uint64
 }
 
 func NewRunManager() *RunManager {
@@ -132,7 +138,7 @@ func (rm *RunManager) signalActivity() {
 }
 
 func (rm *RunManager) NewRunID() string {
-	n := atomic.AddUint64(&rm.counter, 1)
+	n := rm.counter.Add(1)
 	return fmt.Sprintf("run-%d", n)
 }
 
@@ -169,6 +175,9 @@ func (rm *RunManager) SubmitSubmission(submission RunSubmission, work WorkFunc) 
 		rm.repos[submission.Repo] = rq
 	}
 	rm.mu.Unlock()
+	if work == nil {
+		return queuedSnapshot, nil
+	}
 
 	rq.mu.Lock()
 	rq.pending = append(rq.pending, &queuedJob{run: r, work: work})
