@@ -87,7 +87,7 @@ func reviewEnvironment(extra []string) []string {
 	env := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		key, _, ok := strings.Cut(entry, "=")
-		if !ok || sensitiveEnvironmentKey(key) {
+		if !ok || !reviewEnvironmentKey(key) {
 			continue
 		}
 		env = append(env, entry)
@@ -95,14 +95,13 @@ func reviewEnvironment(extra []string) []string {
 	return env
 }
 
-func sensitiveEnvironmentKey(key string) bool {
-	key = strings.ToUpper(key)
-	for _, fragment := range []string{"TOKEN", "SECRET", "PASSWORD", "PRIVATE", "API_KEY", "AUTH", "CREDENTIAL", "SSH_", "AWS_", "AZURE_", "GITHUB", "GH_"} {
-		if strings.Contains(key, fragment) {
-			return true
-		}
+func reviewEnvironmentKey(key string) bool {
+	switch key {
+	case "PATH", "HOME", "TMPDIR", "LANG", "TERM", "USER", "LOGNAME", "SHELL", "PWD", "OLDPWD", "NO_COLOR", "CI",
+		"FAKE_AGENT_KIND", "FAKE_AGENT_SCENARIO", "FAKE_AGENT_LOG_FILE", "FAKE_AGENT_EXIT_CODE":
+		return true
 	}
-	return false
+	return strings.HasPrefix(key, "LC_")
 }
 
 func writeCodexSchema(path string) error {

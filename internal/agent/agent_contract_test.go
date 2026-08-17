@@ -58,6 +58,10 @@ func TestSpawn_DoesNotPassSensitiveEnvironmentToCodex(t *testing.T) {
 			"FAKE_AGENT_KIND=codex",
 			"FAKE_AGENT_SCENARIO=" + scenarioPath,
 			"MADE_TEST_SECRET=must-not-reach-review-agent",
+			"DATABASE_URL=must-not-reach-review-agent",
+			"COOKIE=must-not-reach-review-agent",
+			"JWT_KEY=must-not-reach-review-agent",
+			"KUBECONFIG=/must-not-reach-review-agent",
 		},
 	}); err != nil {
 		t.Fatalf("Spawn exposed sensitive environment: %v", err)

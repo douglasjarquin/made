@@ -22,9 +22,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "fakeagent: invalid invocation: %v\n", err)
 		os.Exit(2)
 	}
-	if os.Getenv("MADE_TEST_SECRET") != "" {
-		fmt.Fprintln(os.Stderr, "fakeagent: sensitive environment was exposed")
-		os.Exit(3)
+	for _, key := range []string{"MADE_TEST_SECRET", "DATABASE_URL", "COOKIE", "JWT_KEY", "KUBECONFIG"} {
+		if os.Getenv(key) != "" {
+			fmt.Fprintf(os.Stderr, "fakeagent: sensitive environment %s was exposed\n", key)
+			os.Exit(3)
+		}
 	}
 
 	if logPath := os.Getenv("FAKE_AGENT_LOG_FILE"); logPath != "" {
