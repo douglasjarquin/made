@@ -43,3 +43,37 @@ runtime audit, and real disposable binary receipts are recorded in
 The review lanes wrote raw reports outside the tracked evidence set.
 Those raw artifacts were moved to recoverable temporary storage and are not
 part of the Made branch.
+
+## Direct PR delivery receipt
+
+The branch was pushed only to `origin/cs/made-remediation-continuation`.
+
+The direct PR was opened with `gh-axi api` REST fallback after the normal
+GraphQL create path reported rate limiting.
+
+```text
+gh-axi api POST /repos/douglasjarquin/made/pulls
+```
+
+PR URL:
+`https://github.com/douglasjarquin/made/pull/2`
+
+The final read-only PR verification returned:
+
+```text
+state=open
+base=main
+base_sha=34d44be504291482d973c65bd427ba964df5e0e9
+head=cs/made-remediation-continuation
+head_sha=c661a43444234cc243e687ce3d6892440ba7221c
+merged=false
+checks.total_count=0
+```
+
+GitHub currently reports `mergeable=false` and
+`mergeable_state=dirty`.
+This is an explicit residual for the configured merge authority.
+The branch was not rebased onto the moving default branch because the task
+requires preserving exact base custody.
+
+No default-branch push, merge, auto-merge, or remote branch deletion occurred.
