@@ -61,7 +61,7 @@ func bubblewrapReviewArgs(binary string, args []string, reviewPath string, prote
 		"--ro-bind", reviewPath, reviewPath,
 	}
 	for _, path := range paths {
-		commandArgs = append(commandArgs, "--tmpfs", path)
+		commandArgs = append(commandArgs, "--perms", "0555", "--tmpfs", path)
 	}
 	commandArgs = append(commandArgs, "--chdir", reviewPath)
 	commandArgs = append(commandArgs, "--", binary)
