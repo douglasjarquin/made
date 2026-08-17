@@ -100,7 +100,7 @@ func startDaemon(ctx context.Context, home, lockPath string, idle time.Duration,
 	}
 	reviewStore := daemon.NewReviewDecisionsForManager(rm)
 	srv := api.NewServer(api.SocketPath(home))
-	registerDaemonHandlers(srv, rm, reviewStore)
+	registerDaemonHandlers(srv, rm, reviewStore, home)
 
 	done := make(chan error, 1)
 
@@ -169,15 +169,15 @@ func isTerminalRunStatus(s daemon.RunStatus) bool {
 
 const debugHandlersEnv = "MADE_DEBUG_HANDLERS"
 
-func registerDaemonHandlers(srv *api.Server, rm *daemon.RunManager, store *daemon.ReviewDecisions) {
+func registerDaemonHandlers(srv *api.Server, rm *daemon.RunManager, store *daemon.ReviewDecisions, home string) {
 	srv.Handle("run.submit", runSubmitHandler(rm))
 	srv.Handle("run.status", statusHandler(rm))
 	srv.Handle("run.list", runListHandler(rm))
 	srv.Handle("run.cancel", runCancelHandler(rm))
 	srv.Handle("review.decide", reviewDecideHandler(store))
 	srv.Handle("review.decision", reviewDecisionHandler(store))
-	srv.Handle("gate.admitPush", gateAdmitPushHandler())
-	srv.Handle("gate.notifyPush", gateNotifyPushHandler(rm, store))
+	srv.Handle("gate.admitPush", gateAdmitPushHandler(home))
+	srv.Handle("gate.notifyPush", gateNotifyPushHandler(rm, store, home))
 	if os.Getenv(debugHandlersEnv) == "1" {
 		srv.Handle("debug.submitCancellableRun", debugSubmitCancellableRunHandler(rm))
 	}
@@ -199,7 +199,7 @@ type gateAdmitPushResult struct {
 // daemon recognizes" - a real, valid bare repo on disk. It deliberately does
 // not touch RunManager; creating a run is the orchestrator's job, not
 // admission's.
-func gateAdmitPushHandler() api.HandlerFunc {
+func gateAdmitPushHandler(home string) api.HandlerFunc {
 	return func(_ context.Context, params json.RawMessage) (any, error) {
 		var p gateAdmitPushParams
 		if err := json.Unmarshal(params, &p); err != nil {
@@ -208,11 +208,45 @@ func gateAdmitPushHandler() api.HandlerFunc {
 		if p.GatePath == "" {
 			return nil, fmt.Errorf("gate.admitPush: gate_path is required")
 		}
+		if err := validateManagedGatePath(home, p.GatePath); err != nil {
+			return nil, fmt.Errorf("gate.admitPush: %w", err)
+		}
 		if err := validateBareGateRepo(p.GatePath); err != nil {
 			return nil, fmt.Errorf("gate.admitPush: %w", err)
 		}
 		return gateAdmitPushResult{OK: true}, nil
 	}
+}
+
+func validateManagedGatePath(home, gatePath string) error {
+	homeResolved, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		return fmt.Errorf("resolve Made home: %w", err)
+	}
+	gateResolved, err := filepath.EvalSymlinks(gatePath)
+	if err != nil {
+		return fmt.Errorf("resolve gate path: %w", err)
+	}
+	rel, err := filepath.Rel(homeResolved, gateResolved)
+	if err != nil {
+		return fmt.Errorf("relate gate to Made home: %w", err)
+	}
+	parts := strings.Split(rel, string(filepath.Separator))
+	if len(parts) != 3 || parts[0] != "gates" || parts[2] != "gate.git" {
+		return fmt.Errorf("gate path must be a managed MADE_HOME/gates/<hash>/gate.git path")
+	}
+	if len(parts[1]) != 64 {
+		return fmt.Errorf("gate path hash has invalid length")
+	}
+	for _, char := range parts[1] {
+		if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f')) {
+			return fmt.Errorf("gate path hash is not lowercase hexadecimal")
+		}
+	}
+	if filepath.Clean(gateResolved) != filepath.Clean(filepath.Join(homeResolved, rel)) {
+		return fmt.Errorf("gate path must not contain symlinks")
+	}
+	return nil
 }
 
 func validateBareGateRepo(path string) error {
@@ -264,7 +298,7 @@ type gateNotifyPushResult struct {
 // still-queued run for the same branch before submitting this push's own
 // run, so a rapid second push always wins over a first one that hasn't
 // started yet - never over one already running.
-func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.ReviewDecisions) api.HandlerFunc {
+func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.ReviewDecisions, home string) api.HandlerFunc {
 	return func(ctx context.Context, params json.RawMessage) (any, error) {
 		var p gateNotifyPushParams
 		if err := json.Unmarshal(params, &p); err != nil {
@@ -272,6 +306,9 @@ func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.Review
 		}
 		if p.GatePath == "" || p.Ref == "" || p.NewSHA == "" {
 			return nil, fmt.Errorf("gate.notifyPush: gate_path, ref, and new_sha are required")
+		}
+		if err := validateManagedGatePath(home, p.GatePath); err != nil {
+			return nil, fmt.Errorf("gate.notifyPush: %w", err)
 		}
 
 		branchCtx, cancel := context.WithTimeout(ctx, gateNotifyPushDefaultBranchTimeout)

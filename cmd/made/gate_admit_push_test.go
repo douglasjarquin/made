@@ -48,13 +48,27 @@ func TestGateAdmitPushRPC_ValidBareRepoAdmitted(t *testing.T) {
 	home := shortTempDir(t)
 	_, client := startTestDaemon(t, home)
 
-	barePath := filepath.Join(shortTempDir(t), "gate.git")
+	barePath := gitgate.GatePath(home, "fixture/repo")
 	if err := gitgate.InitBare(barePath); err != nil {
 		t.Fatalf("InitBare: %v", err)
 	}
 
 	if _, err := client.Call("gate.admitPush", gateAdmitPushParams{GatePath: barePath}); err != nil {
 		t.Fatalf("gate.admitPush: %v", err)
+	}
+}
+
+func TestGateAdmitPushRPC_RejectsBareRepoOutsideMadeHome(t *testing.T) {
+	home := shortTempDir(t)
+	_, client := startTestDaemon(t, home)
+
+	barePath := filepath.Join(shortTempDir(t), "unmanaged.git")
+	if err := gitgate.InitBare(barePath); err != nil {
+		t.Fatalf("InitBare: %v", err)
+	}
+
+	if _, err := client.Call("gate.admitPush", gateAdmitPushParams{GatePath: barePath}); err == nil {
+		t.Fatal("gate.admitPush accepted a bare repository outside MADE_HOME")
 	}
 }
 
@@ -84,7 +98,7 @@ func TestGateAdmitPushCLI_ValidGateExitsZero(t *testing.T) {
 	t.Setenv("MADE_HOME", home)
 	_, _ = startTestDaemon(t, home)
 
-	barePath := filepath.Join(shortTempDir(t), "gate.git")
+	barePath := gitgate.GatePath(home, "fixture/repo")
 	if err := gitgate.InitBare(barePath); err != nil {
 		t.Fatalf("InitBare: %v", err)
 	}
