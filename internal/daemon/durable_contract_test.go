@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -93,6 +94,21 @@ func TestRunStoreIgnoresTornFinalRecord(t *testing.T) {
 	}
 }
 
+func TestRunStoreReopensExactCapRecord(t *testing.T) {
+	path := t.TempDir() + "/runs.wal"
+	data := exactRunStoreRecord(t)
+	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+		t.Fatalf("write exact-cap WAL record: %v", err)
+	}
+	_, snapshots, err := OpenRunStore(path)
+	if err != nil {
+		t.Fatalf("OpenRunStore exact-cap record: %v", err)
+	}
+	if _, ok := snapshots["123e4567-e89b-12d3-a456-426614174008"]; !ok {
+		t.Fatalf("exact-cap WAL record was not replayed: %+v", snapshots)
+	}
+}
+
 func TestGateSpoolIgnoresTornFinalRecord(t *testing.T) {
 	path := t.TempDir() + "/gate.spool"
 	spool, err := OpenGateSpool(path)
@@ -111,6 +127,61 @@ func TestGateSpoolIgnoresTornFinalRecord(t *testing.T) {
 	if pending := reopened.Pending(); len(pending) != 1 || pending[0] != submission {
 		t.Fatalf("valid spool record was lost after torn tail: %+v", pending)
 	}
+}
+
+func TestGateSpoolReopensExactCapRecord(t *testing.T) {
+	path := t.TempDir() + "/gate.spool"
+	data := exactGateSpoolRecord(t)
+	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+		t.Fatalf("write exact-cap spool record: %v", err)
+	}
+	spool, err := OpenGateSpool(path)
+	if err != nil {
+		t.Fatalf("OpenGateSpool exact-cap record: %v", err)
+	}
+	if !spool.HasPending() {
+		t.Fatal("exact-cap spool record was not replayed")
+	}
+}
+
+func exactRunStoreRecord(t *testing.T) []byte {
+	t.Helper()
+	snapshot := RunSnapshot{ID: "123e4567-e89b-12d3-a456-426614174008", Status: RunSucceeded, Message: "x"}
+	record := storeRecord{Version: runStoreRecordVersion, Kind: "snapshot", Snapshot: persistSnapshot(snapshot)}
+	data, err := json.Marshal(record)
+	if err != nil {
+		t.Fatalf("marshal base WAL record: %v", err)
+	}
+	snapshot.Message = strings.Repeat("x", maxRunStoreRecordBytes-len(data)+1)
+	record.Snapshot = persistSnapshot(snapshot)
+	data, err = json.Marshal(record)
+	if err != nil {
+		t.Fatalf("marshal exact-cap WAL record: %v", err)
+	}
+	if len(data) != maxRunStoreRecordBytes {
+		t.Fatalf("exact WAL record length = %d, want %d", len(data), maxRunStoreRecordBytes)
+	}
+	return data
+}
+
+func exactGateSpoolRecord(t *testing.T) []byte {
+	t.Helper()
+	submission := GateSubmission{Gate: "gate", Ref: "refs/heads/main", SHA: "abc", RunID: "run"}
+	record := spoolRecord{Kind: "enqueue", Submission: submission}
+	data, err := json.Marshal(record)
+	if err != nil {
+		t.Fatalf("marshal base spool record: %v", err)
+	}
+	submission.Gate = strings.Repeat("g", maxGateSpoolRecordBytes-len(data)+len(submission.Gate))
+	record.Submission = submission
+	data, err = json.Marshal(record)
+	if err != nil {
+		t.Fatalf("marshal exact-cap spool record: %v", err)
+	}
+	if len(data) != maxGateSpoolRecordBytes {
+		t.Fatalf("exact spool record length = %d, want %d", len(data), maxGateSpoolRecordBytes)
+	}
+	return data
 }
 
 func appendBytes(t *testing.T, path string, data []byte) {

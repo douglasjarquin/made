@@ -119,17 +119,21 @@ func OpenRunStore(path string) (*RunStore, map[string]RunSnapshot, error) {
 }
 
 func readRecordLine(reader *bufio.Reader, maxBytes int) ([]byte, error) {
+	maxLineBytes := maxBytes + 1
 	var line []byte
 	for {
 		chunk, err := reader.ReadSlice('\n')
 		line = append(line, chunk...)
-		if len(line) > maxBytes {
+		if len(line) > maxLineBytes {
 			return nil, fmt.Errorf("record exceeds %d bytes", maxBytes)
 		}
 		if err == bufio.ErrBufferFull {
 			continue
 		}
 		if err == io.EOF {
+			if len(line) > maxBytes {
+				return nil, fmt.Errorf("record exceeds %d bytes", maxBytes)
+			}
 			return nil, io.EOF
 		}
 		if err != nil {
