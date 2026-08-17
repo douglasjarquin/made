@@ -194,7 +194,7 @@ func persistSnapshot(snapshot RunSnapshot) persistedSnapshot {
 		Findings: findings, Decisions: decisions,
 		PRURL: evidence.RedactString(snapshot.PRURL), SupersededBy: evidence.RedactString(snapshot.SupersededBy),
 		CancelRequested:  snapshot.CancelRequested,
-		SubmissionEvents: append([]SubmissionEvent(nil), snapshot.SubmissionEvents...),
+		SubmissionEvents: redactSubmissionEvents(snapshot.SubmissionEvents),
 		Stages:           append([]StageResult(nil), snapshot.Stages...),
 		PendingFindings:  pendingFindings,
 		Finalized:        snapshot.finalized,
@@ -215,7 +215,7 @@ func restoreSnapshot(snapshot persistedSnapshot) RunSnapshot {
 		Message: evidence.RedactString(snapshot.Message), Findings: redactFindings(snapshot.Findings),
 		Decisions: snapshot.Decisions, PRURL: snapshot.PRURL,
 		SupersededBy: snapshot.SupersededBy, CancelRequested: snapshot.CancelRequested,
-		SubmissionEvents: append([]SubmissionEvent(nil), snapshot.SubmissionEvents...),
+		SubmissionEvents: redactSubmissionEvents(snapshot.SubmissionEvents),
 		Stages:           append([]StageResult(nil), snapshot.Stages...),
 		PendingFindings:  redactPendingFindings(snapshot.PendingFindings),
 		finalized:        snapshot.Finalized,
@@ -240,6 +240,9 @@ func redactFindings(values []RunFinding) []RunFinding {
 	redacted := make([]RunFinding, len(values))
 	for i, value := range values {
 		value.Message = evidence.RedactString(value.Message)
+		for j, path := range value.Paths {
+			value.Paths[j] = evidence.RedactString(path)
+		}
 		redacted[i] = value
 	}
 	return redacted
@@ -251,7 +254,24 @@ func redactPendingFindings(values []AskUserFinding) []AskUserFinding {
 	}
 	redacted := make([]AskUserFinding, len(values))
 	for i, value := range values {
+		value.Stage = evidence.RedactString(value.Stage)
 		value.Message = evidence.RedactString(value.Message)
+		redacted[i] = value
+	}
+	return redacted
+}
+
+func redactSubmissionEvents(values []SubmissionEvent) []SubmissionEvent {
+	if values == nil {
+		return nil
+	}
+	redacted := make([]SubmissionEvent, len(values))
+	for i, value := range values {
+		value.Gate = evidence.RedactString(value.Gate)
+		value.Ref = evidence.RedactString(value.Ref)
+		value.InputSHA = evidence.RedactString(value.InputSHA)
+		value.OutputSHA = evidence.RedactString(value.OutputSHA)
+		value.Kind = evidence.RedactString(value.Kind)
 		redacted[i] = value
 	}
 	return redacted

@@ -12,6 +12,7 @@ import (
 
 func TestSpawn_CodexUsesSupportedExecStructuredContract(t *testing.T) {
 	worktree := t.TempDir()
+	t.Setenv("MADE_REVIEW_SECRET", "must-not-reach-agent")
 	logPath := filepath.Join(t.TempDir(), "invocation.log")
 	script := filepath.Join(t.TempDir(), "strict-codex")
 	contents := strings.Join([]string{
@@ -33,6 +34,7 @@ func TestSpawn_CodexUsesSupportedExecStructuredContract(t *testing.T) {
 		"done",
 		"[ \"$has_json\" -eq 1 ]",
 		"[ \"$has_schema\" -eq 1 ]",
+		"test -z \"${MADE_REVIEW_SECRET:-}\"",
 		"printf '%s\\n' '{\"findings\":[]}'",
 		"",
 	}, "\n")

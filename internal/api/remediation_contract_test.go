@@ -106,6 +106,21 @@ func TestServer_RefusesExistingNonSocketPaths(t *testing.T) {
 	}
 }
 
+func TestServer_RedactsHandlerErrors(t *testing.T) {
+	server, client := startTestServer(t)
+	server.Handle("secret-error", func(context.Context, json.RawMessage) (any, error) {
+		return nil, errors.New("request failed: token=handler-secret")
+	})
+
+	_, err := client.Call("secret-error", nil)
+	if err == nil {
+		t.Fatal("expected handler error")
+	}
+	if strings.Contains(err.Error(), "handler-secret") {
+		t.Fatalf("API error response retained sensitive handler text: %v", err)
+	}
+}
+
 func TestServerRejectsOversizedRequestLine(t *testing.T) {
 	path := filepath.Join(tempSocketDir(t), "daemon.sock")
 	server := api.NewServer(path)

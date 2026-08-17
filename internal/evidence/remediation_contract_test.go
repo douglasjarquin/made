@@ -80,6 +80,65 @@ func TestInRepoStore_PublishesEvidenceInAccessibleCommit(t *testing.T) {
 	}
 }
 
+func TestInRepoStore_PublishRejectsSymlinkedEvidenceFile(t *testing.T) {
+	repo := initTargetRepo(t)
+	store := &evidence.InRepoStore{RepoPath: repo, Dir: ".made/evidence"}
+	if err := store.WriteEvidence("run-symlink", map[string][]byte{"safe.log": []byte("safe\n")}); err != nil {
+		t.Fatalf("WriteEvidence: %v", err)
+	}
+	outside := filepath.Join(t.TempDir(), "outside.log")
+	if err := os.WriteFile(outside, []byte("token=outside-secret\n"), 0o600); err != nil {
+		t.Fatalf("write outside file: %v", err)
+	}
+	leakPath := filepath.Join(repo, ".made", "evidence", "run-symlink", "leak.log")
+	if err := os.Symlink(outside, leakPath); err != nil {
+		t.Fatalf("create evidence symlink: %v", err)
+	}
+
+	if err := store.PublishEvidence("run-symlink"); err == nil {
+		t.Fatal("PublishEvidence followed or published a symlinked evidence file")
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Fatalf("outside evidence target disappeared: %v", err)
+	}
+}
+
+func TestInRepoStore_PublishRedactsInjectedEvidence(t *testing.T) {
+	repo := initTargetRepo(t)
+	store := &evidence.InRepoStore{RepoPath: repo, Dir: ".made/evidence", RetentionBytes: 128}
+	if err := store.WriteEvidence("run-injected", map[string][]byte{"safe.log": []byte("safe\n")}); err != nil {
+		t.Fatalf("WriteEvidence: %v", err)
+	}
+	injectedPath := filepath.Join(repo, ".made", "evidence", "run-injected", "injected.log")
+	if err := os.WriteFile(injectedPath, []byte("token=injected-secret\n"), 0o600); err != nil {
+		t.Fatalf("write injected evidence: %v", err)
+	}
+
+	if err := store.PublishEvidence("run-injected"); err != nil {
+		t.Fatalf("PublishEvidence: %v", err)
+	}
+	data := run(t, repo, "git", "show", "HEAD:.made/evidence/run-injected/injected.log")
+	if strings.Contains(data, "injected-secret") {
+		t.Fatalf("published injected evidence retained secret: %q", data)
+	}
+}
+
+func TestInRepoStore_PublishRejectsOversizedInjectedEvidence(t *testing.T) {
+	repo := initTargetRepo(t)
+	store := &evidence.InRepoStore{RepoPath: repo, Dir: ".made/evidence", RetentionBytes: 16}
+	if err := store.WriteEvidence("run-large", map[string][]byte{"safe.log": []byte("safe\n")}); err != nil {
+		t.Fatalf("WriteEvidence: %v", err)
+	}
+	largePath := filepath.Join(repo, ".made", "evidence", "run-large", "large.log")
+	if err := os.WriteFile(largePath, []byte(strings.Repeat("x", 17)), 0o600); err != nil {
+		t.Fatalf("write oversized evidence: %v", err)
+	}
+
+	if err := store.PublishEvidence("run-large"); err == nil {
+		t.Fatal("PublishEvidence accepted evidence beyond the configured retention bound")
+	}
+}
+
 func runEvidenceGit(t *testing.T, dir string, args ...string) []byte {
 	t.Helper()
 	cmd := exec.Command("git", args...)

@@ -123,6 +123,31 @@ func TestNewStatusReportRedactsSensitiveRunText(t *testing.T) {
 	}
 }
 
+func TestNewStatusReportRedactsAllExternallySuppliedRunFields(t *testing.T) {
+	secret := "token=public-secret"
+	report := newStatusReport(daemon.RunSnapshot{
+		ID:        "run-sensitive-fields",
+		PRURL:     "https://user:public-secret@example.com/repo/pull/1",
+		Findings:  []daemon.RunFinding{{Message: "finding", Paths: []string{secret}}},
+		Decisions: map[string]string{"review": secret},
+		SubmissionEvents: []daemon.SubmissionEvent{{
+			Gate:      secret,
+			Ref:       secret,
+			InputSHA:  secret,
+			OutputSHA: secret,
+			Kind:      secret,
+		}},
+		PendingFindings: []daemon.AskUserFinding{{Message: secret}},
+	})
+	encoded, err := json.Marshal(report)
+	if err != nil {
+		t.Fatalf("marshal report: %v", err)
+	}
+	if strings.Contains(string(encoded), "public-secret") {
+		t.Fatalf("status report retained sensitive externally supplied text: %s", encoded)
+	}
+}
+
 func TestStatusJSON_ReflectsRealStageUpdate(t *testing.T) {
 	home := shortTempDir(t)
 	t.Setenv("MADE_HOME", home)

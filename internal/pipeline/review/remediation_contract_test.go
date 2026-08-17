@@ -34,6 +34,26 @@ func TestRun_AutoFixRequiresCleanStateBeforeApplyingReturnedPatch(t *testing.T) 
 	}
 }
 
+func TestRun_RejectsDirectAgentWorktreeEdits(t *testing.T) {
+	bin := agenttest.Build(t)
+	f := setupFixture(t)
+	wt := f.addWorktree(t)
+	t.Cleanup(func() { _ = wt.Remove() })
+	scenarioPath := writeScenario(t, agent.Findings{})
+
+	_, err := review.Run(t.Context(), wt.Path, agent.KindCodex, review.Options{
+		BinaryPath: bin,
+		ExtraEnv: []string{
+			"FAKE_AGENT_SCENARIO=" + scenarioPath,
+			"FAKE_AGENT_WRITE_PATH=unreviewed.txt",
+			"FAKE_AGENT_WRITE_DATA=agent must remain read-only",
+		},
+	})
+	if err == nil {
+		t.Fatal("review accepted direct agent edits to the worktree")
+	}
+}
+
 func TestRun_AutoFixRejectsUnauthorizedDeletionBeforeApplyingPatch(t *testing.T) {
 	bin := agenttest.Build(t)
 	f := setupFixture(t)

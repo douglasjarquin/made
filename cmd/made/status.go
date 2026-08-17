@@ -96,6 +96,13 @@ func newStatusReport(snap daemon.RunSnapshot) StatusReport {
 	pendingFindings := snap.PendingFindings
 	if pendingFindings == nil {
 		pendingFindings = []AskUserFinding{}
+	} else {
+		pendingFindings = make([]AskUserFinding, len(snap.PendingFindings))
+		for i, finding := range snap.PendingFindings {
+			finding.Stage = evidence.RedactString(finding.Stage)
+			finding.Message = evidence.RedactString(finding.Message)
+			pendingFindings[i] = finding
+		}
 	}
 
 	errMsg := ""
@@ -106,18 +113,18 @@ func newStatusReport(snap daemon.RunSnapshot) StatusReport {
 	return StatusReport{
 		SchemaVersion:     statusSchemaVersion,
 		ProtocolVersion:   api.Version,
-		RunID:             snap.ID,
-		Repo:              snap.Repo,
-		Branch:            snap.Branch,
+		RunID:             evidence.RedactString(snap.ID),
+		Repo:              evidence.RedactString(snap.Repo),
+		Branch:            evidence.RedactString(snap.Branch),
 		State:             string(snap.Status),
-		InputSHA:          snap.InputSHA,
-		OutputSHA:         snap.OutputSHA,
+		InputSHA:          evidence.RedactString(snap.InputSHA),
+		OutputSHA:         evidence.RedactString(snap.OutputSHA),
 		ExecutionFinished: snap.ExecutionFinished,
 		Findings:          redactedFindings(snap.Findings),
 		Decisions:         nonNilDecisions(snap.Decisions),
-		PRURL:             snap.PRURL,
+		PRURL:             evidence.RedactString(snap.PRURL),
 		Errors:            redactedErrors(snap.Errors, snap.Err),
-		SupersededBy:      snap.SupersededBy,
+		SupersededBy:      evidence.RedactString(snap.SupersededBy),
 		CancelRequested:   snap.CancelRequested,
 		SubmissionEvents:  nonNilSubmissionEvents(snap.SubmissionEvents),
 		QueuedAt:          timePtr(snap.QueuedAt),
@@ -134,7 +141,13 @@ func redactedFindings(findings []daemon.RunFinding) []daemon.RunFinding {
 		return []daemon.RunFinding{}
 	}
 	redacted := make([]daemon.RunFinding, len(findings))
-	copy(redacted, findings)
+	for i, finding := range findings {
+		redacted[i] = finding
+		redacted[i].Paths = make([]string, len(finding.Paths))
+		for j, path := range finding.Paths {
+			redacted[i].Paths[j] = evidence.RedactString(path)
+		}
+	}
 	for i := range redacted {
 		redacted[i].Message = evidence.RedactString(redacted[i].Message)
 	}
@@ -145,7 +158,11 @@ func nonNilDecisions(decisions map[string]string) map[string]string {
 	if decisions == nil {
 		return map[string]string{}
 	}
-	return decisions
+	redacted := make(map[string]string, len(decisions))
+	for key, value := range decisions {
+		redacted[evidence.RedactString(key)] = evidence.RedactString(value)
+	}
+	return redacted
 }
 
 func redactedErrors(values []string, runErr error) []string {
@@ -166,7 +183,16 @@ func nonNilSubmissionEvents(events []daemon.SubmissionEvent) []daemon.Submission
 	if events == nil {
 		return []daemon.SubmissionEvent{}
 	}
-	return events
+	redacted := make([]daemon.SubmissionEvent, len(events))
+	for i, event := range events {
+		event.Gate = evidence.RedactString(event.Gate)
+		event.Ref = evidence.RedactString(event.Ref)
+		event.InputSHA = evidence.RedactString(event.InputSHA)
+		event.OutputSHA = evidence.RedactString(event.OutputSHA)
+		event.Kind = evidence.RedactString(event.Kind)
+		redacted[i] = event
+	}
+	return redacted
 }
 
 func timePtr(t time.Time) *time.Time {

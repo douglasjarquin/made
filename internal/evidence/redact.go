@@ -6,6 +6,7 @@ import (
 )
 
 var evidenceSecretPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.-]*://)[^\s/@]+@`),
 	regexp.MustCompile(`(?i)(authorization:\s*(?:bearer|basic)\s+)[^\s]+`),
 	regexp.MustCompile(`(?i)(\b(?:token|api[_-]?key|secret|password|passwd|access[_-]?token|refresh[_-]?token|client[_-]?secret)\b\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;&}]+)`),
 	regexp.MustCompile(`(?i)(["']?(?:token|api[_-]?key|secret|password|passwd|access[_-]?token|refresh[_-]?token|client[_-]?secret)["']?\s*:\s*)(?:"[^"]*"|'[^']*'|[^,\s}]+)`),

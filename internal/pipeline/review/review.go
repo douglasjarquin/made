@@ -38,6 +38,9 @@ type Result struct {
 // etc); ask-user and blocking findings are normal outcomes reported via
 // Result, not errors.
 func Run(ctx context.Context, worktreePath string, agentKind agent.Kind, opts Options) (Result, error) {
+	if err := requireCleanWorktree(worktreePath); err != nil {
+		return Result{}, fmt.Errorf("review: inspect worktree before agent: %w", err)
+	}
 	findings, err := agent.Spawn(ctx, agentKind, agent.SpawnParams{
 		WorktreePath: worktreePath,
 		BinaryPath:   opts.BinaryPath,
@@ -46,6 +49,9 @@ func Run(ctx context.Context, worktreePath string, agentKind agent.Kind, opts Op
 	})
 	if err != nil {
 		return Result{}, fmt.Errorf("review: spawn %s: %w", agentKind, err)
+	}
+	if err := requireCleanWorktree(worktreePath); err != nil {
+		return Result{}, fmt.Errorf("review: agent modified worktree: %w", err)
 	}
 
 	var autoFixed []string

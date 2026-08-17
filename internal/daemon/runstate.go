@@ -5,6 +5,9 @@ import "fmt"
 func cloneSnapshot(snapshot RunSnapshot) RunSnapshot {
 	snapshot.Errors = append([]string(nil), snapshot.Errors...)
 	snapshot.Findings = append([]RunFinding(nil), snapshot.Findings...)
+	for i := range snapshot.Findings {
+		snapshot.Findings[i].Paths = append([]string(nil), snapshot.Findings[i].Paths...)
+	}
 	snapshot.Stages = append([]StageResult(nil), snapshot.Stages...)
 	snapshot.PendingFindings = append([]AskUserFinding(nil), snapshot.PendingFindings...)
 	snapshot.SubmissionEvents = append([]SubmissionEvent(nil), snapshot.SubmissionEvents...)

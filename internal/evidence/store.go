@@ -1,9 +1,11 @@
 package evidence
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const (
@@ -11,7 +13,10 @@ const (
 	DefaultDir           = ".made/evidence"
 	maxEvidenceFileBytes = 1 << 20
 	maxEvidenceBytes     = 4 << 20
+	evidenceGitOutputCap = 1 << 20
 )
+
+var evidenceGitTimeout = 30 * time.Second
 
 type Config struct {
 	StoreInRepo    bool
@@ -46,8 +51,16 @@ type Store interface {
 	WriteEvidence(runID string, files map[string][]byte) error
 }
 
+type ContextStore interface {
+	WriteEvidenceContext(ctx context.Context, runID string, files map[string][]byte) error
+}
+
 type Publisher interface {
 	PublishEvidence(runID string) error
+}
+
+type ContextPublisher interface {
+	PublishEvidenceContext(ctx context.Context, runID string) error
 }
 
 func NewStore(repoPath string, cfg Config) Store {

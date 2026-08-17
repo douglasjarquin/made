@@ -12,6 +12,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/douglasjarquin/made/internal/evidence"
 )
 
 const (
@@ -320,7 +322,7 @@ func (s *Server) dispatch(ctx context.Context, req Request) Response {
 }
 
 func errorResponse(id, code, message string) Response {
-	return Response{Protocol: Version, ID: id, Error: &Error{Code: code, Message: message}}
+	return Response{Protocol: Version, ID: id, Error: &Error{Code: code, Message: evidence.RedactString(message)}}
 }
 
 type pingResult struct {

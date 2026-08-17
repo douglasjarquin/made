@@ -347,11 +347,17 @@ func (c *chain) lintStage() error {
 func (c *chain) pushStage() error {
 	c.start(stageNamePush)
 	if publisher, ok := c.rc.Evidence.(evidence.Publisher); ok {
-		if err := publisher.PublishEvidence(c.runID); err != nil {
-			if finishErr := c.finish(stageNamePush, stageResultFail, err.Error()); finishErr != nil {
+		var publishErr error
+		if contextual, contextOK := c.rc.Evidence.(evidence.ContextPublisher); contextOK {
+			publishErr = contextual.PublishEvidenceContext(c.ctx, c.runID)
+		} else {
+			publishErr = publisher.PublishEvidence(c.runID)
+		}
+		if publishErr != nil {
+			if finishErr := c.finish(stageNamePush, stageResultFail, publishErr.Error()); finishErr != nil {
 				return finishErr
 			}
-			return c.stageFailure(stageNamePush, err.Error())
+			return c.stageFailure(stageNamePush, publishErr.Error())
 		}
 	}
 	outputSHA, err := deriveOutputSHA(c.rc.Worktree.Path)

@@ -1,13 +1,17 @@
 package evidence
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
+	execpkg "github.com/douglasjarquin/made/internal/exec"
 	"golang.org/x/sys/unix"
 )
 
@@ -26,8 +30,15 @@ func (s *InRepoStore) Location(runID string) string {
 }
 
 func (s *InRepoStore) WriteEvidence(runID string, files map[string][]byte) (err error) {
+	return s.WriteEvidenceContext(context.Background(), runID, files)
+}
+
+func (s *InRepoStore) WriteEvidenceContext(ctx context.Context, runID string, files map[string][]byte) (err error) {
 	if err := validateEvidenceInput(runID, files, s.RetentionBytes); err != nil {
 		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("evidence: write canceled: %w", err)
 	}
 	dir := s.Dir
 	if dir == "" {
@@ -73,6 +84,9 @@ func (s *InRepoStore) WriteEvidence(runID string, files map[string][]byte) (err 
 	defer closeEvidenceDirectories(opened)
 
 	for name, content := range files {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("evidence: write canceled: %w", err)
+		}
 		parts, err := safePathComponents(name)
 		if err != nil {
 			return fmt.Errorf("evidence: invalid file path %q: %w", name, err)
@@ -110,8 +124,15 @@ func (s *InRepoStore) WriteEvidence(runID string, files map[string][]byte) (err 
 }
 
 func (s *InRepoStore) PublishEvidence(runID string) error {
+	return s.PublishEvidenceContext(context.Background(), runID)
+}
+
+func (s *InRepoStore) PublishEvidenceContext(ctx context.Context, runID string) error {
 	if err := validateEvidenceInput(runID, nil, s.RetentionBytes); err != nil {
 		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("evidence: publish canceled: %w", err)
 	}
 	dir := s.Dir
 	if dir == "" {
@@ -121,51 +142,176 @@ func (s *InRepoStore) PublishEvidence(runID string) error {
 	if err != nil {
 		return fmt.Errorf("evidence: resolve repository path: %w", err)
 	}
-	if _, err := os.Stat(filepath.Join(repoPath, dir, runID)); errors.Is(err, os.ErrNotExist) {
+	repoPath, err = filepath.EvalSymlinks(repoPath)
+	if err != nil {
+		return fmt.Errorf("evidence: resolve repository path: %w", err)
+	}
+	evidenceRoot := filepath.Join(repoPath, dir)
+	runDir := filepath.Join(evidenceRoot, runID)
+	if !isContainedPath(repoPath, evidenceRoot) || !isContainedPath(evidenceRoot, runDir) {
+		return fmt.Errorf("evidence: configured path escapes repository")
+	}
+	if _, err := os.Lstat(runDir); errors.Is(err, os.ErrNotExist) {
 		return nil
 	} else if err != nil {
 		return fmt.Errorf("evidence: inspect run directory: %w", err)
 	}
+	info, err := os.Lstat(runDir)
+	if err != nil {
+		return fmt.Errorf("evidence: inspect run directory: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return fmt.Errorf("evidence: run path is not a directory")
+	}
+	if err := sanitizePublishedEvidence(ctx, runDir, s.RetentionBytes); err != nil {
+		return err
+	}
 	relPath := filepath.Join(dir, runID)
-	if err := runEvidenceGit(repoPath, "add", "--", relPath); err != nil {
+	if err := runEvidenceGit(ctx, repoPath, "add", "--", relPath); err != nil {
 		return fmt.Errorf("evidence: stage in-repo evidence: %w", err)
 	}
-	diff := exec.Command("git", "diff", "--cached", "--quiet", "--", relPath)
-	diff.Dir = repoPath
-	if err := diff.Run(); err == nil {
-		return nil
-	} else if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 1 {
+	diff, err := execpkg.Run(ctx, execpkg.Command{
+		Name:        "git",
+		Args:        []string{"diff", "--cached", "--quiet", "--", relPath},
+		Dir:         repoPath,
+		Timeout:     evidenceGitTimeout,
+		OutputLimit: evidenceGitOutputCap,
+	})
+	if err != nil {
 		return fmt.Errorf("evidence: inspect staged evidence: %w", err)
 	}
-	titleCmd := exec.Command("git", "log", "-1", "--format=%s")
-	titleCmd.Dir = repoPath
-	titleOutput, err := titleCmd.Output()
+	if diff.ExitCode == 0 {
+		return nil
+	} else if diff.ExitCode != 1 {
+		return fmt.Errorf("evidence: inspect staged evidence failed with exit code %d: %s", diff.ExitCode, RedactString(string(diff.Stdout)+string(diff.Stderr)))
+	}
+	titleResult, err := execpkg.Run(ctx, execpkg.Command{
+		Name:        "git",
+		Args:        []string{"log", "-1", "--format=%s"},
+		Dir:         repoPath,
+		Timeout:     evidenceGitTimeout,
+		OutputLimit: evidenceGitOutputCap,
+	})
 	if err != nil {
 		return fmt.Errorf("evidence: derive commit subject: %w", err)
 	}
-	title := strings.TrimSpace(string(titleOutput))
+	if titleResult.ExitCode != 0 {
+		return fmt.Errorf("evidence: derive commit subject failed with exit code %d: %s", titleResult.ExitCode, RedactString(string(titleResult.Stdout)+string(titleResult.Stderr)))
+	}
+	title := strings.TrimSpace(string(titleResult.Stdout))
 	if title == "" {
 		title = "made: publish evidence"
 	}
-	if err := runEvidenceGit(repoPath, "-c", "commit.gpgsign=false", "commit", "--only", "-m", title, "--", relPath); err != nil {
+	if err := runEvidenceGit(ctx, repoPath, "-c", "commit.gpgsign=false", "commit", "--only", "-m", title, "--", relPath); err != nil {
 		return fmt.Errorf("evidence: commit in-repo evidence: %w", err)
 	}
 	return nil
 }
 
-func runEvidenceGit(repoPath string, args ...string) error {
-	cmd := exec.Command("git", args...)
-	cmd.Dir = repoPath
-	cmd.Env = append(os.Environ(),
-		"GIT_AUTHOR_NAME=made-evidence",
-		"GIT_AUTHOR_EMAIL=made-evidence@localhost",
-		"GIT_COMMITTER_NAME=made-evidence",
-		"GIT_COMMITTER_EMAIL=made-evidence@localhost",
-	)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(output)))
+func runEvidenceGit(ctx context.Context, repoPath string, args ...string) error {
+	result, err := execpkg.Run(ctx, execpkg.Command{
+		Name: "git",
+		Args: args,
+		Dir:  repoPath,
+		Env: append(os.Environ(),
+			"GIT_AUTHOR_NAME=made-evidence",
+			"GIT_AUTHOR_EMAIL=made-evidence@localhost",
+			"GIT_COMMITTER_NAME=made-evidence",
+			"GIT_COMMITTER_EMAIL=made-evidence@localhost",
+		),
+		Timeout:     evidenceGitTimeout,
+		OutputLimit: evidenceGitOutputCap,
+	})
+	if err != nil {
+		return fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("git %s failed with exit code %d: %s", strings.Join(args, " "), result.ExitCode, RedactString(strings.TrimSpace(string(result.Stdout)+"\n"+string(result.Stderr))))
 	}
 	return nil
+}
+
+func sanitizePublishedEvidence(ctx context.Context, runDir string, retentionBytes int) error {
+	if retentionBytes <= 0 {
+		retentionBytes = maxEvidenceBytes
+	}
+	total := 0
+	err := filepath.WalkDir(runDir, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return fmt.Errorf("evidence: inspect published path %q: %w", path, walkErr)
+		}
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("evidence: publish canceled: %w", err)
+		}
+		info, err := os.Lstat(path)
+		if err != nil {
+			return fmt.Errorf("evidence: inspect published path %q: %w", path, err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("evidence: refusing symlinked published path %q", path)
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("evidence: refusing non-regular published path %q", path)
+		}
+		if info.Size() > maxEvidenceFileBytes {
+			return fmt.Errorf("evidence: published file %q exceeds %d bytes", path, maxEvidenceFileBytes)
+		}
+		data, err := readPublishedEvidence(path)
+		if err != nil {
+			return fmt.Errorf("evidence: read published file %q: %w", path, err)
+		}
+		redacted := Redact(data)
+		if len(redacted) > maxEvidenceFileBytes || total+len(redacted) > retentionBytes {
+			return fmt.Errorf("evidence: published evidence exceeds retention at %q", path)
+		}
+		if !bytes.Equal(data, redacted) {
+			if err := writePublishedEvidence(path, redacted); err != nil {
+				return fmt.Errorf("evidence: redact published file %q: %w", path, err)
+			}
+		}
+		total += len(redacted)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func readPublishedEvidence(path string) ([]byte, error) {
+	file, err := os.OpenFile(path, os.O_RDONLY|unix.O_NOFOLLOW, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+	data, err := io.ReadAll(io.LimitReader(file, maxEvidenceFileBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxEvidenceFileBytes {
+		return nil, fmt.Errorf("file exceeds %d bytes", maxEvidenceFileBytes)
+	}
+	return data, nil
+}
+
+func writePublishedEvidence(path string, data []byte) error {
+	fd, err := unix.Open(path, unix.O_WRONLY|unix.O_TRUNC|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0o600)
+	if err != nil {
+		return err
+	}
+	if err := unix.Fchmod(fd, 0o600); err != nil {
+		_ = unix.Close(fd)
+		return err
+	}
+	writeErr := writeEvidenceFile(fd, data)
+	closeErr := unix.Close(fd)
+	if writeErr != nil {
+		return writeErr
+	}
+	return closeErr
 }
 
 func isContainedPath(root, target string) bool {

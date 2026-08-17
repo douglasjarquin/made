@@ -43,7 +43,7 @@ func Spawn(ctx context.Context, kind Kind, params SpawnParams) (Findings, error)
 		Name:    binary,
 		Args:    args,
 		Dir:     params.WorktreePath,
-		Env:     append(os.Environ(), params.ExtraEnv...),
+		Env:     reviewEnvironment(params.ExtraEnv),
 		Stdin:   []byte("Return only the Made review JSON object matching the supplied schema.\n"),
 		Timeout: timeout,
 	})
@@ -59,6 +59,36 @@ func Spawn(ctx context.Context, kind Kind, params SpawnParams) (Findings, error)
 		return Findings{}, fmt.Errorf("agent: parse findings from %s: %w: stdout=%s", kind, err, evidence.RedactString(string(result.Stdout)))
 	}
 	return findings, nil
+}
+
+func reviewEnvironment(extra []string) []string {
+	filtered := make([]string, 0, len(os.Environ())+len(extra))
+	for _, entry := range os.Environ() {
+		name, _, ok := strings.Cut(entry, "=")
+		if ok && !sensitiveEnvironmentName(name) {
+			filtered = append(filtered, entry)
+		}
+	}
+	for _, entry := range extra {
+		name, _, ok := strings.Cut(entry, "=")
+		if ok && !sensitiveEnvironmentName(name) {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
+}
+
+func sensitiveEnvironmentName(name string) bool {
+	upper := strings.ToUpper(name)
+	if upper == "SSH_AUTH_SOCK" || upper == "COOKIE" {
+		return true
+	}
+	for _, marker := range []string{"TOKEN", "SECRET", "PASSWORD", "PASSWD", "API_KEY", "PRIVATE_KEY", "CREDENTIAL"} {
+		if strings.Contains(upper, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func invocation(kind Kind, worktree string) ([]string, func(), error) {
