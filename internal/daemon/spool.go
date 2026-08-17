@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -32,6 +33,8 @@ type GateSpool struct {
 	seen    map[string]GateSubmission
 }
 
+const maxGateSpoolRecordBytes = 1 << 20
+
 func (s *GateSpool) Path() string {
 	return s.path
 }
@@ -52,10 +55,20 @@ func OpenGateSpool(path string) (*GateSpool, error) {
 		return nil, fmt.Errorf("daemon: open gate spool: %w", err)
 	}
 	defer func() { _ = file.Close() }()
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
+	reader := bufio.NewReader(file)
+	for {
+		line, readErr := readRecordLine(reader, maxGateSpoolRecordBytes)
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return nil, fmt.Errorf("daemon: read gate spool: %w", readErr)
+		}
+		if len(line) == 0 {
+			continue
+		}
 		var record spoolRecord
-		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
+		if err := json.Unmarshal(line, &record); err != nil {
 			return nil, fmt.Errorf("daemon: decode gate spool: %w", err)
 		}
 		key := gateSubmissionKey(record.Submission)
@@ -68,9 +81,6 @@ func OpenGateSpool(path string) (*GateSpool, error) {
 		default:
 			return nil, fmt.Errorf("daemon: unknown gate spool record %q", record.Kind)
 		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("daemon: read gate spool: %w", err)
 	}
 	return spool, nil
 }
@@ -127,6 +137,9 @@ func (s *GateSpool) appendLocked(record spoolRecord) error {
 	data, err := json.Marshal(record)
 	if err != nil {
 		return fmt.Errorf("daemon: encode gate spool record: %w", err)
+	}
+	if len(data) > maxGateSpoolRecordBytes {
+		return fmt.Errorf("daemon: gate spool record exceeds %d bytes", maxGateSpoolRecordBytes)
 	}
 	file, err := os.OpenFile(s.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND|unix.O_NOFOLLOW, 0o600)
 	if err != nil {

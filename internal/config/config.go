@@ -19,6 +19,7 @@ const (
 	maxStageTimeoutSeconds   = 2 * 60 * 60
 	defaultEvidenceRetention = 4 << 20
 	maxEvidenceRetention     = 64 << 20
+	maxConfigBytes           = 1 << 20
 )
 
 var validStageNames = map[string]struct{}{
@@ -197,6 +198,16 @@ func loadConfigFile(path string) (cfg Config, exists bool, err error) {
 		return Config{}, false, nil
 	}
 
+	info, statErr := os.Stat(path)
+	if statErr != nil {
+		if os.IsNotExist(statErr) {
+			return Config{}, false, nil
+		}
+		return Config{}, false, statErr
+	}
+	if info.Size() > maxConfigBytes {
+		return Config{}, true, fmt.Errorf("config: %s exceeds %d bytes", path, maxConfigBytes)
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {

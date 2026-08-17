@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -15,6 +16,7 @@ import (
 )
 
 const runStoreRecordVersion = 1
+const maxRunStoreRecordBytes = 4 << 20
 
 // RunFinding is the durable Made-owned representation of a review finding.
 // It deliberately contains only data needed by the public run contract.
@@ -92,11 +94,20 @@ func OpenRunStore(path string) (*RunStore, map[string]RunSnapshot, error) {
 	}
 	defer func() { _ = file.Close() }()
 
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
-	for scanner.Scan() {
+	reader := bufio.NewReader(file)
+	for {
+		line, readErr := readRecordLine(reader, maxRunStoreRecordBytes)
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return nil, nil, fmt.Errorf("daemon: read run store: %w", readErr)
+		}
+		if len(line) == 0 {
+			continue
+		}
 		var record storeRecord
-		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
+		if err := json.Unmarshal(line, &record); err != nil {
 			return nil, nil, fmt.Errorf("daemon: decode run store record: %w", err)
 		}
 		if record.Version != runStoreRecordVersion || record.Kind != "snapshot" {
@@ -104,10 +115,28 @@ func OpenRunStore(path string) (*RunStore, map[string]RunSnapshot, error) {
 		}
 		snapshots[record.Snapshot.ID] = restoreSnapshot(record.Snapshot)
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, nil, fmt.Errorf("daemon: read run store: %w", err)
-	}
 	return store, snapshots, nil
+}
+
+func readRecordLine(reader *bufio.Reader, maxBytes int) ([]byte, error) {
+	var line []byte
+	for {
+		chunk, err := reader.ReadSlice('\n')
+		line = append(line, chunk...)
+		if len(line) > maxBytes {
+			return nil, fmt.Errorf("record exceeds %d bytes", maxBytes)
+		}
+		if err == bufio.ErrBufferFull {
+			continue
+		}
+		if err == io.EOF {
+			return nil, io.EOF
+		}
+		if err != nil {
+			return nil, err
+		}
+		return line[:len(line)-1], nil
+	}
 }
 
 func (s *RunStore) Append(snapshot RunSnapshot) error {
@@ -118,6 +147,9 @@ func (s *RunStore) Append(snapshot RunSnapshot) error {
 	data, err := json.Marshal(record)
 	if err != nil {
 		return fmt.Errorf("daemon: encode run store record: %w", err)
+	}
+	if len(data) > maxRunStoreRecordBytes {
+		return fmt.Errorf("daemon: run store record exceeds %d bytes", maxRunStoreRecordBytes)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

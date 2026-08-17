@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -10,6 +11,13 @@ func TestLoadConfig_RejectsUnknownMadeYMLFields(t *testing.T) {
 
 	if _, _, err := loadConfigFile(path); err == nil {
 		t.Fatal("loadConfigFile accepted an unknown .made.yml field")
+	}
+}
+
+func TestLoadConfigRejectsOversizedMadeYML(t *testing.T) {
+	path := writeConfigFile(t, t.TempDir(), ".made.yml", "version: 1\nagent: "+strings.Repeat("a", 1<<20)+"\n")
+	if _, _, err := loadConfigFile(path); err == nil {
+		t.Fatal("loadConfigFile accepted an oversized .made.yml")
 	}
 }
 

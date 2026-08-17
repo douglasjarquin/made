@@ -1,16 +1,20 @@
 package api
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"sync"
 	"syscall"
 	"time"
 )
+
+const maxRequestBytes = 1 << 20
 
 type HandlerFunc func(ctx context.Context, params json.RawMessage) (any, error)
 
@@ -174,17 +178,96 @@ func (s *Server) Close() error {
 func (s *Server) serveConn(ctx context.Context, conn net.Conn) {
 	defer func() { _ = conn.Close() }()
 
-	dec := json.NewDecoder(conn)
+	reader := bufio.NewReader(conn)
 	enc := json.NewEncoder(conn)
 	for {
+		value, err := readRequestValue(reader, maxRequestBytes)
+		if err != nil {
+			return
+		}
+		if len(value) == 0 {
+			continue
+		}
 		var req Request
-		if err := dec.Decode(&req); err != nil {
+		if err := json.Unmarshal(value, &req); err != nil {
 			return
 		}
 		if err := enc.Encode(s.dispatch(ctx, req)); err != nil {
 			return
 		}
 	}
+}
+
+func readRequestValue(reader *bufio.Reader, maxBytes int) ([]byte, error) {
+	value := make([]byte, 0, 4096)
+	started := false
+	depth := 0
+	inString := false
+	escaped := false
+	scalar := false
+	for {
+		b, err := reader.ReadByte()
+		if err != nil {
+			if errors.Is(err, io.EOF) && len(value) > 0 {
+				return nil, io.ErrUnexpectedEOF
+			}
+			return nil, err
+		}
+		value = append(value, b)
+		if len(value) > maxBytes {
+			return nil, fmt.Errorf("api: request exceeds %d bytes", maxBytes)
+		}
+		if !started {
+			if isJSONSpace(b) {
+				continue
+			}
+			started = true
+			switch b {
+			case '{', '[':
+				depth = 1
+			case '"':
+				inString = true
+				scalar = true
+			default:
+				scalar = true
+			}
+			continue
+		}
+		if inString {
+			if escaped {
+				escaped = false
+			} else if b == '\\' {
+				escaped = true
+			} else if b == '"' {
+				inString = false
+				if scalar {
+					return value, nil
+				}
+			}
+			continue
+		}
+		if scalar {
+			if isJSONSpace(b) {
+				return value[:len(value)-1], nil
+			}
+			continue
+		}
+		switch b {
+		case '"':
+			inString = true
+		case '{', '[':
+			depth++
+		case '}', ']':
+			depth--
+			if depth == 0 {
+				return value, nil
+			}
+		}
+	}
+}
+
+func isJSONSpace(b byte) bool {
+	return b == ' ' || b == '\t' || b == '\r' || b == '\n'
 }
 
 // dispatch enforces made's exact-match protocol version policy - mirroring

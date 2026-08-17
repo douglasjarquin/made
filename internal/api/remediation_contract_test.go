@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -102,6 +103,35 @@ func TestServer_RefusesExistingNonSocketPaths(t *testing.T) {
 			}
 			tc.keep(t, path)
 		})
+	}
+}
+
+func TestServerRejectsOversizedRequestLine(t *testing.T) {
+	path := filepath.Join(tempSocketDir(t), "daemon.sock")
+	server := api.NewServer(path)
+	if err := server.Listen(); err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	defer func() { _ = server.Close() }()
+	go func() { _ = server.Serve(ctx) }()
+
+	conn, err := net.DialTimeout("unix", path, time.Second)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+	request := "{\"protocol\":1,\"id\":\"oversized\",\"method\":\"ping\",\"params\":\"" + strings.Repeat("x", 2<<20) + "\"}\n"
+	if _, err := conn.Write([]byte(request)); err != nil {
+		return
+	}
+	if err := conn.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatalf("set read deadline: %v", err)
+	}
+	var response api.Response
+	if err := json.NewDecoder(conn).Decode(&response); err == nil {
+		t.Fatal("server accepted an oversized request line")
 	}
 }
 

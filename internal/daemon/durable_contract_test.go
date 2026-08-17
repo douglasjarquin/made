@@ -73,6 +73,61 @@ func TestRunStoreRedactsDurableFindingAndErrorText(t *testing.T) {
 	}
 }
 
+func TestRunStoreIgnoresTornFinalRecord(t *testing.T) {
+	path := t.TempDir() + "/runs.wal"
+	store, _, err := OpenRunStore(path)
+	if err != nil {
+		t.Fatalf("OpenRunStore: %v", err)
+	}
+	seed := RunSnapshot{ID: "123e4567-e89b-12d3-a456-426614174007", Status: RunSucceeded}
+	if err := store.Append(seed); err != nil {
+		t.Fatalf("Append seed: %v", err)
+	}
+	appendBytes(t, path, []byte(`{"version":1,"kind":"snapshot"`))
+	reopened, snapshots, err := OpenRunStore(path)
+	if err != nil {
+		t.Fatalf("OpenRunStore with torn tail: %v", err)
+	}
+	if reopened == nil || snapshots[seed.ID].Status != RunSucceeded {
+		t.Fatalf("valid WAL record was lost after torn tail: %+v", snapshots)
+	}
+}
+
+func TestGateSpoolIgnoresTornFinalRecord(t *testing.T) {
+	path := t.TempDir() + "/gate.spool"
+	spool, err := OpenGateSpool(path)
+	if err != nil {
+		t.Fatalf("OpenGateSpool: %v", err)
+	}
+	submission := GateSubmission{Gate: "gate", Ref: "refs/heads/main", SHA: "abc", RunID: "run"}
+	if _, _, err := spool.Enqueue(submission); err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+	appendBytes(t, path, []byte(`{"kind":"enqueue","submission"`))
+	reopened, err := OpenGateSpool(path)
+	if err != nil {
+		t.Fatalf("OpenGateSpool with torn tail: %v", err)
+	}
+	if pending := reopened.Pending(); len(pending) != 1 || pending[0] != submission {
+		t.Fatalf("valid spool record was lost after torn tail: %+v", pending)
+	}
+}
+
+func appendBytes(t *testing.T, path string, data []byte) {
+	t.Helper()
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		t.Fatalf("open append fixture: %v", err)
+	}
+	if _, err := file.Write(data); err != nil {
+		_ = file.Close()
+		t.Fatalf("write append fixture: %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("close append fixture: %v", err)
+	}
+}
+
 func TestGateSpoolIsIdempotentAndDurable(t *testing.T) {
 	path := t.TempDir() + "/gate.spool"
 	spool, err := OpenGateSpool(path)
