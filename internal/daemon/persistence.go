@@ -413,7 +413,19 @@ func (rm *RunManager) persistSnapshotLocked(snapshot RunSnapshot) error {
 		return err
 	}
 	if rm.store.shouldCompact() {
-		return rm.store.compact(rm.snapshotsLocked(), rm.counter.Load())
+		runs := rm.snapshotsLocked()
+		replaced := false
+		for i := range runs {
+			if runs[i].ID == snapshot.ID {
+				runs[i] = cloneSnapshot(snapshot)
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			runs = append(runs, cloneSnapshot(snapshot))
+		}
+		return rm.store.compact(runs, rm.counter.Load())
 	}
 	return nil
 }

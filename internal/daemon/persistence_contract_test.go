@@ -161,6 +161,38 @@ func TestRunManager_WALRetentionIsBounded(t *testing.T) {
 	}
 }
 
+func TestRunManager_CompactionPersistsTriggeringTransition(t *testing.T) {
+	stateDir := t.TempDir()
+	rm, err := OpenRunManager(stateDir)
+	if err != nil {
+		t.Fatalf("OpenRunManager: %v", err)
+	}
+	if _, err := rm.SubmitSubmission(RunSubmission{ID: "run-compaction", Repo: "repo", Branch: "branch"}, nil); err != nil {
+		t.Fatalf("SubmitSubmission: %v", err)
+	}
+	for i := 0; i < maxWALRecords-2; i++ {
+		if err := rm.UpdateStages("run-compaction", []StageResult{{Name: "intent", Result: "pass", Message: "before"}}); err != nil {
+			t.Fatalf("UpdateStages before compaction %d: %v", i, err)
+		}
+	}
+	if err := rm.UpdateStages("run-compaction", []StageResult{{Name: "intent", Result: "pass", Message: "compaction-trigger"}}); err != nil {
+		t.Fatalf("UpdateStages compaction trigger: %v", err)
+	}
+
+	restarted, err := OpenRunManager(stateDir)
+	if err != nil {
+		t.Fatalf("OpenRunManager after compaction: %v", err)
+	}
+	defer func() { _ = restarted.Close() }()
+	snapshot, ok := restarted.Snapshot("run-compaction")
+	if !ok || len(snapshot.Stages) != 1 || snapshot.Stages[0].Message != "compaction-trigger" {
+		t.Fatalf("compaction lost triggering transition: %+v (ok=%v)", snapshot, ok)
+	}
+	if err := rm.Close(); err != nil {
+		t.Fatalf("Close original manager: %v", err)
+	}
+}
+
 func TestRunManager_CloseDoesNotDiscardConcurrentDurableMutation(t *testing.T) {
 	stateDir := t.TempDir()
 	rm, err := OpenRunManager(stateDir)
