@@ -336,8 +336,12 @@ This task explicitly forbids running `/made`, editing the Consigliere repository
 
 No Consigliere repository file, GitHub issue, default branch, merge, or shared daemon state was changed.
 
-## Delivery dependency
+## Delivery receipt
 
-The remaining dependency after this report is the final exact-SHA review pass and direct PR on `cs/made-remediation-p1p3b` against `main`.
+The application and CI delivery head immediately before this report-only receipt is `1e5cafb3ae945b50fe5057cbafc2e4b9733244a3` on `cs/made-remediation-p1p3b`.
 
-The branch must be committed, pushed only to `origin/cs/made-remediation-p1p3b`, and opened as a direct PR before the Made lane reports done.
+Direct PR [#1](https://github.com/douglasjarquin/made/pull/1) is open, non-draft, unmerged, and targets `main` at `3e19ed9d598a68149da5a73949533e8095ca4403`.
+
+Live CI run `31995872679` passed its required `build-test-lint` job at that exact delivery head.
+
+No merge, default-branch push, Consigliere edit, GitHub issue, or shared Made-daemon lifecycle action was performed.
