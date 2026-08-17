@@ -414,6 +414,8 @@ func (rm *RunManager) UpdateDecision(id, stage, decision string) error {
 	if !ok {
 		return fmt.Errorf("daemon: no run %q", id)
 	}
+	r.persistMu.Lock()
+	defer r.persistMu.Unlock()
 	candidate := r.snapshot()
 	if candidate.Decisions == nil {
 		candidate.Decisions = make(map[string]string)

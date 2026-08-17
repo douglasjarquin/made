@@ -59,10 +59,11 @@ type WorkFunc func(ctx context.Context, emit func(Event)) error
 var ErrRunIDExists = errors.New("daemon: run ID already submitted")
 
 type run struct {
-	mu     sync.Mutex
-	snap   RunSnapshot
-	ctx    context.Context
-	cancel context.CancelFunc
+	mu        sync.Mutex
+	persistMu sync.Mutex
+	snap      RunSnapshot
+	ctx       context.Context
+	cancel    context.CancelFunc
 }
 
 func (r *run) snapshot() RunSnapshot {
@@ -247,21 +248,21 @@ func (rm *RunManager) execute(r *run, work WorkFunc) {
 	}
 	id := initial.ID
 	started := time.Now()
+	r.persistMu.Lock()
 	startedSnapshot := r.snapshot()
 	if startedSnapshot.Status != RunQueued {
+		r.persistMu.Unlock()
 		return
 	}
 	startedSnapshot.Status = RunRunning
 	startedSnapshot.StartedAt = started
 	if err := rm.persistSnapshot(startedSnapshot); err != nil {
+		r.persistMu.Unlock()
 		rm.failAfterPersistenceError(r, err)
 		return
 	}
-	r.update(func(snapshot *RunSnapshot) {
-		if snapshot.Status == RunQueued && !snapshot.finalized {
-			*snapshot = cloneSnapshot(startedSnapshot)
-		}
-	})
+	r.replace(startedSnapshot)
+	r.persistMu.Unlock()
 	rm.mailbox.Publish(Event{RunID: id, Kind: EventRunStarted, Time: started})
 	rm.signalActivity()
 
@@ -283,6 +284,7 @@ func (rm *RunManager) execute(r *run, work WorkFunc) {
 	rm.signalActivity()
 
 	ended := time.Now()
+	r.persistMu.Lock()
 	finishedSnapshot := r.snapshot()
 	finishedSnapshot.EndedAt = ended
 	finishedSnapshot.ExecutionFinished = true
@@ -301,10 +303,12 @@ func (rm *RunManager) execute(r *run, work WorkFunc) {
 		}
 	}
 	if err := rm.persistSnapshot(finishedSnapshot); err != nil {
+		r.persistMu.Unlock()
 		rm.failAfterPersistenceError(r, err)
 		return
 	}
 	r.replace(finishedSnapshot)
+	r.persistMu.Unlock()
 
 	snapshot := r.snapshot()
 	var finalKind EventKind
@@ -381,6 +385,8 @@ func (rm *RunManager) Finish(id string, status RunStatus, message string) error 
 	if !ok {
 		return fmt.Errorf("daemon: no run %q", id)
 	}
+	r.persistMu.Lock()
+	defer r.persistMu.Unlock()
 	candidate := r.snapshot()
 	candidate.Status = status
 	candidate.Message = message
@@ -394,6 +400,8 @@ func (rm *RunManager) Finish(id string, status RunStatus, message string) error 
 }
 
 func (rm *RunManager) failAfterPersistenceError(r *run, persistErr error) {
+	r.persistMu.Lock()
+	defer r.persistMu.Unlock()
 	failure := fmt.Errorf("daemon: durable run state unavailable: %w", persistErr)
 	ended := time.Now()
 	r.update(func(s *RunSnapshot) {
