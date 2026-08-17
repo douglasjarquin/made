@@ -100,7 +100,7 @@ func reviewProtectedPaths(source, commonDir string) ([]string, error) {
 	paths := make([]string, 0, 2)
 	for _, path := range []string{source, commonDir} {
 		if path == "" {
-			return nil, fmt.Errorf("Git common directory is empty")
+			return nil, fmt.Errorf("git common directory is empty")
 		}
 		if !filepath.IsAbs(path) {
 			path = filepath.Join(source, path)
