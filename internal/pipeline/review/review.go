@@ -9,7 +9,6 @@ package review
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -38,7 +37,7 @@ type Result struct {
 // etc); ask-user and blocking findings are normal outcomes reported via
 // Result, not errors.
 func Run(ctx context.Context, worktreePath string, agentKind agent.Kind, opts Options) (Result, error) {
-	if err := requireCleanWorktree(worktreePath); err != nil {
+	if err := requireCleanWorktree(ctx, worktreePath); err != nil {
 		return Result{}, fmt.Errorf("review: inspect worktree before agent: %w", err)
 	}
 	findings, err := agent.Spawn(ctx, agentKind, agent.SpawnParams{
@@ -50,7 +49,7 @@ func Run(ctx context.Context, worktreePath string, agentKind agent.Kind, opts Op
 	if err != nil {
 		return Result{}, fmt.Errorf("review: spawn %s: %w", agentKind, err)
 	}
-	if err := requireCleanWorktree(worktreePath); err != nil {
+	if err := requireCleanWorktree(ctx, worktreePath); err != nil {
 		return Result{}, fmt.Errorf("review: agent modified worktree: %w", err)
 	}
 
@@ -63,7 +62,7 @@ func Run(ctx context.Context, worktreePath string, agentKind agent.Kind, opts Op
 	for _, finding := range findings.Findings {
 		switch finding.Kind {
 		case agent.FindingAutoFixable:
-			preSHA, postSHA, applyErr := applyAutoFix(worktreePath, finding)
+			preSHA, postSHA, applyErr := applyAutoFix(ctx, worktreePath, finding)
 			if applyErr != nil {
 				return Result{}, fmt.Errorf("review: apply auto-fix %q: %w", finding.Description, applyErr)
 			}
@@ -101,14 +100,14 @@ func Run(ctx context.Context, worktreePath string, agentKind agent.Kind, opts Op
 	}, nil
 }
 
-func applyAutoFix(worktreePath string, finding agent.Finding) (string, string, error) {
+func applyAutoFix(ctx context.Context, worktreePath string, finding agent.Finding) (string, string, error) {
 	if strings.TrimSpace(finding.Patch) == "" {
 		return "", "", fmt.Errorf("auto-fixable finding has no patch")
 	}
-	if err := requireCleanWorktree(worktreePath); err != nil {
+	if err := requireCleanWorktree(ctx, worktreePath); err != nil {
 		return "", "", err
 	}
-	preSHA, err := gitOutput(worktreePath, "rev-parse", "HEAD")
+	preSHA, err := gitOutput(ctx, worktreePath, "rev-parse", "HEAD")
 	if err != nil {
 		return "", "", fmt.Errorf("record pre-fix SHA: %w", err)
 	}
@@ -122,7 +121,7 @@ func applyAutoFix(worktreePath string, finding agent.Finding) (string, string, e
 		if err != nil {
 			return "", "", err
 		}
-		if _, err := gitOutput(worktreePath, "ls-files", "--error-unmatch", "--", clean); err != nil {
+		if _, err := gitOutput(ctx, worktreePath, "ls-files", "--error-unmatch", "--", clean); err != nil {
 			return "", "", fmt.Errorf("auto-fix returned untracked or unauthorized path %q", clean)
 		}
 		allowed[clean] = struct{}{}
@@ -136,13 +135,11 @@ func applyAutoFix(worktreePath string, finding agent.Finding) (string, string, e
 		}
 	}
 
-	applyCmd := exec.Command("git", "-C", worktreePath, "apply", "--whitespace=fix", "-")
-	applyCmd.Stdin = strings.NewReader(finding.Patch)
-	if out, err := applyCmd.CombinedOutput(); err != nil {
-		return "", "", fmt.Errorf("git apply: %w: %s", err, strings.TrimSpace(string(out)))
+	if _, err := runGit(ctx, worktreePath, []string{"apply", "--whitespace=fix", "-"}, []byte(finding.Patch)); err != nil {
+		return "", "", fmt.Errorf("git apply: %w", err)
 	}
 
-	status, err := gitOutput(worktreePath, "status", "--porcelain", "--untracked-files=all")
+	status, err := gitOutput(ctx, worktreePath, "status", "--porcelain", "--untracked-files=all")
 	if err != nil {
 		return "", "", fmt.Errorf("inspect post-fix paths: %w", err)
 	}
@@ -156,36 +153,35 @@ func applyAutoFix(worktreePath string, finding agent.Finding) (string, string, e
 	for path := range allowed {
 		addArgs = append(addArgs, path)
 	}
-	addCmd := exec.Command("git", addArgs...)
-	if out, err := addCmd.CombinedOutput(); err != nil {
-		return "", "", fmt.Errorf("git add returned paths: %w: %s", err, strings.TrimSpace(string(out)))
+	if _, err := runGit(ctx, worktreePath, addArgs[2:], nil); err != nil {
+		return "", "", fmt.Errorf("git add returned paths: %w", err)
 	}
 
 	message := finding.Description
 	if message == "" {
 		message = "made review: auto-fix"
 	}
-	commitCmd := exec.Command("git", "-C", worktreePath,
+	if _, err := runGit(ctx, worktreePath, []string{
 		"-c", "user.name=made-review",
 		"-c", "user.email=made-review@local",
 		"-c", "commit.gpgsign=false",
-		"commit", "-m", message)
-	if out, err := commitCmd.CombinedOutput(); err != nil {
-		return "", "", fmt.Errorf("git commit: %w: %s", err, strings.TrimSpace(string(out)))
+		"commit", "-m", message,
+	}, nil); err != nil {
+		return "", "", fmt.Errorf("git commit: %w", err)
 	}
 
-	shaOut, err := gitOutput(worktreePath, "rev-parse", "HEAD")
+	shaOut, err := gitOutput(ctx, worktreePath, "rev-parse", "HEAD")
 	if err != nil {
 		return "", "", fmt.Errorf("git rev-parse HEAD: %w", err)
 	}
-	if _, err := gitOutput(worktreePath, "diff", "--check", preSHA, shaOut); err != nil {
+	if _, err := gitOutput(ctx, worktreePath, "diff", "--check", preSHA, shaOut); err != nil {
 		return "", "", fmt.Errorf("rerun review validation: %w", err)
 	}
 	return preSHA, shaOut, nil
 }
 
-func requireCleanWorktree(worktreePath string) error {
-	status, err := gitOutput(worktreePath, "status", "--porcelain", "--untracked-files=all")
+func requireCleanWorktree(ctx context.Context, worktreePath string) error {
+	status, err := gitOutput(ctx, worktreePath, "status", "--porcelain", "--untracked-files=all")
 	if err != nil {
 		return fmt.Errorf("inspect clean worktree: %w", err)
 	}
@@ -193,14 +189,6 @@ func requireCleanWorktree(worktreePath string) error {
 		return fmt.Errorf("auto-fix requires a clean worktree")
 	}
 	return nil
-}
-
-func gitOutput(worktreePath string, args ...string) (string, error) {
-	output, err := exec.Command("git", append([]string{"-C", worktreePath}, args...)...).Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(output)), nil
 }
 
 func patchPaths(patch string) ([]string, error) {

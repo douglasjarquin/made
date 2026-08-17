@@ -34,6 +34,82 @@ func TestRun_AutoFixRequiresCleanStateBeforeApplyingReturnedPatch(t *testing.T) 
 	}
 }
 
+func TestRun_AutoFixIgnoresAmbientGitRoutingAndHooks(t *testing.T) {
+	bin := agenttest.Build(t)
+	f := setupFixture(t)
+	wt := f.addWorktree(t)
+	t.Cleanup(func() { _ = wt.Remove() })
+	patch := autoFixPatch(t, wt.Path)
+	scenarioPath := writeScenario(t, agent.Findings{Findings: []agent.Finding{
+		{Kind: agent.FindingAutoFixable, Description: "ignore ambient Git state", Patch: patch, Paths: []string{"reviewed.txt"}},
+	}})
+
+	alternateDir := t.TempDir()
+	run(t, alternateDir, "init", "--bare", "-q")
+	hooksDir := t.TempDir()
+	hookMarker := filepath.Join(t.TempDir(), "hook-fired")
+	if err := os.WriteFile(filepath.Join(hooksDir, "pre-commit"), []byte("#!/bin/sh\nprintf fired > '"+hookMarker+"'\n"), 0o700); err != nil {
+		t.Fatalf("write auto-fix hook: %v", err)
+	}
+	t.Setenv("GIT_DIR", alternateDir)
+	t.Setenv("GIT_CONFIG_COUNT", "1")
+	t.Setenv("GIT_CONFIG_KEY_0", "core.hooksPath")
+	t.Setenv("GIT_CONFIG_VALUE_0", hooksDir)
+
+	result, err := review.Run(t.Context(), wt.Path, agent.KindCodex, review.Options{
+		BinaryPath: bin,
+		ExtraEnv:   []string{"FAKE_AGENT_SCENARIO=" + scenarioPath},
+	})
+	if err != nil {
+		t.Fatalf("review auto-fix inherited ambient Git routing/configuration: %v", err)
+	}
+	if !result.OK || len(result.AutoFixed) != 1 {
+		t.Fatalf("expected one controlled auto-fix, got %+v", result)
+	}
+	for _, name := range []string{"GIT_DIR", "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"} {
+		_ = os.Unsetenv(name)
+	}
+	if got := run(t, wt.Path, "status", "--porcelain"); got != "" {
+		t.Fatalf("controlled auto-fix left worktree dirty: %q", got)
+	}
+	if _, err := os.Stat(hookMarker); !os.IsNotExist(err) {
+		t.Fatalf("ambient auto-fix hook ran: %v", err)
+	}
+}
+
+func TestRun_AutoFixSuppressesAmbientGitHook(t *testing.T) {
+	bin := agenttest.Build(t)
+	f := setupFixture(t)
+	wt := f.addWorktree(t)
+	t.Cleanup(func() { _ = wt.Remove() })
+	patch := autoFixPatch(t, wt.Path)
+	scenarioPath := writeScenario(t, agent.Findings{Findings: []agent.Finding{
+		{Kind: agent.FindingAutoFixable, Description: "suppress ambient hook", Patch: patch, Paths: []string{"reviewed.txt"}},
+	}})
+	hooksDir := t.TempDir()
+	hookMarker := filepath.Join(t.TempDir(), "hook-fired")
+	if err := os.WriteFile(filepath.Join(hooksDir, "pre-commit"), []byte("#!/bin/sh\nprintf fired > '"+hookMarker+"'\n"), 0o700); err != nil {
+		t.Fatalf("write auto-fix hook: %v", err)
+	}
+	t.Setenv("GIT_CONFIG_COUNT", "1")
+	t.Setenv("GIT_CONFIG_KEY_0", "core.hooksPath")
+	t.Setenv("GIT_CONFIG_VALUE_0", hooksDir)
+
+	result, err := review.Run(t.Context(), wt.Path, agent.KindCodex, review.Options{
+		BinaryPath: bin,
+		ExtraEnv:   []string{"FAKE_AGENT_SCENARIO=" + scenarioPath},
+	})
+	if err != nil {
+		t.Fatalf("review auto-fix inherited ambient Git hook configuration: %v", err)
+	}
+	if !result.OK || len(result.AutoFixed) != 1 {
+		t.Fatalf("expected one controlled auto-fix, got %+v", result)
+	}
+	if _, err := os.Stat(hookMarker); !os.IsNotExist(err) {
+		t.Fatalf("ambient auto-fix hook ran: %v", err)
+	}
+}
+
 func TestRun_RejectsDirectAgentWorktreeEdits(t *testing.T) {
 	bin := agenttest.Build(t)
 	f := setupFixture(t)
