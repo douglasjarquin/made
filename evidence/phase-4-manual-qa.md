@@ -257,3 +257,55 @@ made: status is obsolete; use made run status <exact-run-id>
 The disposable daemon was stopped and its home was moved to recoverable
 temporary trash at
 `/tmp/.made-remediation-qa-910-trash.KmgO42/qa-home`.
+
+## Final durability-correction manual QA
+
+The exact final source SHA was `918da271aa9521d292bbda22a862591b770f9af6`.
+
+The binary was built into `/tmp/made-pr2-manual-qa-final.CM6oy5/made` and had SHA256 `ef63f79b90ad4b7760dd6d6a734620d20b3d117c5dcc56aa9a00bce48d766b5b`.
+
+The disposable home was `/tmp/made-pr2-manual-qa-final.CM6oy5/home`.
+
+`made capabilities --json` exited `0` with schema version `1`, protocol version `1`, and the six supported commands.
+
+`made status --json` exited `2` with the explicit obsolete-command message.
+
+`made daemon start --idle-timeout=1m` exited `0` and reported PID `29451`.
+
+`made daemon status` exited `0` and reported the same local PID.
+
+`made run list --json` exited `0` with schema version `1`, protocol version `1`, and an empty run list.
+
+`made run status --json missing-run` exited `1` with the exact-run-ID not-found error.
+
+`made daemon stop` exited `0` with `made daemon: stopped`.
+
+The local daemon exited, the socket and lock were absent, and the exact disposable QA directory was removed.
+
+## Conflict-repair manual QA at final HEAD
+
+The exact final source SHA was `bac8ed2777f584d98eb1ba8015cf1269d01a8c1e`.
+
+The binary was built with `env SSH_AUTH_SOCK= GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0 go build -o /tmp/made-pr2-manual-qa.cs7y3w/made ./cmd/made`.
+
+The binary SHA256 was `502b1d5c3956800ccb4e7bc7c98a28b4789b42ded6270a5687013c7b32a0ac90`.
+
+The disposable home was `/tmp/made-pr2-manual-qa.cs7y3w/home`.
+
+The command `MADE_HOME=/tmp/made-pr2-manual-qa.cs7y3w/home /tmp/made-pr2-manual-qa.cs7y3w/made capabilities --json` exited `0` and returned schema version `1`, protocol version `1`, and the six supported structured commands.
+
+The command `MADE_HOME=/tmp/made-pr2-manual-qa.cs7y3w/home /tmp/made-pr2-manual-qa.cs7y3w/made status --json` exited `2` and returned `made: status is obsolete; use made run status --json <exact-run-id>`.
+
+The command `MADE_HOME=/tmp/made-pr2-manual-qa.cs7y3w/home /tmp/made-pr2-manual-qa.cs7y3w/made daemon start --idle-timeout=1m` exited `0` and reported `made daemon: started (pid 54799)`.
+
+The command `MADE_HOME=/tmp/made-pr2-manual-qa.cs7y3w/home /tmp/made-pr2-manual-qa.cs7y3w/made daemon status` exited `0` and reported `made daemon: running (pid 54799)`.
+
+The command `MADE_HOME=/tmp/made-pr2-manual-qa.cs7y3w/home /tmp/made-pr2-manual-qa.cs7y3w/made run list --json` exited `0` and returned schema version `1`, protocol version `1`, and an empty runs array.
+
+The command `MADE_HOME=/tmp/made-pr2-manual-qa.cs7y3w/home /tmp/made-pr2-manual-qa.cs7y3w/made run status --json missing-run` exited `1` and returned `made run status: handler_error: run.status: exact run_id "missing-run" was not found`.
+
+The command `MADE_HOME=/tmp/made-pr2-manual-qa.cs7y3w/home /tmp/made-pr2-manual-qa.cs7y3w/made daemon stop` exited `0` and returned `made daemon: stopped`.
+
+The local daemon process exited, the disposable socket and lock were absent, and the exact disposable QA directory was removed.
+
+This scenario did not initialize a gate, submit a real project, invoke the shared daemon, alter a default branch, merge a PR, enable auto-merge, or answer an ask-user finding.

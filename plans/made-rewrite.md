@@ -1453,4 +1453,46 @@ Historical task claims above remain unchanged.
 
   **Evidence**: `evidence/phase-4-final-validation.md`, `evidence/phase-4-review-audit.md`, `evidence/phase-4-herdr-cleanup.md`, the final commit list, the branch push receipt, and PR [#2](https://github.com/douglasjarquin/made/pull/2).
 
-  **Commit**: YES | Message: `fix(made): complete remediation continuation from exact base` | Files: Made source, Made tests, `plans/made-rewrite.md`, and phase-scoped evidence only.
+**Commit**: YES | Message: `fix(made): complete remediation continuation from exact base` | Files: Made source, Made tests, `plans/made-rewrite.md`, and phase-scoped evidence only.
+
+### Conflict repair continuation receipt - exact final source `918da271aa9521d292bbda22a862591b770f9af6`
+
+- [x] Conflict repair preserved the exact base `3e19ed9d598a68149da5a73949533e8095ca4403`, retained `origin/main` as merge parent `34d44be504291482d973c65bd427ba964df5e0e9`, and removed only obsolete duplicate CLI paths.
+
+  **References**: `evidence/phase-4-conflict-repair.md`, merge commit `0a7c21d6d3001b85b38330766e01980bd5e92f2c`, and final source commits `bac8ed2777f584d98eb1ba8015cf1269d01a8c1e` and `918da271aa9521d292bbda22a862591b770f9af6`.
+
+  **Acceptance Criteria**: `git diff --name-only 3e19ed9d598a68149da5a73949533e8095ca4403..HEAD` remains Made-only; no unmerged paths remain; the merge parents are exact.
+
+  **QA Scenario**: Run `git merge-base HEAD 3e19ed9d598a68149da5a73949533e8095ca4403`, `git rev-parse HEAD^1`, `git rev-parse HEAD^2`, and `git diff --name-only ...`.
+
+  **Evidence**: `evidence/phase-4-conflict-repair.md`.
+
+- [x] Durability review correction preserves the compaction-triggering transition across restart by overlaying the candidate snapshot before WAL truncation.
+
+  **References**: `internal/daemon/persistence.go`, `internal/daemon/persistence_contract_test.go`, and `evidence/phase-4-conflict-repair.md`.
+
+  **Acceptance Criteria**: The new compaction regression is RED against the pre-fix code and GREEN at `918da271aa9521d292bbda22a862591b770f9af6`; the full daemon package remains green.
+
+  **QA Scenario**: Run `go test ./internal/daemon -run '^TestRunManager_CompactionPersistsTriggeringTransition$' -count=1` and the affected package suite with process-local Git configuration.
+
+  **Evidence**: `evidence/phase-4-conflict-repair.md` and `evidence/phase-4-final-validation.md`.
+
+- [x] Final exact-SHA local validation and disposable real-binary QA were rerun after the durability correction.
+
+  **References**: `evidence/phase-4-final-validation.md` and `evidence/phase-4-manual-qa.md`.
+
+  **Acceptance Criteria**: `go test ./... -count=1`, `go test -race -shuffle=on -count=1 ./...`, `go build ./...`, `go vet ./...`, configured `make lint`, and `gofmt` checks exit `0`; the disposable binary observes exact structured boundaries and cleans its local daemon/socket/lock.
+
+  **QA Scenario**: Build the binary from the exact final source, run capabilities, obsolete status, disposable daemon status/list/unknown-ID/stop, then verify cleanup.
+
+  **Evidence**: `evidence/phase-4-manual-qa.md` and `evidence/phase-4-final-validation.md`.
+
+- [ ] Fresh review-work/runtime-audit receipts are bound to the final documentation SHA and PR #2 is pushed and verified conflict-free.
+
+  **Acceptance Criteria**: All applicable review lanes have terminal verdicts with exact final SHA receipts; only `cs/made-remediation-continuation` is pushed; PR #2 head matches the final branch and reports clean mergeability when GitHub exposes it.
+
+  **QA Scenario**: Run the review audit, inspect the exact commit list and changed-file scope, push only the task branch with `gh-axi`, and read PR #2 metadata without merging.
+
+  **Evidence**: `evidence/phase-4-review-audit.md`, `evidence/phase-4-conflict-repair.md`, and the final PR read receipt.
+
+  **Commit**: YES | Message: `fix(made): preserve compaction transition during conflict repair` | Files: `internal/daemon/persistence.go`, `internal/daemon/persistence_contract_test.go`, phase-scoped evidence, and this continuation receipt.
