@@ -30,7 +30,7 @@ func Spawn(ctx context.Context, kind Kind, params SpawnParams) (Findings, error)
 		binary = kind.binaryName()
 	}
 
-	reviewPath, cleanupReview, err := prepareReviewWorktree(ctx, params.WorktreePath)
+	reviewPath, protectedPaths, cleanupReview, err := prepareReviewWorktree(ctx, params.WorktreePath)
 	if err != nil {
 		return Findings{}, fmt.Errorf("agent: prepare read-only review worktree: %w", err)
 	}
@@ -41,13 +41,17 @@ func Spawn(ctx context.Context, kind Kind, params SpawnParams) (Findings, error)
 		return Findings{}, err
 	}
 	defer cleanup()
+	commandName, commandArgs, err := containedInvocation(binary, args, reviewPath, protectedPaths)
+	if err != nil {
+		return Findings{}, fmt.Errorf("agent: contain review process: %w", err)
+	}
 	timeout := params.Timeout
 	if timeout <= 0 {
 		timeout = defaultSpawnTimeout
 	}
 	result, err := exec.Run(ctx, exec.Command{
-		Name:    binary,
-		Args:    args,
+		Name:    commandName,
+		Args:    commandArgs,
 		Dir:     reviewPath,
 		Env:     reviewEnvironmentForDir(params.ExtraEnv, reviewPath),
 		Stdin:   []byte("Return only the Made review JSON object matching the supplied schema.\n"),
