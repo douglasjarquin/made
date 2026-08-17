@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -12,31 +14,43 @@ import (
 type RunStatus string
 
 const (
-	RunQueued    RunStatus = "queued"
-	RunRunning   RunStatus = "running"
-	RunCompleted RunStatus = "completed"
-	RunFailed    RunStatus = "failed"
+	RunQueued        RunStatus = "queued"
+	RunRunning       RunStatus = "running"
+	RunAwaitingMerge RunStatus = "awaiting_merge"
+	RunSucceeded     RunStatus = "succeeded"
+	RunCompleted     RunStatus = RunSucceeded
+	RunFailed        RunStatus = "failed"
+	RunCanceled      RunStatus = "canceled"
+	RunSuperseded    RunStatus = "superseded"
 )
 
 type RunSnapshot struct {
-	ID              string
-	Repo            string
-	Branch          string
-	Status          RunStatus
-	QueuedAt        time.Time
-	StartedAt       time.Time
-	EndedAt         time.Time
-	Err             error
-	Message         string
-	Stages          []StageResult
-	PendingFindings []AskUserFinding
+	ID                string            `json:"run_id"`
+	Repo              string            `json:"repo"`
+	Branch            string            `json:"branch"`
+	Ref               string            `json:"ref,omitempty"`
+	OldSHA            string            `json:"old_sha,omitempty"`
+	InputSHA          string            `json:"input_sha,omitempty"`
+	OutputSHA         string            `json:"output_sha,omitempty"`
+	SubmissionID      string            `json:"submission_id,omitempty"`
+	GatePath          string            `json:"gate_path,omitempty"`
+	Status            RunStatus         `json:"state"`
+	QueuedAt          time.Time         `json:"queued_at"`
+	StartedAt         time.Time         `json:"started_at,omitempty"`
+	EndedAt           time.Time         `json:"ended_at,omitempty"`
+	Err               error             `json:"-"`
+	Error             string            `json:"error,omitempty"`
+	Message           string            `json:"message,omitempty"`
+	Stages            []StageResult     `json:"stages"`
+	PendingFindings   []AskUserFinding  `json:"pending_findings"`
+	EvidenceRefs      []string          `json:"evidence_refs,omitempty"`
+	CurrentStage      string            `json:"current_stage,omitempty"`
+	Decisions         map[string]string `json:"decisions,omitempty"`
+	ExecutionFinished bool              `json:"execution_finished"`
 
-	// finalized is set by Finish and read by execute: it lets a WorkFunc
-	// declare a run's definitive terminal-or-not Status/Message itself,
-	// overriding execute's normal "nil error means RunCompleted" inference -
-	// needed for the orchestrator's CI-passed-but-awaiting-human-merge case,
-	// where the pipeline finished successfully yet the run must stay
-	// RunRunning rather than flip to RunCompleted.
+	// finalized is set by Finish and read by execute so a WorkFunc can declare
+	// an awaiting-merge or terminal result without being overwritten when it
+	// returns.
 	finalized bool
 }
 
@@ -54,7 +68,7 @@ type run struct {
 func (r *run) snapshot() RunSnapshot {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.snap
+	return cloneSnapshot(r.snap)
 }
 
 func (r *run) update(fn func(*RunSnapshot)) {
@@ -81,6 +95,7 @@ type repoQueue struct {
 type RunManager struct {
 	mailbox  *Mailbox
 	activity chan struct{}
+	store    *runStore
 
 	mu      sync.Mutex
 	repos   map[string]*repoQueue
@@ -89,9 +104,14 @@ type RunManager struct {
 }
 
 func NewRunManager() *RunManager {
+	return newRunManager(nil)
+}
+
+func newRunManager(store *runStore) *RunManager {
 	return &RunManager{
 		mailbox:  NewMailbox(),
 		activity: make(chan struct{}, 1),
+		store:    store,
 		repos:    make(map[string]*repoQueue),
 		runs:     make(map[string]*run),
 	}
@@ -117,29 +137,36 @@ func (rm *RunManager) NewRunID() string {
 }
 
 func (rm *RunManager) Submit(id, repo, branch string, work WorkFunc) (RunSnapshot, error) {
+	return rm.SubmitSubmission(RunSubmission{ID: id, Repo: repo, Branch: branch}, work)
+}
+
+func (rm *RunManager) SubmitSubmission(submission RunSubmission, work WorkFunc) (RunSnapshot, error) {
+	if strings.TrimSpace(submission.ID) == "" {
+		return RunSnapshot{}, fmt.Errorf("daemon: run ID must not be empty")
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &run{
 		ctx:    ctx,
 		cancel: cancel,
-		snap: RunSnapshot{
-			ID:       id,
-			Repo:     repo,
-			Branch:   branch,
-			Status:   RunQueued,
-			QueuedAt: time.Now(),
-		},
+		snap:   submission.snapshot(time.Now()),
 	}
+	queuedSnapshot := cloneSnapshot(r.snap)
 
 	rm.mu.Lock()
-	if _, exists := rm.runs[id]; exists {
+	if _, exists := rm.runs[submission.ID]; exists {
 		rm.mu.Unlock()
 		return RunSnapshot{}, ErrRunIDExists
 	}
-	rm.runs[id] = r
-	rq, ok := rm.repos[repo]
+	if err := rm.persistSnapshotLocked(r.snap); err != nil {
+		rm.mu.Unlock()
+		cancel()
+		return RunSnapshot{}, fmt.Errorf("daemon: persist submission: %w", err)
+	}
+	rm.runs[submission.ID] = r
+	rq, ok := rm.repos[submission.Repo]
 	if !ok {
 		rq = &repoQueue{}
-		rm.repos[repo] = rq
+		rm.repos[submission.Repo] = rq
 	}
 	rm.mu.Unlock()
 
@@ -153,7 +180,39 @@ func (rm *RunManager) Submit(id, repo, branch string, work WorkFunc) (RunSnapsho
 		go rm.drain(rq)
 	}
 
-	return r.snapshot(), nil
+	return queuedSnapshot, nil
+}
+
+func (rm *RunManager) RefreshQueued(id string, work WorkFunc) error {
+	r, ok := rm.lookupRun(id)
+	if !ok {
+		return fmt.Errorf("daemon: no run %q", id)
+	}
+	snapshot := r.snapshot()
+	if snapshot.Status != RunQueued {
+		return fmt.Errorf("daemon: run %q is %s, not queued", id, snapshot.Status)
+	}
+	rm.mu.Lock()
+	rq := rm.repos[snapshot.Repo]
+	rm.mu.Unlock()
+	if rq == nil {
+		return fmt.Errorf("daemon: no queue for run %q", id)
+	}
+	rq.mu.Lock()
+	for _, job := range rq.pending {
+		if job.run == r {
+			rq.mu.Unlock()
+			return nil
+		}
+	}
+	rq.pending = append(rq.pending, &queuedJob{run: r, work: work})
+	startDrain := !rq.active
+	rq.active = true
+	rq.mu.Unlock()
+	if startDrain {
+		go rm.drain(rq)
+	}
+	return nil
 }
 
 func (rm *RunManager) drain(rq *repoQueue) {
@@ -173,12 +232,35 @@ func (rm *RunManager) drain(rq *repoQueue) {
 }
 
 func (rm *RunManager) execute(r *run, work WorkFunc) {
-	id := r.snapshot().ID
+	initial := r.snapshot()
+	if isTerminalRunStatus(initial.Status) {
+		return
+	}
+	id := initial.ID
 	started := time.Now()
+	startedRun := false
 	r.update(func(s *RunSnapshot) {
+		if s.Status != RunQueued {
+			return
+		}
 		s.Status = RunRunning
 		s.StartedAt = started
+		startedRun = true
 	})
+	if !startedRun {
+		return
+	}
+	if err := rm.persistRun(r); err != nil {
+		r.update(func(s *RunSnapshot) {
+			s.Status = RunFailed
+			s.Err = err
+			s.Error = err.Error()
+			s.ExecutionFinished = true
+			s.EndedAt = time.Now()
+		})
+		_ = rm.persistRun(r)
+		return
+	}
 	rm.mailbox.Publish(Event{RunID: id, Kind: EventRunStarted, Time: started})
 	rm.signalActivity()
 
@@ -191,26 +273,47 @@ func (rm *RunManager) execute(r *run, work WorkFunc) {
 		rm.signalActivity()
 	}
 
-	err := work(r.ctx, emit)
+	var err error
+	if work == nil {
+		err = errors.New("daemon: nil run work function")
+	} else {
+		err = work(r.ctx, emit)
+	}
 	rm.signalActivity()
 
 	ended := time.Now()
 	r.update(func(s *RunSnapshot) {
 		s.EndedAt = ended
+		s.ExecutionFinished = true
 		if s.finalized {
 			return
 		}
 		s.Err = err
+		s.Error = ""
 		if err != nil {
-			s.Status = RunFailed
+			s.Error = err.Error()
+			if errors.Is(err, context.Canceled) {
+				s.Status = RunCanceled
+			} else {
+				s.Status = RunFailed
+			}
 		} else {
-			s.Status = RunCompleted
+			s.Status = RunSucceeded
 		}
 	})
+	_ = rm.persistRun(r)
 
-	finalKind := EventRunCompleted
-	if err != nil {
+	snapshot := r.snapshot()
+	var finalKind EventKind
+	switch snapshot.Status {
+	case RunSucceeded:
+		finalKind = EventRunCompleted
+	case RunFailed:
 		finalKind = EventRunFailed
+	case RunCanceled, RunSuperseded:
+		finalKind = EventRunCanceled
+	default:
+		return
 	}
 	rm.mailbox.Publish(Event{RunID: id, Kind: finalKind, Time: ended, Err: err})
 }
@@ -235,6 +338,12 @@ func (rm *RunManager) List() []RunSnapshot {
 	for i, r := range runs {
 		snaps[i] = r.snapshot()
 	}
+	sort.Slice(snaps, func(i, j int) bool {
+		if snaps[i].QueuedAt.Equal(snaps[j].QueuedAt) {
+			return snaps[i].ID < snaps[j].ID
+		}
+		return snaps[i].QueuedAt.Before(snaps[j].QueuedAt)
+	})
 	return snaps
 }
 
@@ -242,32 +351,28 @@ func (rm *RunManager) Subscribe(id string) (<-chan Event, func()) {
 	return rm.mailbox.Subscribe(id)
 }
 
-// Cancel signals the run's WorkFunc via its context; cancellation surfaces as
-// the existing RunFailed status with Err wrapping context.Canceled rather
-// than a new status value, since a cooperating WorkFunc returning ctx.Err()
-// already distinguishes it from an ordinary failure for any caller checking
-// errors.Is(snap.Err, context.Canceled).
 func (rm *RunManager) Cancel(id string) error {
 	r, ok := rm.lookupRun(id)
 	if !ok {
 		return fmt.Errorf("daemon: no run %q", id)
 	}
-	if isTerminalRunStatus(r.snapshot().Status) {
-		return fmt.Errorf("daemon: run %q is already %s", id, r.snapshot().Status)
+	snapshot := r.snapshot()
+	if isTerminalRunStatus(snapshot.Status) {
+		return fmt.Errorf("daemon: run %q is already %s", id, snapshot.Status)
+	}
+	if snapshot.Status == RunQueued {
+		if rm.cancelQueued(r) {
+			return nil
+		}
 	}
 	r.cancel()
 	return nil
 }
 
 func isTerminalRunStatus(s RunStatus) bool {
-	return s == RunCompleted || s == RunFailed
+	return s == RunSucceeded || s == RunFailed || s == RunCanceled || s == RunSuperseded
 }
 
-// Finish lets a WorkFunc declare a run's definitive Status and a
-// human-readable Message just before it returns, so execute's normal
-// nil-error-means-RunCompleted inference does not overwrite it (see
-// RunSnapshot.finalized). status may be any RunStatus, including RunRunning
-// for a run that must stay open pending action made cannot itself take.
 func (rm *RunManager) Finish(id string, status RunStatus, message string) error {
 	r, ok := rm.lookupRun(id)
 	if !ok {
@@ -276,13 +381,12 @@ func (rm *RunManager) Finish(id string, status RunStatus, message string) error 
 	r.update(func(s *RunSnapshot) {
 		s.Status = status
 		s.Message = message
+		s.ExecutionFinished = status == RunAwaitingMerge || isTerminalRunStatus(status)
 		s.finalized = true
 	})
-	return nil
+	return rm.persistRun(r)
 }
 
-// ErrRunSuperseded marks a run SupersedeQueued dropped before it ever
-// started, because a newer push to the same branch arrived first.
 var ErrRunSuperseded = errors.New("daemon: run superseded by a newer push to the same branch")
 
 // SupersedeQueued drops every still-queued (not yet started) job for the
@@ -315,11 +419,65 @@ func (rm *RunManager) SupersedeQueued(repo, branch string) {
 	now := time.Now()
 	for _, j := range dropped {
 		j.run.update(func(s *RunSnapshot) {
-			s.Status = RunFailed
+			s.Status = RunSuperseded
 			s.Err = ErrRunSuperseded
+			s.Error = ErrRunSuperseded.Error()
+			s.ExecutionFinished = true
 			s.EndedAt = now
 		})
-		rm.mailbox.Publish(Event{RunID: j.run.snapshot().ID, Kind: EventRunFailed, Time: now, Err: ErrRunSuperseded})
+		_ = rm.persistRun(j.run)
+		rm.mailbox.Publish(Event{RunID: j.run.snapshot().ID, Kind: EventRunCanceled, Time: now, Err: ErrRunSuperseded})
 		rm.signalActivity()
 	}
+}
+
+func (rm *RunManager) cancelQueued(target *run) bool {
+	snapshot := target.snapshot()
+	rm.mu.Lock()
+	rq := rm.repos[snapshot.Repo]
+	rm.mu.Unlock()
+	if rq == nil {
+		return false
+	}
+	rq.mu.Lock()
+	removed := false
+	for i, job := range rq.pending {
+		if job.run == target {
+			rq.pending = append(rq.pending[:i], rq.pending[i+1:]...)
+			removed = true
+			break
+		}
+	}
+	rq.mu.Unlock()
+	if !removed {
+		return false
+	}
+	now := time.Now()
+	target.cancel()
+	target.update(func(s *RunSnapshot) {
+		s.Status = RunCanceled
+		s.Err = context.Canceled
+		s.Error = context.Canceled.Error()
+		s.EndedAt = now
+		s.ExecutionFinished = true
+	})
+	_ = rm.persistRun(target)
+	rm.mailbox.Publish(Event{RunID: snapshot.ID, Kind: EventRunCanceled, Time: now, Err: context.Canceled})
+	rm.signalActivity()
+	return true
+}
+
+func (rm *RunManager) persistRun(r *run) error {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+	return rm.persistSnapshotLocked(r.snapshot())
+}
+
+func (rm *RunManager) HasActiveRuns() bool {
+	for _, snapshot := range rm.List() {
+		if snapshot.Status == RunQueued || snapshot.Status == RunRunning || snapshot.Status == RunAwaitingMerge {
+			return true
+		}
+	}
+	return false
 }

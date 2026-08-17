@@ -3,10 +3,12 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/douglasjarquin/made/internal/agent"
 	"github.com/douglasjarquin/made/internal/daemon"
+	execpkg "github.com/douglasjarquin/made/internal/exec"
 	"github.com/douglasjarquin/made/internal/pipeline/ci"
 	"github.com/douglasjarquin/made/internal/pipeline/document"
 	"github.com/douglasjarquin/made/internal/pipeline/intent"
@@ -125,22 +127,33 @@ func (c *chain) run() error {
 	}
 
 	// A passing CI stage validates the branch and leaves a PR open, but
-	// merging it is a human decision made cannot observe - so the run's
-	// final status stays RunRunning rather than RunCompleted, with the PR
-	// URL surfaced in the message instead of a terminal "done" state.
+	// merging it is a human decision made cannot observe, so the run remains
+	// explicitly awaiting merge rather than becoming terminal.
 	message := fmt.Sprintf("all stages passed, PR open, awaiting merge: %s", prResult.PRURL)
-	return c.rm.Finish(c.runID, daemon.RunRunning, message)
+	return c.rm.Finish(c.runID, daemon.RunAwaitingMerge, message)
 }
 
 func (c *chain) start(stage string) {
+	_ = c.rm.SetCurrentStage(c.runID, stage)
 	if c.emit != nil {
 		c.emit(daemon.Event{Kind: daemon.EventStageStarted, Stage: stage})
 	}
 }
 
 func (c *chain) finish(stage, result, message string) {
-	c.stages = append(c.stages, daemon.StageResult{Name: stage, Result: result})
+	c.finishWithEvidence(stage, result, message, nil)
+}
+
+func (c *chain) finishWithEvidence(stage, result, message string, evidenceRefs []string) {
+	stageResult := daemon.StageResult{Name: stage, Result: result, Message: message, EvidenceRefs: append([]string(nil), evidenceRefs...)}
+	if result == stageResultFail {
+		stageResult.Error = message
+	}
+	c.stages = append(c.stages, stageResult)
 	_ = c.rm.UpdateStages(c.runID, append([]daemon.StageResult(nil), c.stages...))
+	for _, ref := range evidenceRefs {
+		_ = c.rm.AddEvidenceRef(c.runID, ref)
+	}
 	if c.emit != nil {
 		c.emit(daemon.Event{Kind: daemon.EventStageFinished, Stage: stage, Message: message})
 	}
@@ -222,10 +235,10 @@ func (c *chain) testStage() error {
 		return err
 	}
 	if !result.OK {
-		c.finish(stageNameTest, stageResultFail, result.Message)
+		c.finishWithEvidence(stageNameTest, stageResultFail, result.Message, c.evidenceRefs("stdout.log", "stderr.log"))
 		return c.stageFailure(stageNameTest, result.Message)
 	}
-	c.finish(stageNameTest, stageResultPass, result.Message)
+	c.finishWithEvidence(stageNameTest, stageResultPass, result.Message, c.evidenceRefs("stdout.log", "stderr.log"))
 	return nil
 }
 
@@ -257,11 +270,20 @@ func (c *chain) lintStage() error {
 		return err
 	}
 	if !result.OK {
-		c.finish(stageNameLint, stageResultFail, result.Message)
+		c.finishWithEvidence(stageNameLint, stageResultFail, result.Message, c.evidenceRefs("stdout.log", "stderr.log"))
 		return c.stageFailure(stageNameLint, result.Message)
 	}
-	c.finish(stageNameLint, stageResultPass, result.Message)
+	c.finishWithEvidence(stageNameLint, stageResultPass, result.Message, c.evidenceRefs("stdout.log", "stderr.log"))
 	return nil
+}
+
+func (c *chain) evidenceRefs(files ...string) []string {
+	base := deriveEvidenceRef(c.rc.Evidence, c.runID)
+	refs := make([]string, len(files))
+	for i, file := range files {
+		refs[i] = base + "/" + file
+	}
+	return refs
 }
 
 func (c *chain) pushStage() error {
@@ -275,8 +297,25 @@ func (c *chain) pushStage() error {
 		return c.stageFailure(stageNamePush, result.Message)
 	}
 	c.pushed = true
+	if headSHA, err := outputSHA(c.rc.Worktree.Path); err == nil {
+		_ = c.rm.UpdateSubmissionOutput(c.runID, headSHA)
+	}
 	c.finish(stageNamePush, stageResultPass, result.Message)
 	return nil
+}
+
+func outputSHA(worktreePath string) (string, error) {
+	result, err := execpkg.Run(context.Background(), execpkg.Command{
+		Name: "git",
+		Args: []string{"-C", worktreePath, "rev-parse", "HEAD"},
+	})
+	if err != nil {
+		return "", err
+	}
+	if result.ExitCode != 0 {
+		return "", fmt.Errorf("git rev-parse HEAD: %s", strings.TrimSpace(string(result.Stderr)))
+	}
+	return strings.TrimSpace(string(result.Stdout)), nil
 }
 
 func (c *chain) prStage() (pr.Result, error) {
@@ -306,6 +345,10 @@ func (c *chain) prStage() (pr.Result, error) {
 
 func (c *chain) ciStage(prURL string) error {
 	c.start(stageNameCI)
+	if c.rc.Config.NoCI {
+		c.finish(stageNameCI, stageResultPass, "CI disabled by trusted configuration")
+		return nil
+	}
 	ciCtx, cancel := context.WithTimeout(c.ctx, ciStageTimeout)
 	defer cancel()
 

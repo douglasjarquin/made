@@ -1,7 +1,9 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/douglasjarquin/made/internal/agent"
@@ -142,7 +144,16 @@ func loadConfigFile(path string) (cfg Config, exists bool, err error) {
 		return Config{}, false, err
 	}
 
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&cfg); err != nil {
+		return Config{}, true, err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return Config{}, true, fmt.Errorf("multiple YAML documents are not supported")
+		}
 		return Config{}, true, err
 	}
 

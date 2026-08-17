@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -34,7 +35,7 @@ func TestRunManager_UpdateStagesVisibleViaSnapshot(t *testing.T) {
 	if len(snap.Stages) != 2 {
 		t.Fatalf("Stages = %+v, want 2 entries", snap.Stages)
 	}
-	if snap.Stages[0] != stages[0] || snap.Stages[1] != stages[1] {
+	if !reflect.DeepEqual(snap.Stages, stages) {
 		t.Errorf("Stages = %+v, want %+v", snap.Stages, stages)
 	}
 }
@@ -115,7 +116,7 @@ func TestRunManager_UpdateStagesReflectsListToo(t *testing.T) {
 	for _, r := range runs {
 		if r.ID == id {
 			found = true
-			if len(r.Stages) != 1 || r.Stages[0] != stages[0] {
+			if len(r.Stages) != 1 || !reflect.DeepEqual(r.Stages[0], stages[0]) {
 				t.Errorf("List() Stages = %+v, want %+v", r.Stages, stages)
 			}
 		}

@@ -2,6 +2,10 @@ package daemon
 
 import (
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -81,7 +85,116 @@ func TestRunManager_RestoresDurableSnapshotAfterRestart(t *testing.T) {
 	if restored.SubmissionID != "submission-1" || restored.GatePath != "/tmp/made-gate" {
 		t.Fatalf("restored submission metadata = %+v", restored)
 	}
-	if len(restored.Stages) != len(stages) || restored.Stages[1] != stages[1] {
+	if len(restored.Stages) != len(stages) || !reflect.DeepEqual(restored.Stages[1], stages[1]) {
 		t.Fatalf("restored stages = %+v, want %+v", restored.Stages, stages)
+	}
+	if err := rm2.Finish("run-durable-1", RunSucceeded, "merged"); err != nil {
+		t.Fatalf("Finish succeeded: %v", err)
+	}
+	finished, _ := rm2.Snapshot("run-durable-1")
+	if finished.Status != RunSucceeded || !finished.ExecutionFinished {
+		t.Fatalf("awaiting_merge did not transition to succeeded: %+v", finished)
+	}
+}
+
+func TestRunManager_IgnoresTornFinalWALRecord(t *testing.T) {
+	stateDir := t.TempDir()
+	rm, err := OpenRunManager(stateDir)
+	if err != nil {
+		t.Fatalf("OpenRunManager: %v", err)
+	}
+	if _, err := rm.Submit("run-torn-tail", "repo", "branch", func(context.Context, func(Event)) error { return nil }); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		snapshot, _ := rm.Snapshot("run-torn-tail")
+		if snapshot.Status == RunSucceeded {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if err := rm.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	wal, err := os.OpenFile(filepath.Join(stateDir, walFileName), os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		t.Fatalf("open WAL: %v", err)
+	}
+	if _, err := wal.WriteString(`{"snapshot":{"run_id":"run-torn-tail"`); err != nil {
+		t.Fatalf("append torn WAL: %v", err)
+	}
+	_ = wal.Close()
+
+	restarted, err := OpenRunManager(stateDir)
+	if err != nil {
+		t.Fatalf("OpenRunManager after torn tail: %v", err)
+	}
+	defer func() { _ = restarted.Close() }()
+	if snapshot, ok := restarted.Snapshot("run-torn-tail"); !ok || snapshot.Status != RunSucceeded {
+		t.Fatalf("valid checkpoint was lost with torn WAL tail: %+v (ok=%v)", snapshot, ok)
+	}
+}
+
+func TestRunManager_WALRetentionIsBounded(t *testing.T) {
+	stateDir := t.TempDir()
+	rm, err := OpenRunManager(stateDir)
+	if err != nil {
+		t.Fatalf("OpenRunManager: %v", err)
+	}
+	if _, err := rm.Submit("run-retention", "repo", "branch", func(context.Context, func(Event)) error { return nil }); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	for i := 0; i < maxWALRecords+10; i++ {
+		if err := rm.UpdateStages("run-retention", []StageResult{{Name: "stage", Result: "pass", Message: "update"}}); err != nil {
+			t.Fatalf("UpdateStages %d: %v", i, err)
+		}
+	}
+	if info, err := os.Stat(filepath.Join(stateDir, walFileName)); err != nil {
+		t.Fatalf("stat WAL: %v", err)
+	} else if info.Size() >= maxWALBytes {
+		t.Fatalf("WAL exceeded retention bound: %d bytes", info.Size())
+	}
+	if err := rm.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+}
+
+func TestReviewDecisions_RestoreAndRejectConflict(t *testing.T) {
+	stateDir := t.TempDir()
+	rm, err := OpenRunManager(stateDir)
+	if err != nil {
+		t.Fatalf("OpenRunManager: %v", err)
+	}
+	if _, err := rm.Submit("run-decision", "repo", "branch", func(context.Context, func(Event)) error { return nil }); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		snapshot, _ := rm.Snapshot("run-decision")
+		if snapshot.Status == RunSucceeded {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	decisions := NewReviewDecisionsForManager(rm)
+	if err := decisions.Set("run-decision", "review", ReviewRejected); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if err := rm.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	restarted, err := OpenRunManager(stateDir)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer func() { _ = restarted.Close() }()
+	restoredDecisions := NewReviewDecisionsForManager(restarted)
+	decision, ok := restoredDecisions.Get("run-decision", "review")
+	if !ok || decision != ReviewRejected {
+		t.Fatalf("decision did not restore: %q (ok=%v)", decision, ok)
+	}
+	if err := restoredDecisions.Set("run-decision", "review", ReviewApproved); !errors.Is(err, ErrDecisionAlreadyRecorded) {
+		t.Fatalf("conflicting decision error = %v, want ErrDecisionAlreadyRecorded", err)
 	}
 }

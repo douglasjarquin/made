@@ -22,7 +22,7 @@ func startReviewTestServer(t *testing.T, fixture StatusReport) string {
 	socketPath := api.SocketPath(home)
 
 	srv := api.NewServer(socketPath)
-	srv.Handle("status", func(ctx context.Context, params json.RawMessage) (any, error) {
+	srv.Handle("run.status", func(ctx context.Context, params json.RawMessage) (any, error) {
 		return fixture, nil
 	})
 	store := newReviewDecisions()

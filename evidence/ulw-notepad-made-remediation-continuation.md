@@ -23,8 +23,9 @@ Started: 2026-08-17T00:00:00-04:00
 
 ## Now
 
-Phase 2 GitHub and CI external-tool contracts are GREEN with focused tests and
-LSP diagnostics; the Codex structured-task slice is next.
+Phase 3 lifecycle and durability slices are GREEN in focused daemon, CLI,
+configuration, evidence, reviewer-containment, orchestrator, and rebase tests;
+disposable real-binary QA and final validation remain.
 
 ## Todo
 
@@ -69,6 +70,25 @@ LSP diagnostics; the Codex structured-task slice is next.
   shim was added.
 - Focused agent and review happy-path GREEN evidence is in
   `evidence/phase-2-external-contracts.md`.
+- Phase 3 focused lifecycle, durability, evidence, configuration, reviewer,
+  orchestrator, and rebase evidence is in
+  `evidence/phase-3-lifecycle-durability.md`.
+- The durable run store uses a fsynced JSONL WAL plus atomic checkpoint and
+  bounded compaction; a final malformed WAL record is ignored as a torn tail,
+  while malformed non-final records fail open/recovery closed.
+- The public run surface is `capabilities --json`, exact-ID
+  `run submit/status/list/cancel`, `review.decide`, and structured `doctor
+  --json`; the obsolete global-latest `status` command is rejected.
+- `awaiting_merge` is non-terminal until an explicit `succeeded` transition,
+  and daemon shutdown cancels only queued/running execution while preserving
+  durable awaiting-merge records.
+- Real Made binary manual QA passed against a disposable home at
+  `evidence/phase-4-manual-qa.md`: capabilities, queued pre-drain submission,
+  exact-ID status/list, obsolete-status rejection, doctor JSON, daemon restart
+  recovery, and strict exact-ID error behavior were observed.
+- The isolated Herdr helper probe confirmed named session
+  `cs-lab-made-remediation-9714-1438` is running and compatible; final teardown
+  remains pending until all validation and delivery work is complete.
 - LSP diagnostics for the changed GitHub/CI production files and focused tests
   reported no errors or warnings; one non-blocking `stringsseq` hint remains in
   `internal/pipeline/ci/ci_contract_test.go`.

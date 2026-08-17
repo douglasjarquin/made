@@ -52,7 +52,7 @@ type reviewDecisionResult struct {
 func reviewDecideHandler(store *reviewDecisions) api.HandlerFunc {
 	return func(ctx context.Context, params json.RawMessage) (any, error) {
 		var p reviewDecideParams
-		if err := json.Unmarshal(params, &p); err != nil {
+		if err := decodeStrictJSON(params, &p); err != nil {
 			return nil, fmt.Errorf("review.decide: invalid params: %w", err)
 		}
 		if p.RunID == "" || p.Stage == "" {
@@ -61,7 +61,9 @@ func reviewDecideHandler(store *reviewDecisions) api.HandlerFunc {
 		if p.Decision != ReviewApproved && p.Decision != ReviewRejected {
 			return nil, fmt.Errorf("review.decide: decision must be %q or %q", ReviewApproved, ReviewRejected)
 		}
-		store.Set(p.RunID, p.Stage, p.Decision)
+		if err := store.Set(p.RunID, p.Stage, p.Decision); err != nil {
+			return nil, err
+		}
 		return reviewDecideResult{OK: true}, nil
 	}
 }
@@ -69,7 +71,7 @@ func reviewDecideHandler(store *reviewDecisions) api.HandlerFunc {
 func reviewDecisionHandler(store *reviewDecisions) api.HandlerFunc {
 	return func(ctx context.Context, params json.RawMessage) (any, error) {
 		var p reviewDecisionParams
-		if err := json.Unmarshal(params, &p); err != nil {
+		if err := decodeStrictJSON(params, &p); err != nil {
 			return nil, fmt.Errorf("review.decision: invalid params: %w", err)
 		}
 		decision, found := store.Get(p.RunID, p.Stage)
@@ -82,6 +84,10 @@ func runReviewCommand(args []string, stdin io.Reader, stdout, stderr *os.File) i
 	fs.SetOutput(stderr)
 	runID := fs.String("run", "", "run ID to review (default: most recent run)")
 	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *runID == "" {
+		_, _ = fmt.Fprintln(stderr, "made review: --run exact-run-id is required")
 		return 2
 	}
 
@@ -99,7 +105,7 @@ func runReviewCommand(args []string, stdin io.Reader, stdout, stderr *os.File) i
 	defer func() { _ = client.Close() }()
 
 	var report StatusReport
-	if err := client.CallInto("status", statusParams{RunID: *runID}, &report); err != nil {
+	if err := client.CallInto("run.status", statusParams{RunID: *runID}, &report); err != nil {
 		_, _ = fmt.Fprintln(stderr, "made review:", err)
 		return 1
 	}

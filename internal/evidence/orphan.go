@@ -36,6 +36,9 @@ func (s *OrphanBranchStore) WriteEvidence(runID string, files map[string][]byte)
 	if runID == "" {
 		return fmt.Errorf("evidence: runID must not be empty")
 	}
+	if err := validatePathPart(runID); err != nil {
+		return fmt.Errorf("evidence: invalid runID: %w", err)
+	}
 	branch := s.Branch
 	if branch == "" {
 		branch = DefaultBranch
@@ -49,53 +52,65 @@ func (s *OrphanBranchStore) WriteEvidence(runID string, files map[string][]byte)
 	defer func() { _ = os.RemoveAll(idxDir) }()
 	indexEnv := []string{"GIT_INDEX_FILE=" + idxDir + "/index"}
 
-	parent, err := s.runGit(nil, nil, "rev-parse", "--verify", ref)
-	hasParent := err == nil
-	if hasParent {
-		if _, err := s.runGit(indexEnv, nil, "read-tree", parent); err != nil {
-			return fmt.Errorf("evidence: seed scratch index from existing evidence branch: %w", err)
-		}
-	}
-
 	names := make([]string, 0, len(files))
 	for name := range files {
+		if err := validatePathPart(name); err != nil {
+			return fmt.Errorf("evidence: invalid file name %q: %w", name, err)
+		}
 		names = append(names, name)
 	}
 	sort.Strings(names)
 
-	for _, name := range names {
-		blobSHA, err := s.runGit(indexEnv, files[name], "hash-object", "-w", "--stdin")
+	var lastUpdateErr error
+	for range 5 {
+		parent, parentErr := s.runGit(nil, nil, "rev-parse", "--verify", ref)
+		hasParent := parentErr == nil
+		if hasParent {
+			if _, err := s.runGit(indexEnv, nil, "read-tree", parent); err != nil {
+				return fmt.Errorf("evidence: seed scratch index from existing evidence branch: %w", err)
+			}
+		} else if _, err := s.runGit(indexEnv, nil, "read-tree", "--empty"); err != nil {
+			return fmt.Errorf("evidence: clear scratch index: %w", err)
+		}
+
+		for _, name := range names {
+			blobSHA, err := s.runGit(indexEnv, files[name], "hash-object", "-w", "--stdin")
+			if err != nil {
+				return fmt.Errorf("evidence: hash evidence file %q: %w", name, err)
+			}
+			entryPath := path.Join(runID, name)
+			if _, err := s.runGit(indexEnv, nil, "update-index", "--add", "--cacheinfo", "100644,"+blobSHA+","+entryPath); err != nil {
+				return fmt.Errorf("evidence: stage evidence file %q: %w", name, err)
+			}
+		}
+
+		treeSHA, err := s.runGit(indexEnv, nil, "write-tree")
 		if err != nil {
-			return fmt.Errorf("evidence: hash evidence file %q: %w", name, err)
+			return fmt.Errorf("evidence: write evidence tree: %w", err)
 		}
-		entryPath := path.Join(runID, name)
-		if _, err := s.runGit(indexEnv, nil, "update-index", "--add", "--cacheinfo", "100644,"+blobSHA+","+entryPath); err != nil {
-			return fmt.Errorf("evidence: stage evidence file %q: %w", name, err)
+
+		commitArgs := []string{"commit-tree", treeSHA, "-m", "evidence: " + runID}
+		if hasParent {
+			commitArgs = append(commitArgs, "-p", parent)
 		}
-	}
+		commitSHA, err := s.runGit(commitAuthorEnv(), nil, commitArgs...)
+		if err != nil {
+			return fmt.Errorf("evidence: commit evidence tree: %w", err)
+		}
 
-	treeSHA, err := s.runGit(indexEnv, nil, "write-tree")
-	if err != nil {
-		return fmt.Errorf("evidence: write evidence tree: %w", err)
+		updateArgs := []string{"update-ref", ref, commitSHA}
+		if hasParent {
+			updateArgs = append(updateArgs, parent)
+		} else {
+			updateArgs = append(updateArgs, strings.Repeat("0", 40))
+		}
+		if _, err := s.runGit(nil, nil, updateArgs...); err != nil {
+			lastUpdateErr = err
+			continue
+		}
+		return nil
 	}
-
-	commitArgs := []string{"commit-tree", treeSHA, "-m", "evidence: " + runID}
-	if hasParent {
-		commitArgs = append(commitArgs, "-p", parent)
-	}
-	commitSHA, err := s.runGit(commitAuthorEnv(), nil, commitArgs...)
-	if err != nil {
-		return fmt.Errorf("evidence: commit evidence tree: %w", err)
-	}
-
-	updateArgs := []string{"update-ref", ref, commitSHA}
-	if hasParent {
-		updateArgs = append(updateArgs, parent)
-	}
-	if _, err := s.runGit(nil, nil, updateArgs...); err != nil {
-		return fmt.Errorf("evidence: update evidence branch ref: %w", err)
-	}
-	return nil
+	return fmt.Errorf("evidence: update evidence branch ref after retries: %w", lastUpdateErr)
 }
 
 func (s *OrphanBranchStore) runGit(extraEnv []string, stdin []byte, args ...string) (string, error) {

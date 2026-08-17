@@ -24,7 +24,13 @@ type Result struct {
 // etc); a rebase conflict is a normal outcome reported via Result.OK, not an
 // error.
 func Run(worktreePath, defaultBranch string) (Result, error) {
-	cmd := exec.Command("git", "-C", worktreePath, "rebase", defaultBranch)
+	cmd := exec.Command("git", "-C", worktreePath, "-c", "commit.gpgsign=false", "rebase", defaultBranch)
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=made-rebase",
+		"GIT_AUTHOR_EMAIL=made-rebase@localhost",
+		"GIT_COMMITTER_NAME=made-rebase",
+		"GIT_COMMITTER_EMAIL=made-rebase@localhost",
+	)
 	out, rebaseErr := cmd.CombinedOutput()
 	if rebaseErr == nil {
 		return Result{
@@ -40,6 +46,9 @@ func Run(worktreePath, defaultBranch string) (Result, error) {
 	files, err := conflictingFiles(worktreePath)
 	if err != nil {
 		return Result{}, fmt.Errorf("rebase: list conflicting files after failed rebase onto %s: %w", defaultBranch, err)
+	}
+	if len(files) == 0 {
+		return Result{}, fmt.Errorf("rebase: git rebase %s reported failure without conflict files: %s", defaultBranch, strings.TrimSpace(string(out)))
 	}
 
 	// A halted stage must never leave the worktree mid-rebase, so whatever
@@ -63,7 +72,7 @@ func conflictingFiles(worktreePath string) ([]string, error) {
 	}
 
 	var files []string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 		if line != "" {
 			files = append(files, line)
 		}

@@ -1,10 +1,16 @@
 package daemon
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 type StageResult struct {
-	Name   string `json:"name"`
-	Result string `json:"result"`
+	Name         string   `json:"name"`
+	Result       string   `json:"result"`
+	Message      string   `json:"message,omitempty"`
+	Error        string   `json:"error,omitempty"`
+	EvidenceRefs []string `json:"evidence_refs,omitempty"`
 }
 
 type AskUserFinding struct {
@@ -18,9 +24,10 @@ func (rm *RunManager) UpdateStages(id string, stages []StageResult) error {
 		return fmt.Errorf("daemon: no run %q", id)
 	}
 	r.update(func(s *RunSnapshot) {
-		s.Stages = stages
+		s.Stages = cloneStageResults(stages)
+		s.CurrentStage = currentStage(s.Stages)
 	})
-	return nil
+	return rm.persistRun(r)
 }
 
 func (rm *RunManager) UpdatePendingFindings(id string, findings []AskUserFinding) error {
@@ -29,9 +36,61 @@ func (rm *RunManager) UpdatePendingFindings(id string, findings []AskUserFinding
 		return fmt.Errorf("daemon: no run %q", id)
 	}
 	r.update(func(s *RunSnapshot) {
-		s.PendingFindings = findings
+		s.PendingFindings = append([]AskUserFinding(nil), findings...)
 	})
-	return nil
+	return rm.persistRun(r)
+}
+
+func (rm *RunManager) SetCurrentStage(id, stage string) error {
+	r, ok := rm.lookupRun(id)
+	if !ok {
+		return fmt.Errorf("daemon: no run %q", id)
+	}
+	r.update(func(s *RunSnapshot) {
+		s.CurrentStage = stage
+	})
+	return rm.persistRun(r)
+}
+
+func (rm *RunManager) AddEvidenceRef(id, ref string) error {
+	r, ok := rm.lookupRun(id)
+	if !ok {
+		return fmt.Errorf("daemon: no run %q", id)
+	}
+	r.update(func(s *RunSnapshot) {
+		if !slices.Contains(s.EvidenceRefs, ref) {
+			s.EvidenceRefs = append(s.EvidenceRefs, ref)
+		}
+	})
+	return rm.persistRun(r)
+}
+
+func (rm *RunManager) UpdateSubmissionOutput(id, outputSHA string) error {
+	r, ok := rm.lookupRun(id)
+	if !ok {
+		return fmt.Errorf("daemon: no run %q", id)
+	}
+	r.update(func(s *RunSnapshot) {
+		s.OutputSHA = outputSHA
+	})
+	return rm.persistRun(r)
+}
+
+func cloneStageResults(stages []StageResult) []StageResult {
+	out := append([]StageResult(nil), stages...)
+	for i := range out {
+		out[i].EvidenceRefs = append([]string(nil), stages[i].EvidenceRefs...)
+	}
+	return out
+}
+
+func currentStage(stages []StageResult) string {
+	for _, stage := range stages {
+		if stage.Result != "pass" {
+			return stage.Name
+		}
+	}
+	return ""
 }
 
 func (rm *RunManager) lookupRun(id string) (*run, bool) {

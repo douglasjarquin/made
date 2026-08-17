@@ -15,6 +15,7 @@ type Options struct {
 	IdleTimeout time.Duration
 	OnReady     func(pid int)
 	ActivityCh  <-chan struct{}
+	ActiveFunc  func() bool
 }
 
 type StatusInfo struct {
@@ -55,6 +56,10 @@ func Run(ctx context.Context, opts Options) error {
 		case <-sigCh:
 			return nil
 		case <-idleCh:
+			if opts.ActiveFunc != nil && opts.ActiveFunc() {
+				timer.Reset(opts.IdleTimeout)
+				continue
+			}
 			return nil
 		case <-ctx.Done():
 			return nil

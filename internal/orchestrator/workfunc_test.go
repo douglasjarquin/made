@@ -219,8 +219,8 @@ func TestNewWorkFunc_FullPassEndsRunningWithAwaitingMergeMessage(t *testing.T) {
 	submitWorkFunc(t, rm, runID, "repo-full-pass", branch, wf, rc)
 
 	snap := waitForRunEnded(t, rm, runID, 30*time.Second)
-	if snap.Status != daemon.RunRunning {
-		t.Fatalf("expected final status RunRunning (awaiting merge), got %v (err=%v)", snap.Status, snap.Err)
+	if snap.Status != daemon.RunAwaitingMerge {
+		t.Fatalf("expected final status RunAwaitingMerge, got %v (err=%v)", snap.Status, snap.Err)
 	}
 	if !strings.Contains(snap.Message, "awaiting merge") {
 		t.Fatalf("expected final message to mention awaiting merge, got %q", snap.Message)
@@ -258,8 +258,8 @@ func TestNewWorkFunc_FullPassPRTitleMatchesPushedCommitSubject(t *testing.T) {
 	submitWorkFunc(t, rm, runID, "repo-pr-title", branch, wf, rc)
 
 	snap := waitForRunEnded(t, rm, runID, 30*time.Second)
-	if snap.Status != daemon.RunRunning {
-		t.Fatalf("expected final status RunRunning (awaiting merge), got %v (err=%v)", snap.Status, snap.Err)
+	if snap.Status != daemon.RunAwaitingMerge {
+		t.Fatalf("expected final status RunAwaitingMerge, got %v (err=%v)", snap.Status, snap.Err)
 	}
 	assertAllStagesPassed(t, snap.Stages)
 
@@ -431,8 +431,8 @@ func TestNewWorkFunc_DocumentFindingParksThenApprovedResumesToCompletion(t *test
 	reviewDecisions.Set(runID, stageNameDocument, daemon.ReviewApproved)
 
 	snap := waitForRunEnded(t, rm, runID, 30*time.Second)
-	if snap.Status != daemon.RunRunning {
-		t.Fatalf("expected final status RunRunning (awaiting merge) after resume, got %v (err=%v)", snap.Status, snap.Err)
+	if snap.Status != daemon.RunAwaitingMerge {
+		t.Fatalf("expected final status RunAwaitingMerge after resume, got %v (err=%v)", snap.Status, snap.Err)
 	}
 	if !strings.Contains(snap.Message, "awaiting merge") {
 		t.Fatalf("expected final message to mention awaiting merge, got %q", snap.Message)

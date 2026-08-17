@@ -92,8 +92,13 @@ func daemonStart(args []string, home, lockPath string, stdout, stderr *os.File) 
 // The returned channel receives daemon.Run's final error exactly once, after
 // the socket server has also been shut down.
 func startDaemon(ctx context.Context, home, lockPath string, idle time.Duration, onReady func(pid int)) (*daemon.RunManager, <-chan error) {
-	rm := daemon.NewRunManager()
-	reviewStore := daemon.NewReviewDecisions()
+	rm, openErr := daemon.OpenRunManager(filepath.Join(home, "runs"))
+	if openErr != nil {
+		done := make(chan error, 1)
+		done <- fmt.Errorf("open run store: %w", openErr)
+		return daemon.NewRunManager(), done
+	}
+	reviewStore := daemon.NewReviewDecisionsForManager(rm)
 	srv := api.NewServer(api.SocketPath(home))
 	registerDaemonHandlers(srv, rm, reviewStore)
 
@@ -114,11 +119,15 @@ func startDaemon(ctx context.Context, home, lockPath string, idle time.Duration,
 			IdleTimeout: idle,
 			OnReady:     onReady,
 			ActivityCh:  rm.ActivitySignal(),
+			ActiveFunc:  rm.HasActiveRuns,
 		})
 		cancelInFlightRuns(rm, shutdownCancelTimeout)
 		cancelServe()
 		<-serveErr
 		_ = srv.Close()
+		if closeErr := rm.Close(); runErr == nil && closeErr != nil {
+			runErr = closeErr
+		}
 		done <- runErr
 	}()
 
@@ -133,7 +142,7 @@ func startDaemon(ctx context.Context, home, lockPath string, idle time.Duration,
 // ctx.Done() and return before shutdown proceeds.
 func cancelInFlightRuns(rm *daemon.RunManager, timeout time.Duration) {
 	for _, snap := range rm.List() {
-		if !isTerminalRunStatus(snap.Status) {
+		if snap.Status == daemon.RunQueued || snap.Status == daemon.RunRunning {
 			_ = rm.Cancel(snap.ID)
 		}
 	}
@@ -142,7 +151,7 @@ func cancelInFlightRuns(rm *daemon.RunManager, timeout time.Duration) {
 	for time.Now().Before(deadline) {
 		allTerminal := true
 		for _, snap := range rm.List() {
-			if !isTerminalRunStatus(snap.Status) {
+			if snap.Status == daemon.RunQueued || snap.Status == daemon.RunRunning {
 				allTerminal = false
 				break
 			}
@@ -155,13 +164,16 @@ func cancelInFlightRuns(rm *daemon.RunManager, timeout time.Duration) {
 }
 
 func isTerminalRunStatus(s daemon.RunStatus) bool {
-	return s == daemon.RunCompleted || s == daemon.RunFailed
+	return s == daemon.RunSucceeded || s == daemon.RunFailed || s == daemon.RunCanceled || s == daemon.RunSuperseded
 }
 
 const debugHandlersEnv = "MADE_DEBUG_HANDLERS"
 
 func registerDaemonHandlers(srv *api.Server, rm *daemon.RunManager, store *daemon.ReviewDecisions) {
-	srv.Handle("status", statusHandler(rm))
+	srv.Handle("run.submit", runSubmitHandler(rm))
+	srv.Handle("run.status", statusHandler(rm))
+	srv.Handle("run.list", runListHandler(rm))
+	srv.Handle("run.cancel", runCancelHandler(rm))
 	srv.Handle("review.decide", reviewDecideHandler(store))
 	srv.Handle("review.decision", reviewDecisionHandler(store))
 	srv.Handle("gate.admitPush", gateAdmitPushHandler())
@@ -234,10 +246,11 @@ func validateBareGateRepo(path string) error {
 const gateNotifyPushDefaultBranchTimeout = 10 * time.Second
 
 type gateNotifyPushParams struct {
-	GatePath string `json:"gate_path"`
-	OldSHA   string `json:"old_sha"`
-	NewSHA   string `json:"new_sha"`
-	Ref      string `json:"ref"`
+	GatePath     string `json:"gate_path"`
+	OldSHA       string `json:"old_sha"`
+	NewSHA       string `json:"new_sha"`
+	Ref          string `json:"ref"`
+	SubmissionID string `json:"submission_id,omitempty"`
 }
 
 type gateNotifyPushResult struct {
@@ -278,19 +291,45 @@ func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.Review
 
 		branch := strings.TrimPrefix(p.Ref, "refs/heads/")
 		repo := gateRepoIdentifier(p.GatePath)
-		rm.SupersedeQueued(repo, branch)
-
 		gatePath := p.GatePath
 		worktreesDir := gitgate.WorktreesDir(gatePath)
 		newSHA := p.NewSHA
+		submissionID := p.SubmissionID
+		if submissionID == "" {
+			submissionID = p.Ref + "@" + p.NewSHA
+		}
+		submission := daemon.RunSubmission{
+			Repo:         repo,
+			Branch:       branch,
+			Ref:          p.Ref,
+			OldSHA:       p.OldSHA,
+			InputSHA:     p.NewSHA,
+			OutputSHA:    p.NewSHA,
+			SubmissionID: submissionID,
+			GatePath:     p.GatePath,
+		}
+		existing, exists := rm.FindSubmission(submission)
 		runID := rm.NewRunID()
+		if exists {
+			runID = existing.ID
+		}
+		submission.ID = runID
 
 		work := func(workCtx context.Context, emit func(daemon.Event)) error {
 			return orchestrator.Run(workCtx, gatePath, defaultBranch, worktreesDir, runID, newSHA,
 				orchestrator.NewWorkFunc(rm, reviewDecisions, emit, runID, defaultBranch, branch, orchestrator.Options{}))
 		}
+		if exists {
+			if existing.Status == daemon.RunQueued {
+				if err := rm.RefreshQueued(existing.ID, work); err != nil {
+					return nil, fmt.Errorf("gate.notifyPush: refresh queued run: %w", err)
+				}
+			}
+			return gateNotifyPushResult{RunID: existing.ID}, nil
+		}
+		rm.SupersedeQueued(repo, branch)
 
-		if _, err := rm.Submit(runID, repo, branch, work); err != nil {
+		if _, err := rm.SubmitSubmission(submission, work); err != nil {
 			return nil, fmt.Errorf("gate.notifyPush: submit run: %w", err)
 		}
 

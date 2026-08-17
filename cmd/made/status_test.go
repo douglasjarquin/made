@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -56,7 +57,7 @@ func TestStatusJSON_SchemaValidity(t *testing.T) {
 		}
 	}
 
-	out, errOut, code := runCapture(t, []string{"status", "--json"})
+	out, errOut, code := runCapture(t, []string{"run", "status", "run-test-1", "--json"})
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0; stdout=%s stderr=%s", code, out, errOut)
 	}
@@ -79,7 +80,7 @@ func TestStatusJSON_SchemaValidity(t *testing.T) {
 		t.Errorf("Branch = %q, want %q", report.Branch, "feature-x")
 	}
 	switch report.State {
-	case "queued", "running", "completed", "failed":
+	case "queued", "running", "awaiting_merge", "succeeded", "failed", "canceled", "superseded":
 	default:
 		t.Errorf("State = %q, not one of the documented run states", report.State)
 	}
@@ -156,7 +157,7 @@ func TestStatusJSON_ReflectsRealStageUpdate(t *testing.T) {
 		t.Fatalf("UpdatePendingFindings: %v", err)
 	}
 
-	out, errOut, code := runCapture(t, []string{"status", "--json", "run-real-stage-1"})
+	out, errOut, code := runCapture(t, []string{"run", "status", "run-real-stage-1", "--json"})
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0; stdout=%s stderr=%s", code, out, errOut)
 	}
@@ -166,12 +167,17 @@ func TestStatusJSON_ReflectsRealStageUpdate(t *testing.T) {
 		t.Fatalf("output is not valid JSON: %v\noutput: %s", err, out)
 	}
 
-	if len(report.Stages) != len(wantStages) {
-		t.Fatalf("Stages = %+v, want %+v", report.Stages, wantStages)
+	if len(report.Stages) != len(pipelineStages) {
+		t.Fatalf("Stages = %+v, want fixed ordered stages %+v", report.Stages, pipelineStages)
 	}
 	for i, want := range wantStages {
-		if report.Stages[i] != StageResult(want) {
+		if !reflect.DeepEqual(report.Stages[i], StageResult(want)) {
 			t.Errorf("Stages[%d] = %+v, want %+v", i, report.Stages[i], want)
+		}
+	}
+	for _, stage := range report.Stages[len(wantStages):] {
+		if stage.Result != StageResultPending {
+			t.Errorf("unreached stage %q = %q, want pending", stage.Name, stage.Result)
 		}
 	}
 
@@ -207,7 +213,7 @@ func TestStatus_NoRunsReportsError(t *testing.T) {
 		}
 	})
 
-	_, _, code := runCapture(t, []string{"status", "--json"})
+	_, _, code := runCapture(t, []string{"run", "status", "missing-run", "--json"})
 	if code == 0 {
 		t.Fatal("expected non-zero exit when no runs have been submitted")
 	}

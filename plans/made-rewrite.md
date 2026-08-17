@@ -1374,3 +1374,83 @@ Each implementation task (1-35) commits independently once its own acceptance cr
 - The trusted-vs-pushed config boundary is enforced exactly as specified in the Metis Review section, with a failing-then-passing test proving each of the four rules.
 - No merge-authority violation is possible in code: made's PR stage has no code path that calls a merge API.
 
+## Made remediation continuation from exact base `3e19ed9d598a68149da5a73949533e8095ca4403`
+
+This linked section is the canonical ledger for the continuation work.
+Historical task claims above remain unchanged.
+
+### Phase 4A - contract and durability gates
+
+- [x] Public structured contract: exact `capabilities --json`, `run.submit`, `run.status`, `run.list`, `run.cancel`, `review.decide`, and `doctor --json` surfaces are implemented with exact run IDs and no global-latest status fallback.
+
+  **References**: `cmd/made/capabilities.go`, `cmd/made/run.go`, `cmd/made/run_handlers.go`, `cmd/made/status.go`, `cmd/made/doctor.go`, and `evidence/phase-1-red-made-remediation-continuation.md`.
+
+  **Acceptance Criteria**: The obsolete `made status` command rejects with exit code 2; exact-ID status returns structured lifecycle state; missing IDs fail closed; capabilities lists the supported commands.
+
+  **QA Scenarios**: Run the real binary against a disposable Made home, submit a disposable identity, query the exact run ID, query an unknown ID, and invoke the obsolete status command.
+
+  **Evidence**: `evidence/phase-4-manual-qa.md`.
+
+- [x] Lifecycle and durability: queued identity, submission refresh, exact input/output SHA and submission metadata, queued cancellation, awaiting-merge, succeeded/canceled/superseded terminal states, first-wins decisions, restart recovery, torn-tail tolerance, durable ordering, and bounded WAL retention are implemented.
+
+  **References**: `internal/daemon/runmanager.go`, `internal/daemon/persistence.go`, `internal/daemon/runstate.go`, `internal/daemon/reviewdecisions.go`, and `evidence/phase-3-lifecycle-durability.md`.
+
+  **Acceptance Criteria**: A submitted record is durable before queue drain; a daemon restart restores the exact record without replaying unrelated work; awaiting-merge remains non-terminal until succeeded; a queued cancel performs no work; torn final records are ignored and non-final corruption fails closed.
+
+  **QA Scenarios**: Run the daemon tests for queued cancellation, awaiting-merge, restart, torn-tail, retention, decision conflict, and the real binary restart scenario.
+
+  **Evidence**: `internal/daemon/persistence_contract_test.go`, `evidence/phase-3-lifecycle-durability.md`, and `evidence/phase-4-manual-qa.md`.
+
+- [x] Evidence and reviewer containment: atomic in-repository evidence writes, compare-and-swap orphan publication, path containment, stage evidence references, and patch-only auto-fix commits are enforced.
+
+  **References**: `internal/evidence/inrepo.go`, `internal/evidence/orphan.go`, `internal/orchestrator/workfunc.go`, `internal/pipeline/review/review.go`, and `evidence/phase-3-lifecycle-durability.md`.
+
+  **Acceptance Criteria**: Concurrent orphan writers retain every run; evidence files use durable write ordering; an auto-fix never stages unrelated worktree files; stage and run snapshots preserve evidence references.
+
+  **QA Scenarios**: Run the evidence concurrency suite and reviewer containment scenario with an unrelated disposable file present.
+
+  **Evidence**: `internal/evidence/evidence_contract_test.go`, `internal/pipeline/review/review_contract_test.go`, and `evidence/phase-3-lifecycle-durability.md`.
+
+- [x] Semantic configuration and enforced switches: unknown or multiple YAML documents fail closed, trusted configuration remains authoritative, and the trusted `no_ci` switch is enforced by the orchestrator.
+
+  **References**: `internal/config/config.go`, `internal/config/config_contract_test.go`, `internal/orchestrator/workfunc.go`, and `evidence/phase-3-lifecycle-durability.md`.
+
+  **Acceptance Criteria**: Unknown semantic switches are rejected; pushed configuration cannot override trusted execution settings without the existing explicit trust switch; `no_ci` records a skipped CI stage instead of invoking CI.
+
+  **QA Scenarios**: Load disposable trusted/pushed YAML fixtures with unknown fields and run a trusted `no_ci` stage fixture.
+
+  **Evidence**: `internal/config/config_contract_test.go` and `evidence/phase-3-lifecycle-durability.md`.
+
+### Phase 4B - compatibility and final validation gates
+
+- [x] Strict external compatibility: GitHub uses `gh pr checks --json name,state,bucket,link`, preserves numeric workflow run IDs, exposes authentication/check/log/rerun errors, and Codex uses the structured `exec` task contract while unsupported Claude behavior is rejected explicitly.
+
+  **References**: `internal/github/client.go`, `internal/github/testdata/fakegh/main.go`, `internal/agent/spawn.go`, `internal/agent/testdata/fakeagent/main.go`, and `evidence/phase-2-external-contracts.md`.
+
+  **Acceptance Criteria**: Strict fakes reject obsolete or invented arguments; focused GREEN tests accept only supported GitHub JSON and Codex structured output; PR URLs cannot reach workflow run operations.
+
+  **QA Scenarios**: Run the focused GitHub/CI and agent/review suites against disposable repositories, strict fake boundaries, and process fixtures.
+
+  **Evidence**: `evidence/phase-1-red-made-remediation-continuation.md` and `evidence/phase-2-external-contracts.md`.
+
+- [x] Disposable live scenarios: the real Made binary was exercised only against a disposable Made home, exact run identities, a restart, strict boundary behavior, and the named non-default Herdr lab session.
+
+  **References**: `evidence/phase-0-grounding-made-remediation-continuation.md`, `evidence/phase-4-manual-qa.md`, and the required Herdr helper path in the task brief.
+
+  **Acceptance Criteria**: The live scenario does not initialize a real gate, submit a real project, alter the shared daemon, or use the default Herdr session.
+
+  **QA Scenarios**: Start and stop only the disposable Made daemon, query exact IDs, restart it, and probe the named Herdr session through the helper.
+
+  **Evidence**: `evidence/phase-4-manual-qa.md`.
+
+- [ ] Final validation and delivery: run the Made-only build, race/shuffle test, vet, configured lint, changed-file diagnostics, final branch scope review, review-work/runtime audit, direct branch push, and direct PR creation.
+
+  **References**: `evidence/phase-1-red-made-remediation-continuation.md`, `evidence/phase-2-external-contracts.md`, `evidence/phase-3-lifecycle-durability.md`, and `evidence/phase-4-manual-qa.md`.
+
+  **Acceptance Criteria**: The final commit list starts at the exact base SHA; only Made files and linked evidence/plan records are changed; all authorized local validation is green; the PR is open on `cs/made-remediation-continuation`; no default branch push or merge occurs.
+
+  **QA Scenarios**: Execute the final Made-only validation commands, inspect the exact full SHA and changed-file list, perform required review audits, and open the direct PR with `gh-axi`.
+
+  **Evidence**: Add the final validation, audit, cleanup, commit, push, and PR receipts under `evidence/` before marking this checkbox complete.
+
+  **Commit**: YES | Message: `fix(made): complete remediation continuation from exact base` | Files: Made source, Made tests, `plans/made-rewrite.md`, and phase-scoped evidence only.

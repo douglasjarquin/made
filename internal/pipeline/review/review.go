@@ -86,15 +86,18 @@ func applyAutoFix(worktreePath string, finding agent.Finding) (string, error) {
 		return "", fmt.Errorf("auto-fixable finding has no patch")
 	}
 
-	applyCmd := exec.Command("git", "-C", worktreePath, "apply", "--whitespace=fix", "-")
+	applyCmd := exec.Command("git", "-C", worktreePath, "apply", "--index", "--whitespace=fix", "-")
 	applyCmd.Stdin = strings.NewReader(finding.Patch)
 	if out, err := applyCmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("git apply: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 
-	addCmd := exec.Command("git", "-C", worktreePath, "add", "-A")
-	if out, err := addCmd.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("git add -A: %w: %s", err, strings.TrimSpace(string(out)))
+	filesOut, err := exec.Command("git", "-C", worktreePath, "diff", "--cached", "--name-only", "--diff-filter=ACMRTUXB").CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git diff staged files: %w: %s", err, strings.TrimSpace(string(filesOut)))
+	}
+	if strings.TrimSpace(string(filesOut)) == "" {
+		return "", fmt.Errorf("git apply produced no staged files")
 	}
 
 	message := finding.Description
@@ -102,6 +105,7 @@ func applyAutoFix(worktreePath string, finding agent.Finding) (string, error) {
 		message = "made review: auto-fix"
 	}
 	commitCmd := exec.Command("git", "-C", worktreePath,
+		"-c", "commit.gpgsign=false",
 		"-c", "user.name=made-review",
 		"-c", "user.email=made-review@local",
 		"commit", "-m", message)
