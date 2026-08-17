@@ -111,3 +111,14 @@ func autoFixPatch(t *testing.T, worktreePath string) string {
 	writeFile(t, scratch, "reviewed.txt", "line one\nauto-fixed line\n")
 	return run(t, scratch, "diff")
 }
+
+func deletionAndAllowedPatch(t *testing.T, worktreePath string) string {
+	t.Helper()
+	scratch := t.TempDir()
+	run(t, scratch, "clone", "-q", worktreePath, ".")
+	writeFile(t, scratch, "reviewed.txt", "line one\nauto-fixed line\n")
+	if err := os.Remove(filepath.Join(scratch, "unauthorized.txt")); err != nil {
+		t.Fatalf("remove unauthorized patch fixture: %v", err)
+	}
+	return run(t, scratch, "diff")
+}

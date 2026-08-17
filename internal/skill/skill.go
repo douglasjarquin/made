@@ -68,21 +68,23 @@ along with the command:
 - The daemon starts on demand, but ` + "`made doctor`" + ` is the fastest way to
   confirm the daemon, ` + "`gh`" + ` authentication, and (optionally) a running herdr
   server are all reachable before you push.
+  Use ` + "`made doctor --json`" + ` for the versioned health response.
 
 ## Running the gate
 
 ` + "```sh" + `
 made gate init                # once per repo: create the bare gate + remote
 git push made <branch>        # admits the push and returns immediately
-made status --json            # poll structured run state, per-stage
-                               # results, and any pending ask-user findings
+made capabilities --json      # inspect the versioned public command contract
+made run list --json --active # list active runs and exact run IDs
+made run status --json <id>   # poll one exact run ID
 ` + "```" + `
 
 ` + "`git push made <branch>`" + ` only blocks long enough to admit the push; it
 returns as soon as the push is accepted, before the pipeline has run a single
 stage. The 9-stage pipeline then runs in the background against a
-daemon-managed worktree. Poll ` + "`made status --json`" + ` (it is safe to call
-repeatedly) to watch the run progress and to read its eventual outcome -
+daemon-managed worktree. Poll ` + "`made run status --json <exact-run-id>`" + ` (it is safe to call
+repeatedly) to watch that run's progress and to read its eventual outcome -
 the push itself never reports pass or fail.
 
 ## Findings and approval
@@ -92,10 +94,7 @@ Review and Document can surface findings while the pipeline runs:
 - Auto-fixable findings are applied automatically as new commits; nothing to
   do.
 - **ask-user** findings are queued, never silently applied or dropped. Run
-  ` + "`made review`" + ` to see them and approve or reject each one from a plain
-  stdin/stdout prompt - relay the finding to the user verbatim rather than
-  paraphrasing it, since it challenges something about their intent or the
-  product behavior of the change.
+  ` + "`made review decide --json --stage <stage> --decision <approved|rejected> <exact-run-id>`" + ` after the decision is authorized.
 
 A rejected finding halts the pipeline at that stage; an approved one applies
 and the run resumes.
@@ -122,16 +121,15 @@ and the run resumes.
 
 ## Outcomes
 
-` + "`made status --json`" + `'s ` + "`state`" + ` field is one of ` + "`queued`" + `,
-` + "`running`" + `, ` + "`completed`" + `, or ` + "`failed`" + `:
+` + "`made run status --json <exact-run-id>`" + `'s ` + "`state`" + ` field is one of ` + "`queued`" + `,
+` + "`running`" + `, ` + "`awaiting_review`" + `, ` + "`awaiting_merge`" + `, ` + "`succeeded`" + `, ` + "`failed`" + `, ` + "`canceled`" + `, or ` + "`superseded`" + `:
 
-- **All 9 stages pass** - the run's state stays ` + "`running`" + `, not
-  ` + "`completed`" + `. made opened a real PR and watched its checks go green,
+- **All 9 stages pass** - the run's state becomes ` + "`awaiting_merge`" + `. made opened a real PR and watched its checks go green,
   but merging that PR is a human decision made cannot observe, so it never
   marks the run done on its own. The run's message names the open PR and
   says it is awaiting merge - tell the user it is ready for their review,
   and do not wait for the merge yourself.
-- ` + "`failed`" + ` - a stage blocked the run. Read ` + "`made status --json`" + ` for
+- ` + "`failed`" + ` - a stage blocked the run. Read ` + "`made run status --json <exact-run-id>`" + ` for
   the failing stage's result and message, fix it, commit the fix on the
   same branch, and push to ` + "`made`" + ` again. If PR or CI fails after
   Push already succeeded, the message says so explicitly - e.g. "push
@@ -140,9 +138,19 @@ and the run resumes.
   real remote, so that message is your signal the branch is already live
   there even though the run itself failed - check whether it needs manual
   cleanup before you push a fix.
-- An ask-user finding parks the run rather than failing it: state stays
-  ` + "`running`" + ` and ` + "`pending_findings`" + ` is populated until
-  ` + "`made review`" + ` resolves it (see above).
+- An ask-user finding parks the run rather than failing it: state becomes
+  ` + "`awaiting_review`" + ` and ` + "`pending_findings`" + ` is populated until
+  ` + "`made review decide`" + ` resolves it (see above).
+
+## Durable contract
+
+The daemon acquires its singleton before inspecting or changing the Unix socket path.
+
+Only a stale Unix socket can be removed, and regular files, symlinks, and directories are preserved and rejected.
+
+Run state is stored in a fsync-backed local WAL, and gate submissions use an idempotent fsync-backed spool keyed by gate, ref, and input SHA.
+
+Shutdown is authorized through the owner-only Unix socket and is refused while active, awaiting, or undrained work remains.
 
 ## herdr visibility
 

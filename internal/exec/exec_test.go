@@ -41,6 +41,24 @@ func TestRunCapturesStderr(t *testing.T) {
 	}
 }
 
+func TestRunBoundsStdoutAndStderrWhileProcessRuns(t *testing.T) {
+	const limit = 64
+	res, err := exec.Run(context.Background(), exec.Command{
+		Name:        "sh",
+		Args:        []string{"-c", "printf '%*s' 10000 x; printf '%*s' 10000 y >&2"},
+		OutputLimit: limit,
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if len(res.Stdout) > limit || len(res.Stderr) > limit {
+		t.Fatalf("output exceeded limit: stdout=%d stderr=%d limit=%d", len(res.Stdout), len(res.Stderr), limit)
+	}
+	if !strings.Contains(string(res.Stdout), "output truncated") || !strings.Contains(string(res.Stderr), "output truncated") {
+		t.Fatalf("bounded output omitted truncation markers: stdout=%q stderr=%q", res.Stdout, res.Stderr)
+	}
+}
+
 func TestRunCancellationReapsGrandchildren(t *testing.T) {
 	if _, err := osexec.LookPath("pgrep"); err != nil {
 		t.Skip("pgrep not available on this system")

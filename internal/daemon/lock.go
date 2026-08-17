@@ -20,7 +20,7 @@ type Lock struct {
 // including on a crash - unlike a PID file, whose mere existence proves
 // nothing about whether its writer is still alive.
 func AcquireLock(path string) (*Lock, error) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|unix.O_NOFOLLOW, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("open lock file %s: %w", path, err)
 	}

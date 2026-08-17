@@ -12,6 +12,7 @@ type Finding struct {
 	Kind        FindingKind `json:"kind"`
 	Description string      `json:"description"`
 	Patch       string      `json:"patch,omitempty"`
+	Paths       []string    `json:"paths,omitempty"`
 }
 
 type Findings struct {

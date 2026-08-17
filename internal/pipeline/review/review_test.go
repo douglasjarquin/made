@@ -25,7 +25,7 @@ func TestRun_AutoFixApplied(t *testing.T) {
 
 	scenarioPath := writeScenario(t, agent.Findings{
 		Findings: []agent.Finding{
-			{Kind: agent.FindingAutoFixable, Description: "append auto-fixed line", Patch: patch},
+			{Kind: agent.FindingAutoFixable, Description: "append auto-fixed line", Patch: patch, Paths: []string{"reviewed.txt"}},
 		},
 	})
 

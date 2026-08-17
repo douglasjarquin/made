@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -62,7 +63,7 @@ func waitForRunTerminal(t *testing.T, rm *daemon.RunManager, id string, timeout 
 	deadline := time.After(timeout)
 	for {
 		snap, ok := rm.Snapshot(id)
-		if ok && (snap.Status == daemon.RunCompleted || snap.Status == daemon.RunFailed) {
+		if ok && (snap.Status == daemon.RunSucceeded || snap.Status == daemon.RunFailed) {
 			return snap
 		}
 		select {
@@ -143,6 +144,63 @@ func TestGateNotifyPushRPC_RejectedRefCreatesNoRun(t *testing.T) {
 	}
 }
 
+func TestGateNotifyPushRPC_RejectsInputSHAThatIsNotGateHead(t *testing.T) {
+	home := shortTempDir(t)
+	rm, client := startTestDaemon(t, home)
+	barePath, sourceDir := setupGateFixture(t, home)
+	testGit(t, sourceDir, "checkout", "-b", "feature-head")
+	sha := pushFeatureCommit(t, sourceDir, "feature-head", "v1\n", "feature head")
+	wrongSHA := strings.Repeat("b", 40)
+	if wrongSHA == sha {
+		t.Fatal("test setup bug: wrong SHA unexpectedly equals pushed SHA")
+	}
+
+	_, err := client.Call("gate.notifyPush", gateNotifyPushParams{
+		GatePath: barePath,
+		OldSHA:   gitZeroSHA,
+		NewSHA:   wrongSHA,
+		Ref:      "refs/heads/feature-head",
+	})
+	if err == nil || !strings.Contains(err.Error(), "does not match gate head") {
+		t.Fatalf("gate.notifyPush accepted an input SHA that is not the gate head: %v", err)
+	}
+	if len(rm.List()) != 0 {
+		t.Fatalf("unauthorized input SHA created a run: %+v", rm.List())
+	}
+}
+
+func TestGateNotifyPushRPC_RetainsSubmissionWhenRemoteRefreshFails(t *testing.T) {
+	home := shortTempDir(t)
+	rm, _ := startTestDaemon(t, home)
+	barePath, sourceDir := setupGateFixture(t, home)
+	testGit(t, sourceDir, "checkout", "-b", "feature-offline")
+	sha := pushFeatureCommit(t, sourceDir, "feature-offline", "v1\n", "feature offline")
+	missingRemote := filepath.Join(home, "missing-remote.git")
+	testGit(t, barePath, "remote", "set-url", "origin", missingRemote)
+	spool, err := daemon.OpenGateSpool(filepath.Join(home, "gate.spool"))
+	if err != nil {
+		t.Fatalf("OpenGateSpool: %v", err)
+	}
+	handler := gateNotifyPushHandler(rm, daemon.NewReviewDecisions(), spool)
+	params, marshalErr := json.Marshal(gateNotifyPushParams{
+		GatePath: barePath,
+		OldSHA:   gitZeroSHA,
+		NewSHA:   sha,
+		Ref:      "refs/heads/feature-offline",
+	})
+	if marshalErr != nil {
+		t.Fatalf("marshal gate.notifyPush params: %v", marshalErr)
+	}
+	_, err = handler(context.Background(), params)
+	if err == nil {
+		t.Fatal("gate.notifyPush succeeded despite an unavailable remote")
+	}
+	pending := spool.Pending()
+	if len(pending) != 1 || pending[0].Gate != barePath || pending[0].SHA != sha || pending[0].RunID == "" {
+		t.Fatalf("accepted submission was not retained in the durable spool: %+v", pending)
+	}
+}
+
 func TestGateNotifyPushRPC_RefDeletionCreatesNoRun(t *testing.T) {
 	home := shortTempDir(t)
 	rm, client := startTestDaemon(t, home)
@@ -173,10 +231,6 @@ func TestGateNotifyPushRPC_SupersededPushValidatesNewestSHA(t *testing.T) {
 
 	testGit(t, sourceDir, "checkout", "-b", "feature-x")
 	sha1 := pushFeatureCommit(t, sourceDir, "feature-x", "v1\n", "feature commit 1")
-	sha2 := pushFeatureCommit(t, sourceDir, "feature-x", "v2\n", "feature commit 2")
-	if sha1 == sha2 {
-		t.Fatal("test setup bug: expected two distinct commits")
-	}
 
 	repo := gateRepoIdentifier(barePath)
 
@@ -207,6 +261,11 @@ func TestGateNotifyPushRPC_SupersededPushValidatesNewestSHA(t *testing.T) {
 
 	if snap, ok := rm.Snapshot(result1.RunID); !ok || snap.Status != daemon.RunQueued {
 		t.Fatalf("expected first run still queued behind the blocker, got %+v (ok=%v)", snap, ok)
+	}
+
+	sha2 := pushFeatureCommit(t, sourceDir, "feature-x", "v2\n", "feature commit 2")
+	if sha1 == sha2 {
+		t.Fatal("test setup bug: expected two distinct commits")
 	}
 
 	var result2 gateNotifyPushResult
@@ -260,8 +319,8 @@ waitLoop:
 	if !ok {
 		t.Fatal("expected the first (superseded) run to remain tracked")
 	}
-	if final1.Status != daemon.RunFailed || !errors.Is(final1.Err, daemon.ErrRunSuperseded) {
-		t.Fatalf("expected first run superseded (Failed/ErrRunSuperseded), got status=%v err=%v", final1.Status, final1.Err)
+	if final1.Status != daemon.RunSuperseded || !errors.Is(final1.Err, daemon.ErrRunSuperseded) {
+		t.Fatalf("expected first run superseded, got status=%v err=%v", final1.Status, final1.Err)
 	}
 	if !final1.StartedAt.IsZero() {
 		t.Fatal("superseded run must never have started")
@@ -306,6 +365,42 @@ func TestGateNotifyPushCLI_AlwaysExitsZeroEvenWhenDaemonUnreachable(t *testing.T
 	}
 	if strings.TrimSpace(string(errOut)) == "" {
 		t.Fatal("expected a diagnostic message on stderr even though the exit code must stay 0")
+	}
+}
+
+func TestGateNotifyPushCLI_DurablyQueuesWhenDaemonUnreachable(t *testing.T) {
+	home := shortTempDir(t)
+	t.Setenv("MADE_HOME", home)
+	gatePath := filepath.Join(home, "gates", "repo", "gate.git")
+	args := []string{
+		"gate", "notify-push",
+		"--gate", gatePath,
+		"--old", gitZeroSHA,
+		"--new", strings.Repeat("c", 40),
+		"--ref", "refs/heads/feature-x",
+	}
+	if _, _, code := runCapture(t, args); code != 0 {
+		t.Fatalf("offline gate notify-push exit code = %d, want 0", code)
+	}
+	spool, err := daemon.OpenGateSpool(filepath.Join(home, "gate.spool"))
+	if err != nil {
+		t.Fatalf("OpenGateSpool: %v", err)
+	}
+	pending := spool.Pending()
+	if len(pending) != 1 || pending[0].Gate != gatePath || pending[0].Ref != "refs/heads/feature-x" || pending[0].SHA != strings.Repeat("c", 40) || pending[0].RunID == "" {
+		t.Fatalf("offline submission spool = %+v, want one complete durable identity", pending)
+	}
+	firstRunID := pending[0].RunID
+	if _, _, code := runCapture(t, args); code != 0 {
+		t.Fatalf("duplicate offline gate notify-push exit code = %d, want 0", code)
+	}
+	reopened, err := daemon.OpenGateSpool(filepath.Join(home, "gate.spool"))
+	if err != nil {
+		t.Fatalf("reopen GateSpool: %v", err)
+	}
+	pending = reopened.Pending()
+	if len(pending) != 1 || pending[0].RunID != firstRunID {
+		t.Fatalf("duplicate offline submission spool = %+v, want original idempotent record", pending)
 	}
 }
 

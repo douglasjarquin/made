@@ -30,6 +30,31 @@ type wfFixture struct {
 	defaultBranch string
 }
 
+func TestChain_RefusesDeliveryWhenRequiredStageDisabled(t *testing.T) {
+	disabled := false
+	rm := daemon.NewRunManager()
+	runID := rm.NewRunID()
+	if _, err := rm.Submit(runID, "repo", "branch", func(context.Context, func(daemon.Event)) error { return nil }); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	c := &chain{rc: &RunContext{Config: config.Config{
+		Review: config.Review{Required: true},
+		Stages: map[string]config.Stage{stageNameReview: {Enabled: &disabled}},
+	}}, rm: rm, runID: runID}
+
+	err := c.requireDeliveryStages()
+	if err == nil {
+		t.Fatal("requireDeliveryStages allowed delivery with a disabled required review stage")
+	}
+	if !strings.Contains(err.Error(), `required stage "review" is disabled`) {
+		t.Fatalf("requireDeliveryStages error = %q, want disabled review stage", err)
+	}
+	snapshot, ok := rm.Snapshot(runID)
+	if !ok || len(snapshot.Stages) != 1 || snapshot.Stages[0] != (daemon.StageResult{Name: stageNameReview, Result: "skipped"}) {
+		t.Fatalf("disabled stage snapshot = %+v, want review/skipped", snapshot.Stages)
+	}
+}
+
 func newWFFixture(t *testing.T) *wfFixture {
 	t.Helper()
 	dir := t.TempDir()
@@ -219,11 +244,14 @@ func TestNewWorkFunc_FullPassEndsRunningWithAwaitingMergeMessage(t *testing.T) {
 	submitWorkFunc(t, rm, runID, "repo-full-pass", branch, wf, rc)
 
 	snap := waitForRunEnded(t, rm, runID, 30*time.Second)
-	if snap.Status != daemon.RunRunning {
-		t.Fatalf("expected final status RunRunning (awaiting merge), got %v (err=%v)", snap.Status, snap.Err)
+	if snap.Status != daemon.RunAwaitingMerge {
+		t.Fatalf("expected final status RunAwaitingMerge, got %v (err=%v)", snap.Status, snap.Err)
 	}
 	if !strings.Contains(snap.Message, "awaiting merge") {
 		t.Fatalf("expected final message to mention awaiting merge, got %q", snap.Message)
+	}
+	if len(snap.OutputSHA) != 40 {
+		t.Fatalf("expected durable output SHA after push preparation, got %q", snap.OutputSHA)
 	}
 	assertAllStagesPassed(t, snap.Stages)
 
@@ -258,8 +286,8 @@ func TestNewWorkFunc_FullPassPRTitleMatchesPushedCommitSubject(t *testing.T) {
 	submitWorkFunc(t, rm, runID, "repo-pr-title", branch, wf, rc)
 
 	snap := waitForRunEnded(t, rm, runID, 30*time.Second)
-	if snap.Status != daemon.RunRunning {
-		t.Fatalf("expected final status RunRunning (awaiting merge), got %v (err=%v)", snap.Status, snap.Err)
+	if snap.Status != daemon.RunAwaitingMerge {
+		t.Fatalf("expected final status RunAwaitingMerge, got %v (err=%v)", snap.Status, snap.Err)
 	}
 	assertAllStagesPassed(t, snap.Stages)
 
@@ -378,8 +406,8 @@ func TestNewWorkFunc_DocumentFindingParksThenRejectedFailsRun(t *testing.T) {
 	submitWorkFunc(t, rm, runID, "repo-doc-reject", branch, wf, rc)
 
 	parked := waitForPendingFindings(t, rm, runID, 30*time.Second)
-	if parked.Status != daemon.RunRunning {
-		t.Fatalf("expected parked run to stay RunRunning, got %v", parked.Status)
+	if parked.Status != daemon.RunAwaitingReview {
+		t.Fatalf("expected parked run to stay RunAwaitingReview, got %v", parked.Status)
 	}
 	if len(parked.PendingFindings) != 1 || parked.PendingFindings[0].Stage != stageNameDocument {
 		t.Fatalf("expected one pending finding on stage %q, got %+v", stageNameDocument, parked.PendingFindings)
@@ -424,15 +452,15 @@ func TestNewWorkFunc_DocumentFindingParksThenApprovedResumesToCompletion(t *test
 	submitWorkFunc(t, rm, runID, "repo-doc-approve", branch, wf, rc)
 
 	parked := waitForPendingFindings(t, rm, runID, 30*time.Second)
-	if parked.Status != daemon.RunRunning {
-		t.Fatalf("expected parked run to stay RunRunning, got %v", parked.Status)
+	if parked.Status != daemon.RunAwaitingReview {
+		t.Fatalf("expected parked run to stay RunAwaitingReview, got %v", parked.Status)
 	}
 
 	reviewDecisions.Set(runID, stageNameDocument, daemon.ReviewApproved)
 
 	snap := waitForRunEnded(t, rm, runID, 30*time.Second)
-	if snap.Status != daemon.RunRunning {
-		t.Fatalf("expected final status RunRunning (awaiting merge) after resume, got %v (err=%v)", snap.Status, snap.Err)
+	if snap.Status != daemon.RunAwaitingMerge {
+		t.Fatalf("expected final status RunAwaitingMerge after resume, got %v (err=%v)", snap.Status, snap.Err)
 	}
 	if !strings.Contains(snap.Message, "awaiting merge") {
 		t.Fatalf("expected final message to mention awaiting merge, got %q", snap.Message)

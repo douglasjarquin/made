@@ -16,9 +16,8 @@ type reviewKey struct {
 }
 
 // ReviewDecisions lives alongside RunManager because a decision only ever
-// applies to one (run, stage) pair, making it per-run state that both the
-// review.decide/review.decision RPC handlers and the orchestrator's WorkFunc
-// need to reach from their separate packages.
+// applies to one (run, stage) pair, making it per-run state that the versioned
+// review.decide handler and orchestrator's WorkFunc share.
 type ReviewDecisions struct {
 	mu      sync.Mutex
 	entries map[reviewKey]string
@@ -46,13 +45,6 @@ func (d *ReviewDecisions) Set(runID, stage, decision string) {
 	for _, ch := range waiters {
 		ch <- decision
 	}
-}
-
-func (d *ReviewDecisions) Get(runID, stage string) (string, bool) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	decision, ok := d.entries[reviewKey{RunID: runID, Stage: stage}]
-	return decision, ok
 }
 
 // Wait blocks until a decision is recorded for (runID, stage) via Set, or

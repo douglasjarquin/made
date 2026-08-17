@@ -46,7 +46,7 @@ func TestRunManager_SequentialQueuing(t *testing.T) {
 	deadline := time.After(2 * time.Second)
 	for {
 		s2, ok := rm.Snapshot(id2)
-		if ok && (s2.Status == RunCompleted || s2.Status == RunFailed) {
+		if ok && (s2.Status == RunSucceeded || s2.Status == RunFailed) {
 			break
 		}
 		select {
@@ -242,7 +242,7 @@ func TestRunManager_CancelStopsRunningWorkFunc(t *testing.T) {
 		t.Fatal("WorkFunc did not unblock within 1s of Cancel")
 	}
 
-	final := waitForStatus(t, rm, id, RunFailed, 2*time.Second)
+	final := waitForStatus(t, rm, id, RunCanceled, 2*time.Second)
 	if final.Err == nil || !errors.Is(final.Err, context.Canceled) {
 		t.Fatalf("expected final error to wrap context.Canceled, got %v", final.Err)
 	}
@@ -291,7 +291,9 @@ func TestRunManager_SupersedeQueuedDropsOnlyStillQueuedJobForBranch(t *testing.T
 		t.Fatalf("expected first run still queued behind the blocker before supersession, got %+v (ok=%v)", snap, ok)
 	}
 
-	rm.SupersedeQueued(repo, "feature-x")
+	if err := rm.SupersedeQueued(repo, "feature-x"); err != nil {
+		t.Fatalf("SupersedeQueued: %v", err)
+	}
 
 	id2 := rm.NewRunID()
 	if _, err := rm.Submit(id2, repo, "feature-x", recordWork("second")); err != nil {
@@ -300,14 +302,14 @@ func TestRunManager_SupersedeQueuedDropsOnlyStillQueuedJobForBranch(t *testing.T
 
 	close(blockRelease)
 
-	waitForStatus(t, rm, id2, RunCompleted, 2*time.Second)
+	waitForStatus(t, rm, id2, RunSucceeded, 2*time.Second)
 
 	final1, ok := rm.Snapshot(id1)
 	if !ok {
 		t.Fatal("expected superseded run to remain tracked, not deleted")
 	}
-	if final1.Status != RunFailed {
-		t.Fatalf("expected superseded run status RunFailed, got %v", final1.Status)
+	if final1.Status != RunSuperseded {
+		t.Fatalf("expected superseded run status RunSuperseded, got %v", final1.Status)
 	}
 	if !errors.Is(final1.Err, ErrRunSuperseded) {
 		t.Fatalf("expected superseded run's error to wrap ErrRunSuperseded, got %v", final1.Err)
@@ -341,14 +343,16 @@ func TestRunManager_SupersedeQueuedLeavesAlreadyStartedRunAlone(t *testing.T) {
 	<-started
 	waitForStatus(t, rm, id, RunRunning, time.Second)
 
-	rm.SupersedeQueued(repo, "feature-x")
+	if err := rm.SupersedeQueued(repo, "feature-x"); err != nil {
+		t.Fatalf("SupersedeQueued: %v", err)
+	}
 
 	if snap, _ := rm.Snapshot(id); snap.Status != RunRunning {
 		t.Fatalf("expected already-started run to stay RunRunning after SupersedeQueued, got %v", snap.Status)
 	}
 
 	close(release)
-	final := waitForStatus(t, rm, id, RunCompleted, 2*time.Second)
+	final := waitForStatus(t, rm, id, RunSucceeded, 2*time.Second)
 	if final.Err != nil {
 		t.Fatalf("expected already-started run to complete normally, got err %v", final.Err)
 	}
@@ -362,7 +366,7 @@ func TestRunManager_CancelTerminalRunErrors(t *testing.T) {
 		t.Fatalf("submit: %v", err)
 	}
 
-	waitForStatus(t, rm, id, RunCompleted, 2*time.Second)
+	waitForStatus(t, rm, id, RunSucceeded, 2*time.Second)
 
 	if err := rm.Cancel(id); err == nil {
 		t.Fatal("expected error cancelling an already-terminal run")

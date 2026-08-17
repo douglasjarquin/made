@@ -36,6 +36,10 @@ func main() {
 	switch {
 	case len(args) >= 2 && args[0] == "pr" && args[1] == "create":
 		fmt.Fprintln(os.Stdout, envOr("FAKE_GH_PR_URL", "https://github.com/example/repo/pull/1"))
+	case len(args) >= 2 && args[0] == "pr" && args[1] == "list":
+		fmt.Fprint(os.Stdout, envOr("FAKE_GH_PR_LIST_JSON", "[]"))
+	case len(args) >= 2 && args[0] == "pr" && args[1] == "checks":
+		fmt.Fprint(os.Stdout, checksResponse())
 	case len(args) >= 2 && args[0] == "pr" && args[1] == "view":
 		fmt.Fprint(os.Stdout, prViewResponse())
 	case len(args) >= 2 && args[0] == "run" && args[1] == "view":
@@ -62,6 +66,23 @@ func prViewResponse() string {
 	list := strings.Split(states, ",")
 	idx := nextSequenceIndex("pr_view", len(list))
 	return fmt.Sprintf(`{"mergeStateStatus":%q}`, strings.TrimSpace(list[idx]))
+}
+
+func checksResponse() string {
+	if value := os.Getenv("FAKE_GH_CHECKS_JSON"); value != "" {
+		return value
+	}
+	states := os.Getenv("FAKE_GH_PR_VIEW_STATES")
+	if states == "" {
+		return `[{"name":"ci","state":"SUCCESS","conclusion":"SUCCESS","workflowRunId":1,"detailsUrl":"https://github.com/example/repo/actions/runs/1"}]`
+	}
+	list := strings.Split(states, ",")
+	idx := nextSequenceIndex("checks", len(list))
+	state := strings.ToUpper(strings.TrimSpace(list[idx]))
+	if state == "CLEAN" {
+		return `[{"name":"ci","state":"SUCCESS","conclusion":"SUCCESS","workflowRunId":1,"detailsUrl":"https://github.com/example/repo/actions/runs/1"}]`
+	}
+	return `[{"name":"ci","state":"COMPLETED","conclusion":"FAILURE","workflowRunId":1,"detailsUrl":"https://github.com/example/repo/actions/runs/1"}]`
 }
 
 // nextSequenceIndex lets one scripted state sequence (e.g. "fails twice then

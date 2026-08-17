@@ -36,11 +36,6 @@ type Result struct {
 	PRURL   string
 }
 
-// Run's error return is reserved for infrastructure/configuration failures
-// (a nil client, missing required options); a PR request rejected by GitHub
-// itself - auth failure, branch protection, network error - is a normal
-// outcome reported via Result.OK, not an error, following the push stage's
-// convention (internal/pipeline/push).
 func Run(ctx context.Context, ghClient *github.Client, opts Options) (Result, error) {
 	if ghClient == nil {
 		return Result{}, fmt.Errorf("pr: ghClient must not be nil")
@@ -65,10 +60,7 @@ func Run(ctx context.Context, ghClient *github.Client, opts Options) (Result, er
 		Head:  opts.Head,
 	})
 	if err != nil {
-		return Result{
-			OK:      false,
-			Message: err.Error(),
-		}, nil
+		return Result{}, fmt.Errorf("pr: GitHub API failure: %w", err)
 	}
 
 	return Result{

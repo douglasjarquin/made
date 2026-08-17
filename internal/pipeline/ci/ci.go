@@ -16,13 +16,6 @@ import (
 
 const (
 	defaultPollInterval = 2 * time.Second
-
-	// passingMergeState is the gh pr view mergeStateStatus value that means
-	// "all checks passed and the PR is clear to proceed". internal/github's
-	// Client exposes no separate check-listing endpoint, so this stage
-	// treats PR mergeability status as its check-status signal; any other
-	// state is treated as a (possibly transient) check failure.
-	passingMergeState = "CLEAN"
 )
 
 type Result struct {
@@ -58,40 +51,83 @@ func Run(ctx context.Context, ghClient *github.Client, prURL string, rerunBudget
 
 	reruns := 0
 	for {
-		state, err := ghClient.MergeableState(ctx, prURL)
+		checks, err := ghClient.Checks(ctx, prURL)
 		if err != nil {
-			return Result{OK: false, Message: err.Error(), RerunsUsed: reruns}, nil
+			return Result{}, err
 		}
-		if state == passingMergeState {
+		if len(checks) == 0 {
+			return Result{}, fmt.Errorf("ci: GitHub returned no checks for %s", prURL)
+		}
+		allPassed := true
+		var failing *github.Check
+		pending := false
+		for i := range checks {
+			check := checks[i]
+			if checkPassed(check) {
+				continue
+			}
+			allPassed = false
+			if checkPending(check) {
+				pending = true
+				continue
+			}
+			if failing == nil {
+				failing = &check
+			}
+		}
+		if allPassed {
 			return Result{
 				OK:         true,
 				Message:    fmt.Sprintf("checks passed for %s after %d rerun(s)", prURL, reruns),
 				RerunsUsed: reruns,
 			}, nil
 		}
+		if pending && failing == nil {
+			select {
+			case <-ctx.Done():
+				return Result{}, ctx.Err()
+			case <-time.After(pollInterval):
+			}
+			continue
+		}
+		if failing == nil {
+			return Result{}, fmt.Errorf("ci: check state was neither passing, pending, nor failing")
+		}
 
 		if reruns >= rerunBudget {
-			excerpt, logErr := ghClient.CheckLogs(ctx, prURL)
+			excerpt, logErr := ghClient.CheckLogs(ctx, failing.WorkflowRunID)
 			if logErr != nil {
-				excerpt = fmt.Sprintf("(failed to fetch check logs: %s)", logErr.Error())
+				return Result{}, logErr
 			}
 			return Result{
 				OK:         false,
-				Message:    fmt.Sprintf("checks still failing (%s) for %s after exhausting rerun budget (%d)", state, prURL, rerunBudget),
+				Message:    fmt.Sprintf("check %s still failing for %s after exhausting rerun budget (%d)", failing.Name, prURL, rerunBudget),
 				RerunsUsed: reruns,
 				LogExcerpt: excerpt,
 			}, nil
 		}
 
-		if err := ghClient.RerunCheck(ctx, prURL); err != nil {
-			return Result{OK: false, Message: err.Error(), RerunsUsed: reruns}, nil
+		if err := ghClient.RerunCheck(ctx, failing.WorkflowRunID); err != nil {
+			return Result{}, err
 		}
 		reruns++
 
 		select {
 		case <-ctx.Done():
-			return Result{OK: false, Message: ctx.Err().Error(), RerunsUsed: reruns}, nil
+			return Result{}, ctx.Err()
 		case <-time.After(pollInterval):
 		}
 	}
+}
+
+func checkPassed(check github.Check) bool {
+	status := strings.ToUpper(strings.TrimSpace(check.Status))
+	conclusion := strings.ToUpper(strings.TrimSpace(check.Conclusion))
+	return (status == "SUCCESS" || status == "COMPLETED") && (conclusion == "SUCCESS" || conclusion == "SUCCESSFUL" || conclusion == "NEUTRAL")
+}
+
+func checkPending(check github.Check) bool {
+	status := strings.ToUpper(strings.TrimSpace(check.Status))
+	conclusion := strings.TrimSpace(check.Conclusion)
+	return conclusion == "" || status == "QUEUED" || status == "IN_PROGRESS" || status == "PENDING"
 }

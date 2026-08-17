@@ -1,26 +1,88 @@
 package config
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/douglasjarquin/made/internal/agent"
 	"gopkg.in/yaml.v3"
 )
 
-const defaultCIRerunBudget = 2
+const (
+	defaultCIRerunBudget     = 2
+	defaultStageTimeout      = 30 * time.Minute
+	maxStageTimeoutSeconds   = 2 * 60 * 60
+	defaultEvidenceRetention = 4 << 20
+	maxEvidenceRetention     = 64 << 20
+	maxConfigBytes           = 1 << 20
+)
+
+var validStageNames = map[string]struct{}{
+	"intent": {}, "rebase": {}, "review": {}, "test": {}, "document": {},
+	"lint": {}, "push": {}, "pr": {}, "ci": {},
+}
 
 type Config struct {
-	Document               Document `yaml:"document"`
-	Review                 Review   `yaml:"review"`
-	DisableProjectSettings bool     `yaml:"disable_project_settings"`
-	NoCI                   bool     `yaml:"no_ci"`
-	CI                     CI       `yaml:"ci"`
-	Test                   Test     `yaml:"test"`
-	Commands               Commands `yaml:"commands"`
-	Agent                  string   `yaml:"agent"`
-	Agents                 []string `yaml:"agents"`
-	AllowRepoCommands      bool     `yaml:"allow_repo_commands"`
+	Version                int              `yaml:"version"`
+	Document               Document         `yaml:"document"`
+	Review                 Review           `yaml:"review"`
+	DisableProjectSettings bool             `yaml:"disable_project_settings"`
+	NoCI                   bool             `yaml:"no_ci"`
+	CI                     CI               `yaml:"ci"`
+	Test                   Test             `yaml:"test"`
+	Commands               Commands         `yaml:"commands"`
+	Agent                  string           `yaml:"agent"`
+	Agents                 []string         `yaml:"agents"`
+	AllowRepoCommands      bool             `yaml:"allow_repo_commands"`
+	Stages                 map[string]Stage `yaml:"stages"`
+}
+
+type Stage struct {
+	Enabled        *bool `yaml:"enabled"`
+	TimeoutSeconds *int  `yaml:"timeout_seconds"`
+}
+
+func (c Config) StageTimeout(name string) time.Duration {
+	stage := c.Stages[name]
+	if stage.TimeoutSeconds == nil {
+		return defaultStageTimeout
+	}
+	return time.Duration(*stage.TimeoutSeconds) * time.Second
+}
+
+func (c Config) EvidenceRetentionBytes() int {
+	if c.Test.Evidence.RetentionBytes == nil {
+		return defaultEvidenceRetention
+	}
+	return *c.Test.Evidence.RetentionBytes
+}
+
+func (c Config) StageResult(name string) string {
+	if name == "ci" && c.NoCI {
+		return "skipped"
+	}
+	stage, ok := c.Stages[name]
+	if ok && stage.Enabled != nil && !*stage.Enabled {
+		return "skipped"
+	}
+	return "pending"
+}
+
+func (c Config) StageRequired(name string) bool {
+	switch name {
+	case "review":
+		return c.Review.Required
+	case "ci":
+		return c.CI.Required && !c.NoCI
+	default:
+		return true
+	}
 }
 
 type Document struct {
@@ -46,9 +108,10 @@ type Test struct {
 }
 
 type Evidence struct {
-	Branch      string `yaml:"branch"`
-	StoreInRepo bool   `yaml:"store_in_repo"`
-	Dir         string `yaml:"dir"`
+	Branch         string `yaml:"branch"`
+	StoreInRepo    bool   `yaml:"store_in_repo"`
+	Dir            string `yaml:"dir"`
+	RetentionBytes *int   `yaml:"retention_bytes"`
 }
 
 type Commands struct {
@@ -72,12 +135,14 @@ func LoadEffectiveConfig(trustedPath, pushedPath string) (Config, error) {
 	}
 
 	effective := Config{
+		Version:                trusted.Version,
 		Document:               trusted.Document,
 		Review:                 trusted.Review,
 		DisableProjectSettings: trusted.DisableProjectSettings,
 		NoCI:                   trusted.NoCI,
 		CI:                     trusted.CI,
 		AllowRepoCommands:      trusted.AllowRepoCommands,
+		Stages:                 trusted.Stages,
 	}
 	effective.Test.Evidence = trusted.Test.Evidence
 
@@ -134,17 +199,91 @@ func loadConfigFile(path string) (cfg Config, exists bool, err error) {
 		return Config{}, false, nil
 	}
 
-	data, err := os.ReadFile(path)
+	data, exists, err := readConfigBytes(path, nil)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return Config{}, false, nil
-		}
-		return Config{}, false, err
+		return Config{}, exists, err
+	}
+	if !exists {
+		return Config{}, false, nil
 	}
 
+	if filepath.Base(path) == ".made.yml" || strings.HasSuffix(filepath.Base(path), ".made.yml") {
+		decoder := yaml.NewDecoder(bytes.NewReader(data))
+		decoder.KnownFields(true)
+		if err := decoder.Decode(&cfg); err != nil {
+			return Config{}, true, err
+		}
+		var extra any
+		if err := decoder.Decode(&extra); err != io.EOF {
+			if err == nil {
+				return Config{}, true, fmt.Errorf("versioned .made.yml must contain one document")
+			}
+			return Config{}, true, err
+		}
+		if cfg.Version != 1 {
+			return Config{}, true, fmt.Errorf("versioned .made.yml requires version: 1, got %d", cfg.Version)
+		}
+		for name := range cfg.Stages {
+			if _, ok := validStageNames[name]; !ok {
+				return Config{}, true, fmt.Errorf("versioned .made.yml has unknown stage %q", name)
+			}
+			stage := cfg.Stages[name]
+			if stage.TimeoutSeconds != nil && (*stage.TimeoutSeconds <= 0 || *stage.TimeoutSeconds > maxStageTimeoutSeconds) {
+				return Config{}, true, fmt.Errorf("versioned .made.yml stage %q timeout_seconds must be between 1 and %d", name, maxStageTimeoutSeconds)
+			}
+		}
+		if retention := cfg.Test.Evidence.RetentionBytes; retention != nil && (*retention <= 0 || *retention > maxEvidenceRetention) {
+			return Config{}, true, fmt.Errorf("versioned .made.yml test.evidence.retention_bytes must be between 1 and %d", maxEvidenceRetention)
+		}
+		if !cfg.hasConfiguredValue() {
+			return Config{}, true, fmt.Errorf("versioned .made.yml must configure at least one non-version field")
+		}
+		return cfg, true, nil
+	}
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return Config{}, true, err
 	}
 
 	return cfg, true, nil
+}
+
+func readConfigBytes(path string, beforeRead func()) ([]byte, bool, error) {
+	file, err := os.Open(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	defer func() { _ = file.Close() }()
+
+	info, err := file.Stat()
+	if err != nil {
+		return nil, true, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, true, fmt.Errorf("config: %s is not a regular file", path)
+	}
+	if info.Size() > maxConfigBytes {
+		return nil, true, fmt.Errorf("config: %s exceeds %d bytes", path, maxConfigBytes)
+	}
+	if beforeRead != nil {
+		beforeRead()
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxConfigBytes+1))
+	if err != nil {
+		return nil, true, err
+	}
+	if len(data) > maxConfigBytes {
+		return nil, true, fmt.Errorf("config: %s exceeds %d bytes", path, maxConfigBytes)
+	}
+	return data, true, nil
+}
+
+func (c Config) hasConfiguredValue() bool {
+	return len(c.Document.Rules) > 0 || c.Review.Required || c.DisableProjectSettings || c.NoCI ||
+		c.CI.Required || c.CI.RerunBudget != 0 || len(c.Test.Evidence.Branch) > 0 || c.Test.Evidence.RetentionBytes != nil ||
+		c.Test.Evidence.StoreInRepo || len(c.Test.Evidence.Dir) > 0 || len(c.Commands.Test) > 0 ||
+		len(c.Commands.Lint) > 0 || len(c.Agent) > 0 || len(c.Agents) > 0 || c.AllowRepoCommands ||
+		len(c.Stages) > 0
 }

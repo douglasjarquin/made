@@ -10,6 +10,9 @@ import (
 )
 
 func TestRun_CleanRebaseProceeds(t *testing.T) {
+	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+	t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+	t.Setenv("SSH_AUTH_SOCK", "")
 	f := setupFixture(t, "", "", "")
 	wt := f.addWorktree(t)
 	defer func() {
@@ -39,6 +42,28 @@ func TestRun_CleanRebaseProceeds(t *testing.T) {
 	log := run(t, wt.Path, "log", "--format=%s")
 	if !strings.Contains(log, "main commit") || !strings.Contains(log, "feature commit") {
 		t.Fatalf("expected rebased history to contain both commits, got log:\n%s", log)
+	}
+}
+
+func TestRun_CleanRebaseIgnoresAmbientGitRouting(t *testing.T) {
+	f := setupFixture(t, "", "", "")
+	wt := f.addWorktree(t)
+	defer func() {
+		if err := wt.Remove(); err != nil {
+			t.Errorf("Remove: %v", err)
+		}
+	}()
+
+	ambientGitDir := t.TempDir()
+	run(t, ambientGitDir, "init", "--bare", "-q")
+	t.Setenv("GIT_DIR", ambientGitDir)
+
+	result, err := rebase.Run(wt.Path, f.defaultBranch)
+	if err != nil {
+		t.Fatalf("Run with ambient GIT_DIR: %v", err)
+	}
+	if !result.OK {
+		t.Fatalf("expected OK=true despite ambient GIT_DIR, got %+v", result)
 	}
 }
 

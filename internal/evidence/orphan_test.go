@@ -1,6 +1,7 @@
 package evidence_test
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -72,5 +73,23 @@ func TestOrphanBranchStoreDefaultBranchName(t *testing.T) {
 
 	if _, err := runNoFatal(repo, "git", "rev-parse", "--verify", "refs/heads/"+evidence.DefaultBranch); err != nil {
 		t.Fatalf("expected default evidence branch %q to exist: %v", evidence.DefaultBranch, err)
+	}
+}
+
+func TestOrphanBranchStorePublishesEvidenceToOrigin(t *testing.T) {
+	repo := initTargetRepo(t)
+	remote := filepath.Join(t.TempDir(), "remote.git")
+	run(t, t.TempDir(), "git", "init", "--bare", "-q", remote)
+	run(t, repo, "git", "remote", "add", "origin", remote)
+	store := &evidence.OrphanBranchStore{RepoPath: repo, Branch: "made-evidence"}
+	if err := store.WriteEvidence("run-remote", map[string][]byte{"summary.txt": []byte("published\n")}); err != nil {
+		t.Fatalf("WriteEvidence: %v", err)
+	}
+	if err := store.PublishEvidence("run-remote"); err != nil {
+		t.Fatalf("PublishEvidence: %v", err)
+	}
+	tree := run(t, remote, "git", "ls-tree", "-r", "--name-only", "refs/heads/made-evidence")
+	if !strings.Contains(tree, "run-remote/summary.txt") {
+		t.Fatalf("remote evidence branch lacks published file: %s", tree)
 	}
 }

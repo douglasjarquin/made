@@ -4,9 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"os/exec"
+	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/douglasjarquin/made/internal/api"
@@ -22,14 +21,14 @@ func TestScenarioDemo_SocketPermissions(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = srv.Close() })
 
-	out, err := exec.Command("stat", "-f", "%Sp %Su", socketPath).CombinedOutput()
+	info, err := os.Stat(socketPath)
 	if err != nil {
-		t.Fatalf("stat: %v: %s", err, out)
+		t.Fatalf("stat: %v", err)
 	}
-	fmt.Printf("$ stat -f \"%%Sp %%Su\" %s\n%s", socketPath, out)
+	fmt.Printf("$ inspect Unix socket %s\nmode=%#o type=%s\n", socketPath, info.Mode().Perm(), info.Mode().Type())
 
-	if !strings.HasPrefix(strings.TrimSpace(string(out)), "srw-------") {
-		t.Fatalf("expected owner-only socket permissions srw-------, got: %s", out)
+	if info.Mode()&os.ModeSocket == 0 || info.Mode().Perm() != 0o600 {
+		t.Fatalf("expected owner-only Unix socket mode 0600, got mode=%#o type=%s", info.Mode().Perm(), info.Mode().Type())
 	}
 	fmt.Println("=== RESULT ===")
 	fmt.Println("PASS: socket created with mode 0600 (srw-------), owner-only")

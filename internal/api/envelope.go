@@ -10,6 +10,7 @@ const Version = 1
 
 const (
 	ErrProtocolMismatch = "protocol_mismatch"
+	ErrInvalidRequest   = "invalid_request"
 	ErrUnknownMethod    = "unknown_method"
 	ErrHandlerFailed    = "handler_error"
 	ErrInternal         = "internal_error"
