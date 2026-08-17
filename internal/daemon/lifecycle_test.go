@@ -13,9 +13,11 @@ func TestRun_GracefulStop(t *testing.T) {
 
 	ready := make(chan int, 1)
 	done := make(chan error, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	go func() {
-		done <- Run(context.Background(), Options{
+		done <- Run(ctx, Options{
 			LockPath:    lockPath,
 			IdleTimeout: time.Minute,
 			OnReady:     func(pid int) { ready <- pid },
@@ -36,9 +38,7 @@ func TestRun_GracefulStop(t *testing.T) {
 		t.Fatal("expected daemon to report running before stop")
 	}
 
-	if err := Stop(lockPath, 2*time.Second); err != nil {
-		t.Fatalf("Stop: %v", err)
-	}
+	cancel()
 
 	select {
 	case runErr := <-done:

@@ -43,10 +43,17 @@ func Run(ctx context.Context, worktreePath, runID string, lintCommand []string, 
 		return Result{}, fmt.Errorf("lint: run %q: %w", strings.Join(lintCommand, " "), err)
 	}
 
-	if evErr := store.WriteEvidence(runID, map[string][]byte{
+	evidenceFiles := map[string][]byte{
 		"stdout.log": res.Stdout,
 		"stderr.log": res.Stderr,
-	}); evErr != nil {
+	}
+	var evErr error
+	if contextual, ok := store.(evidence.ContextStore); ok {
+		evErr = contextual.WriteEvidenceContext(ctx, runID, evidenceFiles)
+	} else {
+		evErr = store.WriteEvidence(runID, evidenceFiles)
+	}
+	if evErr != nil {
 		return Result{}, fmt.Errorf("lint: write evidence: %w", evErr)
 	}
 

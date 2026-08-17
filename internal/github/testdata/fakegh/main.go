@@ -36,6 +36,9 @@ func main() {
 		}
 		failIfScripted()
 		fmt.Fprintln(os.Stdout, envOr("FAKE_GH_PR_URL", "https://github.com/example/repo/pull/1"))
+	case len(args) == 10 && args[0] == "pr" && args[1] == "list" && args[2] == "--state" && args[3] == "open" && args[4] == "--base" && args[6] == "--head" && args[8] == "--json" && args[9] == "url":
+		failIfScripted()
+		fmt.Fprint(os.Stdout, envOr("FAKE_GH_PR_LIST_JSON", "[]"))
 	case len(args) == 5 && args[0] == "pr" && args[1] == "checks" && args[3] == "--json" && args[4] == "name,state,bucket,link":
 		payload := checksResponse()
 		fmt.Fprint(os.Stdout, payload)

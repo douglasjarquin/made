@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -62,7 +63,7 @@ func waitForRunTerminal(t *testing.T, rm *daemon.RunManager, id string, timeout 
 	deadline := time.After(timeout)
 	for {
 		snap, ok := rm.Snapshot(id)
-		if ok && (snap.Status == daemon.RunCompleted || snap.Status == daemon.RunFailed) {
+		if ok && (snap.Status == daemon.RunSucceeded || snap.Status == daemon.RunFailed) {
 			return snap
 		}
 		select {
@@ -143,70 +144,60 @@ func TestGateNotifyPushRPC_RejectedRefCreatesNoRun(t *testing.T) {
 	}
 }
 
-func TestGateNotifyPushRPC_RejectsNewSHAThatIsNotTheReceivedRef(t *testing.T) {
+func TestGateNotifyPushRPC_RejectsInputSHAThatIsNotGateHead(t *testing.T) {
 	home := shortTempDir(t)
 	rm, client := startTestDaemon(t, home)
 	barePath, sourceDir := setupGateFixture(t, home)
+	testGit(t, sourceDir, "checkout", "-b", "feature-head")
+	sha := pushFeatureCommit(t, sourceDir, "feature-head", "v1\n", "feature head")
+	wrongSHA := strings.Repeat("b", 40)
+	if wrongSHA == sha {
+		t.Fatal("test setup bug: wrong SHA unexpectedly equals pushed SHA")
+	}
 
-	testGit(t, sourceDir, "checkout", "-b", "feature-forged")
-	_ = pushFeatureCommit(t, sourceDir, "feature-forged", "v1\n", "feature commit")
 	_, err := client.Call("gate.notifyPush", gateNotifyPushParams{
 		GatePath: barePath,
 		OldSHA:   gitZeroSHA,
-		NewSHA:   strings.Repeat("a", 40),
-		Ref:      "refs/heads/feature-forged",
+		NewSHA:   wrongSHA,
+		Ref:      "refs/heads/feature-head",
 	})
-	if err == nil {
-		t.Fatalf("accepted forged new SHA; runs=%+v", rm.List())
+	if err == nil || !strings.Contains(err.Error(), "does not match gate head") {
+		t.Fatalf("gate.notifyPush accepted an input SHA that is not the gate head: %v", err)
+	}
+	if len(rm.List()) != 0 {
+		t.Fatalf("unauthorized input SHA created a run: %+v", rm.List())
 	}
 }
 
-func TestGateNotifyPushRPC_RejectsExistingUnrelatedSHA(t *testing.T) {
+func TestGateNotifyPushRPC_RetainsSubmissionWhenRemoteRefreshFails(t *testing.T) {
 	home := shortTempDir(t)
-	rm, client := startTestDaemon(t, home)
+	rm, _ := startTestDaemon(t, home)
 	barePath, sourceDir := setupGateFixture(t, home)
-
-	testGit(t, sourceDir, "checkout", "-b", "feature-forged")
-	featureSHA := pushFeatureCommit(t, sourceDir, "feature-forged", "v1\n", "feature commit")
-
-	unrelatedDir := shortTempDir(t)
-	testGit(t, "", "init", "-b", "unrelated-history", unrelatedDir)
-	writeAndCommit(t, unrelatedDir, "unrelated.txt", "unrelated\n", "unrelated commit")
-	unrelatedSHA := strings.TrimSpace(testGitOutput(t, unrelatedDir, "rev-parse", "HEAD"))
-	testGit(t, unrelatedDir, "remote", "add", "origin", "file://"+barePath)
-	testGit(t, unrelatedDir, "push", "origin", "HEAD:refs/heads/unrelated-history")
-
-	_, err := client.Call("gate.notifyPush", gateNotifyPushParams{
+	testGit(t, sourceDir, "checkout", "-b", "feature-offline")
+	sha := pushFeatureCommit(t, sourceDir, "feature-offline", "v1\n", "feature offline")
+	missingRemote := filepath.Join(home, "missing-remote.git")
+	testGit(t, barePath, "remote", "set-url", "origin", missingRemote)
+	spool, err := daemon.OpenGateSpool(filepath.Join(home, "gate.spool"))
+	if err != nil {
+		t.Fatalf("OpenGateSpool: %v", err)
+	}
+	handler := gateNotifyPushHandler(rm, daemon.NewReviewDecisions(), spool)
+	params, marshalErr := json.Marshal(gateNotifyPushParams{
 		GatePath: barePath,
 		OldSHA:   gitZeroSHA,
-		NewSHA:   unrelatedSHA,
-		Ref:      "refs/heads/feature-forged",
+		NewSHA:   sha,
+		Ref:      "refs/heads/feature-offline",
 	})
-	if err == nil {
-		t.Fatalf("accepted existing unrelated SHA %s for feature SHA %s; runs=%+v", unrelatedSHA, featureSHA, rm.List())
+	if marshalErr != nil {
+		t.Fatalf("marshal gate.notifyPush params: %v", marshalErr)
 	}
-}
-
-func TestGateNotifyPushRPC_RejectsStaleAncestorSHA(t *testing.T) {
-	home := shortTempDir(t)
-	rm, client := startTestDaemon(t, home)
-	barePath, sourceDir := setupGateFixture(t, home)
-
-	testGit(t, sourceDir, "checkout", "-b", "feature-stale")
-	sha1 := pushFeatureCommit(t, sourceDir, "feature-stale", "v1\n", "feature commit 1")
-	_ = pushFeatureCommit(t, sourceDir, "feature-stale", "v2\n", "feature commit 2")
-
-	_, err := client.Call("gate.notifyPush", gateNotifyPushParams{
-		GatePath: barePath,
-		OldSHA:   gitZeroSHA,
-		NewSHA:   sha1,
-		Ref:      "refs/heads/feature-stale",
-	})
+	_, err = handler(context.Background(), params)
 	if err == nil {
-		t.Fatalf("accepted stale ancestor SHA %s for advanced feature ref; runs=%+v", sha1, rm.List())
+		t.Fatal("gate.notifyPush succeeded despite an unavailable remote")
 	}
-	if runs := rm.List(); len(runs) != 0 {
-		t.Fatalf("stale notification created runs: %+v", runs)
+	pending := spool.Pending()
+	if len(pending) != 1 || pending[0].Gate != barePath || pending[0].SHA != sha || pending[0].RunID == "" {
+		t.Fatalf("accepted submission was not retained in the durable spool: %+v", pending)
 	}
 }
 
@@ -329,7 +320,7 @@ waitLoop:
 		t.Fatal("expected the first (superseded) run to remain tracked")
 	}
 	if final1.Status != daemon.RunSuperseded || !errors.Is(final1.Err, daemon.ErrRunSuperseded) {
-		t.Fatalf("expected first run superseded (Superseded/ErrRunSuperseded), got status=%v err=%v", final1.Status, final1.Err)
+		t.Fatalf("expected first run superseded, got status=%v err=%v", final1.Status, final1.Err)
 	}
 	if !final1.StartedAt.IsZero() {
 		t.Fatal("superseded run must never have started")
@@ -374,6 +365,42 @@ func TestGateNotifyPushCLI_AlwaysExitsZeroEvenWhenDaemonUnreachable(t *testing.T
 	}
 	if strings.TrimSpace(string(errOut)) == "" {
 		t.Fatal("expected a diagnostic message on stderr even though the exit code must stay 0")
+	}
+}
+
+func TestGateNotifyPushCLI_DurablyQueuesWhenDaemonUnreachable(t *testing.T) {
+	home := shortTempDir(t)
+	t.Setenv("MADE_HOME", home)
+	gatePath := filepath.Join(home, "gates", "repo", "gate.git")
+	args := []string{
+		"gate", "notify-push",
+		"--gate", gatePath,
+		"--old", gitZeroSHA,
+		"--new", strings.Repeat("c", 40),
+		"--ref", "refs/heads/feature-x",
+	}
+	if _, _, code := runCapture(t, args); code != 0 {
+		t.Fatalf("offline gate notify-push exit code = %d, want 0", code)
+	}
+	spool, err := daemon.OpenGateSpool(filepath.Join(home, "gate.spool"))
+	if err != nil {
+		t.Fatalf("OpenGateSpool: %v", err)
+	}
+	pending := spool.Pending()
+	if len(pending) != 1 || pending[0].Gate != gatePath || pending[0].Ref != "refs/heads/feature-x" || pending[0].SHA != strings.Repeat("c", 40) || pending[0].RunID == "" {
+		t.Fatalf("offline submission spool = %+v, want one complete durable identity", pending)
+	}
+	firstRunID := pending[0].RunID
+	if _, _, code := runCapture(t, args); code != 0 {
+		t.Fatalf("duplicate offline gate notify-push exit code = %d, want 0", code)
+	}
+	reopened, err := daemon.OpenGateSpool(filepath.Join(home, "gate.spool"))
+	if err != nil {
+		t.Fatalf("reopen GateSpool: %v", err)
+	}
+	pending = reopened.Pending()
+	if len(pending) != 1 || pending[0].RunID != firstRunID {
+		t.Fatalf("duplicate offline submission spool = %+v, want original idempotent record", pending)
 	}
 }
 

@@ -26,6 +26,21 @@ func derivePRTitle(worktreePath string) (string, error) {
 	return strings.TrimSpace(string(res.Stdout)), nil
 }
 
+func deriveOutputSHA(worktreePath string) (string, error) {
+	res, err := execpkg.Run(context.Background(), execpkg.Command{
+		Name: "git",
+		Args: []string{"rev-parse", "HEAD"},
+		Dir:  worktreePath,
+	})
+	if err != nil {
+		return "", fmt.Errorf("orchestrator: run git rev-parse HEAD: %w", err)
+	}
+	if res.ExitCode != 0 {
+		return "", fmt.Errorf("orchestrator: git rev-parse HEAD failed: %s", strings.TrimSpace(string(res.Stderr)))
+	}
+	return strings.TrimSpace(string(res.Stdout)), nil
+}
+
 func deriveEvidenceRef(store evidence.Store, runID string) string {
 	switch s := store.(type) {
 	case *evidence.OrphanBranchStore:

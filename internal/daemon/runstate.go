@@ -43,6 +43,12 @@ func (rm *RunManager) UpdatePendingFindings(id string, findings []AskUserFinding
 	defer r.persistMu.Unlock()
 	candidate := r.snapshot()
 	candidate.PendingFindings = append([]AskUserFinding(nil), findings...)
+	if len(findings) > 0 && candidate.Status == RunRunning {
+		candidate.Status = RunAwaitingReview
+	}
+	if len(findings) == 0 && candidate.Status == RunAwaitingReview {
+		candidate.Status = RunRunning
+	}
 	if err := rm.persistAndReplace(r, candidate); err != nil {
 		return err
 	}

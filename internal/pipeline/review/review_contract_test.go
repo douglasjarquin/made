@@ -26,7 +26,7 @@ func TestRun_AutoFixDoesNotStageUnrelatedChanges(t *testing.T) {
 	run(t, wt.Path, "add", "unrelated.txt")
 	patch := autoFixPatch(t, wt.Path)
 	scenarioPath := writeScenario(t, agent.Findings{Findings: []agent.Finding{{
-		Kind: agent.FindingAutoFixable, Description: "contained fix", Patch: patch,
+		Kind: agent.FindingAutoFixable, Description: "contained fix", Patch: patch, Paths: []string{"reviewed.txt"},
 	}}})
 
 	result, err := review.Run(context.Background(), wt.Path, agent.KindCodex, review.Options{

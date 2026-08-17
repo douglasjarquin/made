@@ -61,14 +61,11 @@ func TestRun_UnreachableRemoteFailsClean(t *testing.T) {
 	beforeHead := strings.TrimSpace(run(t, wt.Path, "rev-parse", "HEAD"))
 
 	result, err := push.Run(context.Background(), wt.Path, "origin", f.branch)
-	if err != nil {
-		t.Fatalf("Run: expected a reported failure, not an error, got: %v", err)
+	if err == nil {
+		t.Fatalf("Run: expected unreachable push to be classified as infrastructure error, result=%+v", result)
 	}
-	if result.OK {
-		t.Fatalf("expected OK=false for a push to an unreachable remote, got %+v", result)
-	}
-	if result.Message == "" {
-		t.Fatalf("expected a non-empty failure message")
+	if !strings.Contains(err.Error(), "infrastructure") {
+		t.Fatalf("expected infrastructure classification, got %v", err)
 	}
 
 	status := run(t, wt.Path, "status", "--porcelain")

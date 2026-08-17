@@ -57,7 +57,7 @@ func (d *ReviewDecisions) Set(runID, stage, decision string) error {
 		if !ok {
 			return fmt.Errorf("daemon: cannot decide unknown run %q", runID)
 		}
-		if snapshot.Status != RunRunning {
+		if snapshot.Status != RunRunning && snapshot.Status != RunAwaitingReview {
 			return fmt.Errorf("daemon: run %q is %s, not awaiting a review decision", runID, snapshot.Status)
 		}
 		pending := false

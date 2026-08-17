@@ -2,6 +2,8 @@ package daemon
 
 import (
 	"context"
+	cryptorand "crypto/rand"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"sort"
@@ -14,14 +16,15 @@ import (
 type RunStatus string
 
 const (
-	RunQueued        RunStatus = "queued"
-	RunRunning       RunStatus = "running"
-	RunAwaitingMerge RunStatus = "awaiting_merge"
-	RunSucceeded     RunStatus = "succeeded"
-	RunCompleted     RunStatus = RunSucceeded
-	RunFailed        RunStatus = "failed"
-	RunCanceled      RunStatus = "canceled"
-	RunSuperseded    RunStatus = "superseded"
+	RunQueued         RunStatus = "queued"
+	RunRunning        RunStatus = "running"
+	RunAwaitingReview RunStatus = "awaiting_review"
+	RunAwaitingMerge  RunStatus = "awaiting_merge"
+	RunSucceeded      RunStatus = "succeeded"
+	RunCompleted      RunStatus = RunSucceeded
+	RunFailed         RunStatus = "failed"
+	RunCanceled       RunStatus = "canceled"
+	RunSuperseded     RunStatus = "superseded"
 )
 
 type RunSnapshot struct {
@@ -41,6 +44,12 @@ type RunSnapshot struct {
 	Err               error             `json:"-"`
 	Error             string            `json:"error,omitempty"`
 	Message           string            `json:"message,omitempty"`
+	Errors            []string          `json:"errors,omitempty"`
+	Findings          []RunFinding      `json:"findings,omitempty"`
+	PRURL             string            `json:"pr_url,omitempty"`
+	SupersededBy      string            `json:"superseded_by,omitempty"`
+	CancelRequested   bool              `json:"cancel_requested,omitempty"`
+	SubmissionEvents  []SubmissionEvent `json:"submission_events,omitempty"`
 	Stages            []StageResult     `json:"stages"`
 	PendingFindings   []AskUserFinding  `json:"pending_findings"`
 	EvidenceRefs      []string          `json:"evidence_refs,omitempty"`
@@ -57,6 +66,8 @@ type RunSnapshot struct {
 type WorkFunc func(ctx context.Context, emit func(Event)) error
 
 var ErrRunIDExists = errors.New("daemon: run ID already submitted")
+
+var ErrRunSubmissionClosed = errors.New("daemon: run submission is closed")
 
 type run struct {
 	mu        sync.Mutex
@@ -104,6 +115,7 @@ type RunManager struct {
 	mu      sync.Mutex
 	repos   map[string]*repoQueue
 	runs    map[string]*run
+	closing bool
 	counter atomic.Uint64
 }
 
@@ -125,6 +137,31 @@ func (rm *RunManager) ActivitySignal() <-chan struct{} {
 	return rm.activity
 }
 
+func (rm *RunManager) BeginShutdown() error {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+	for _, r := range rm.runs {
+		snapshot := r.snapshot()
+		if snapshot.Status == RunQueued || snapshot.Status == RunRunning || snapshot.Status == RunAwaitingReview || snapshot.Status == RunAwaitingMerge {
+			return fmt.Errorf("daemon: active run %q remains in state %s", snapshot.ID, snapshot.Status)
+		}
+	}
+	rm.closing = true
+	return nil
+}
+
+func (rm *RunManager) StopAccepting() {
+	rm.mu.Lock()
+	rm.closing = true
+	rm.mu.Unlock()
+}
+
+func (rm *RunManager) Accepting() bool {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+	return !rm.closing
+}
+
 // Non-blocking send: a run must never wait on whether anyone is listening
 // for activity, and a still-pending signal already means "reset the idle
 // timer," so a full buffer can just drop this one without losing meaning.
@@ -136,12 +173,35 @@ func (rm *RunManager) signalActivity() {
 }
 
 func (rm *RunManager) NewRunID() string {
-	n := rm.counter.Add(1)
-	return fmt.Sprintf("run-%d", n)
+	return NewRunID()
+}
+
+var fallbackRunIDCounter atomic.Uint64
+
+func NewRunID() string {
+	var id [16]byte
+	if _, err := cryptorand.Read(id[:]); err != nil {
+		binary.BigEndian.PutUint64(id[:8], uint64(time.Now().UnixNano()))
+		binary.BigEndian.PutUint64(id[8:], fallbackRunIDCounter.Add(1))
+	}
+	id[6] = (id[6] & 0x0f) | 0x40
+	id[8] = (id[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		binary.BigEndian.Uint32(id[0:4]),
+		binary.BigEndian.Uint16(id[4:6]),
+		binary.BigEndian.Uint16(id[6:8]),
+		binary.BigEndian.Uint16(id[8:10]),
+		uint64(id[10])<<40|uint64(id[11])<<32|uint64(id[12])<<24|uint64(id[13])<<16|uint64(id[14])<<8|uint64(id[15]))
 }
 
 func (rm *RunManager) Submit(id, repo, branch string, work WorkFunc) (RunSnapshot, error) {
 	return rm.SubmitSubmission(RunSubmission{ID: id, Repo: repo, Branch: branch}, work)
+}
+
+func (rm *RunManager) SubmitWithMetadata(id, repo, branch, inputSHA, outputSHA string, work WorkFunc) (RunSnapshot, error) {
+	return rm.SubmitSubmission(RunSubmission{
+		ID: id, Repo: repo, Branch: branch, InputSHA: inputSHA, OutputSHA: outputSHA,
+	}, work)
 }
 
 func (rm *RunManager) SubmitSubmission(submission RunSubmission, work WorkFunc) (RunSnapshot, error) {
@@ -158,6 +218,12 @@ func (rm *RunManager) SubmitSubmission(submission RunSubmission, work WorkFunc) 
 
 	rm.durableMu.Lock()
 	rm.mu.Lock()
+	if rm.closing {
+		rm.mu.Unlock()
+		rm.durableMu.Unlock()
+		cancel()
+		return RunSnapshot{}, ErrRunSubmissionClosed
+	}
 	if _, exists := rm.runs[submission.ID]; exists {
 		rm.mu.Unlock()
 		rm.durableMu.Unlock()

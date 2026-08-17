@@ -16,10 +16,11 @@ func TestSetupResolvesTrustedConfigWhenPresentOnDefaultBranch(t *testing.T) {
 	if err := gitgate.InitBare(barePath); err != nil {
 		t.Fatalf("InitBare: %v", err)
 	}
+	runGit(t, barePath, "remote", "add", "origin", barePath)
 
 	src := filepath.Join(dir, "src")
 	initSourceRepo(t, src)
-	writeFile(t, src, ".made.yml", "no_ci: true\nallow_repo_commands: true\ncommands:\n  test: \"go test ./...\"\n")
+	writeFile(t, src, ".made.yml", "version: 1\nno_ci: true\nallow_repo_commands: true\ncommands:\n  test: \"go test ./...\"\n")
 	commit(t, src, "add made.yml")
 	sha := pushBranch(t, src, barePath, "main")
 
@@ -47,6 +48,7 @@ func TestSetupResolvesEmptyTrustedConfigWhenMadeYmlMissingFromDefaultBranch(t *t
 	if err := gitgate.InitBare(barePath); err != nil {
 		t.Fatalf("InitBare: %v", err)
 	}
+	runGit(t, barePath, "remote", "add", "origin", barePath)
 
 	src := filepath.Join(dir, "src")
 	initSourceRepo(t, src)
@@ -70,6 +72,7 @@ func TestSetupResolvesEmptyTrustedConfigWhenDefaultBranchNeverFetched(t *testing
 	if err := gitgate.InitBare(barePath); err != nil {
 		t.Fatalf("InitBare: %v", err)
 	}
+	runGit(t, barePath, "remote", "add", "origin", barePath)
 
 	src := filepath.Join(dir, "src")
 	initSourceRepo(t, src)
@@ -87,12 +90,44 @@ func TestSetupResolvesEmptyTrustedConfigWhenDefaultBranchNeverFetched(t *testing
 	}
 }
 
+func TestRefreshDefaultBranchClearsDeletedRemotePolicyRef(t *testing.T) {
+	dir := t.TempDir()
+	gatePath := filepath.Join(dir, "gate.git")
+	remotePath := filepath.Join(dir, "remote.git")
+	runGit(t, "", "init", "--bare", "-q", "-b", "main", remotePath)
+	if err := gitgate.InitBare(gatePath); err != nil {
+		t.Fatalf("InitBare gate: %v", err)
+	}
+	runGit(t, gatePath, "remote", "add", "origin", remotePath)
+
+	src := filepath.Join(dir, "src")
+	initSourceRepo(t, src)
+	sha := pushBranch(t, src, remotePath, "main")
+	if err := refreshDefaultBranch(context.Background(), gatePath, "main"); err != nil {
+		t.Fatalf("initial refreshDefaultBranch: %v", err)
+	}
+	if got := revParse(t, gatePath, "refs/heads/main"); got != sha {
+		t.Fatalf("fetched trusted ref = %s, want %s", got, sha)
+	}
+	runGit(t, remotePath, "update-ref", "-d", "refs/heads/main")
+
+	if err := refreshDefaultBranch(context.Background(), gatePath, "main"); err != nil {
+		t.Fatalf("refreshDefaultBranch after remote deletion: %v", err)
+	}
+	cmd := exec.Command("git", "rev-parse", "--verify", "refs/heads/main")
+	cmd.Dir = gatePath
+	if err := cmd.Run(); err == nil {
+		t.Fatal("refreshDefaultBranch retained a deleted remote trusted ref")
+	}
+}
+
 func TestSetupCutsWorktreeAtExactPushedSHANotBranchTip(t *testing.T) {
 	dir := t.TempDir()
 	barePath := filepath.Join(dir, "gate.git")
 	if err := gitgate.InitBare(barePath); err != nil {
 		t.Fatalf("InitBare: %v", err)
 	}
+	runGit(t, barePath, "remote", "add", "origin", barePath)
 
 	src := filepath.Join(dir, "src")
 	initSourceRepo(t, src)
@@ -134,6 +169,7 @@ func TestSetupRecoversFromMidSetupPanicAndCleansUp(t *testing.T) {
 	if err := gitgate.InitBare(barePath); err != nil {
 		t.Fatalf("InitBare: %v", err)
 	}
+	runGit(t, barePath, "remote", "add", "origin", barePath)
 
 	src := filepath.Join(dir, "src")
 	initSourceRepo(t, src)
@@ -168,6 +204,7 @@ func TestRunWrapsSetupWorkAndCleanupWithPanicRecovery(t *testing.T) {
 	if err := gitgate.InitBare(barePath); err != nil {
 		t.Fatalf("InitBare: %v", err)
 	}
+	runGit(t, barePath, "remote", "add", "origin", barePath)
 
 	src := filepath.Join(dir, "src")
 	initSourceRepo(t, src)

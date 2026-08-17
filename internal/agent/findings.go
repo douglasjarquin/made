@@ -18,6 +18,7 @@ type Finding struct {
 	Kind        FindingKind `json:"kind"`
 	Description string      `json:"description"`
 	Patch       string      `json:"patch,omitempty"`
+	Paths       []string    `json:"paths,omitempty"`
 }
 
 func (f *Finding) UnmarshalJSON(data []byte) error {
@@ -25,6 +26,7 @@ func (f *Finding) UnmarshalJSON(data []byte) error {
 		Kind        *FindingKind `json:"kind"`
 		Description *string      `json:"description"`
 		Patch       *string      `json:"patch"`
+		Paths       []string     `json:"paths"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
@@ -40,6 +42,7 @@ func (f *Finding) UnmarshalJSON(data []byte) error {
 	if wire.Patch != nil {
 		f.Patch = *wire.Patch
 	}
+	f.Paths = append([]string(nil), wire.Paths...)
 	return nil
 }
 

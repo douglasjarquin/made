@@ -94,22 +94,19 @@ func TestRun_RejectsEmptyEvidenceRef(t *testing.T) {
 	}
 }
 
-func TestRun_ReportsGHFailureAsResultNotError(t *testing.T) {
+func TestRun_ReportsGHFailureAsInfrastructureError(t *testing.T) {
 	c := newClient(t, []string{"FAKE_GH_EXIT_CODE=1", "FAKE_GH_STDERR=pr create failed: branch protection"}, "")
 
-	result, err := pr.Run(context.Background(), c, pr.Options{
+	_, err := pr.Run(context.Background(), c, pr.Options{
 		Title:       "made: automated change",
 		Base:        "main",
 		Head:        "made/run-999",
 		EvidenceRef: "evidence/run-999/summary.txt",
 	})
-	if err != nil {
-		t.Fatalf("Run: expected a reported failure, not an error, got: %v", err)
+	if err == nil {
+		t.Fatal("expected GitHub API failure to be returned as infrastructure error")
 	}
-	if result.OK {
-		t.Fatalf("expected OK=false, got %+v", result)
-	}
-	if result.Message == "" {
-		t.Fatal("expected a non-empty failure message")
+	if !strings.Contains(err.Error(), "GitHub API failure") {
+		t.Fatalf("expected infrastructure classification, got %v", err)
 	}
 }

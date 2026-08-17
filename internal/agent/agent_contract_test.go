@@ -14,7 +14,7 @@ import (
 
 func TestSpawn_CodexUsesStructuredExecContract(t *testing.T) {
 	bin := agenttest.Build(t)
-	worktree := t.TempDir()
+	worktree := agentWorktree(t)
 	scenarioPath := filepath.Join(t.TempDir(), "scenario.json")
 	if err := os.WriteFile(scenarioPath, []byte(`{"findings":[]}`), 0o644); err != nil {
 		t.Fatalf("write scenario: %v", err)
@@ -36,7 +36,7 @@ func TestSpawn_CodexUsesStructuredExecContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read invocation log: %v", err)
 	}
-	for _, token := range []string{"exec", "--json", "--output-schema", "--ephemeral", "-C", worktree} {
+	for _, token := range []string{"exec", "--json", "--output-schema", "--output-last-message", "--sandbox", "read-only", "--ephemeral", "-C"} {
 		if !strings.Contains(string(data), token) {
 			t.Fatalf("expected Codex structured invocation token %q, got %s", token, data)
 		}
@@ -45,7 +45,7 @@ func TestSpawn_CodexUsesStructuredExecContract(t *testing.T) {
 
 func TestSpawn_DoesNotPassSensitiveEnvironmentToCodex(t *testing.T) {
 	bin := agenttest.Build(t)
-	worktree := t.TempDir()
+	worktree := agentWorktree(t)
 	scenarioPath := filepath.Join(t.TempDir(), "scenario.json")
 	if err := os.WriteFile(scenarioPath, []byte(`{"findings":[]}`), 0o644); err != nil {
 		t.Fatalf("write scenario: %v", err)
@@ -76,7 +76,7 @@ func TestSpawn_RejectsStructuredOutputWithoutFindingsField(t *testing.T) {
 	}
 
 	_, err := agent.Spawn(context.Background(), agent.KindCodex, agent.SpawnParams{
-		WorktreePath: t.TempDir(),
+		WorktreePath: agentWorktree(t),
 		BinaryPath:   bin,
 		ExtraEnv: []string{
 			"FAKE_AGENT_KIND=codex",

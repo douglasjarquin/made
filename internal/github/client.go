@@ -20,6 +20,8 @@ type Client struct {
 	Timeout  time.Duration
 }
 
+const maxCheckLogBytes = 64 * 1024
+
 type AuthError struct {
 	Detail string
 }
@@ -63,6 +65,11 @@ func (c *Client) CreatePR(ctx context.Context, opts CreatePROptions) (string, er
 	if err := c.AuthStatus(ctx); err != nil {
 		return "", err
 	}
+	if existing, err := c.findOpenPR(ctx, opts); err != nil {
+		return "", err
+	} else if existing != "" {
+		return existing, nil
+	}
 
 	args := []string{"pr", "create", "--title", opts.Title, "--body", opts.Body}
 	if opts.Base != "" {
@@ -79,10 +86,58 @@ func (c *Client) CreatePR(ctx context.Context, opts CreatePROptions) (string, er
 	if res.ExitCode != 0 {
 		return "", fmt.Errorf("github: gh pr create failed: %s", strings.TrimSpace(string(res.Stderr)))
 	}
-	return lastLine(res.Stdout), nil
+	url := lastLine(res.Stdout)
+	if url == "" {
+		return "", fmt.Errorf("github: gh pr create returned an empty URL")
+	}
+	return url, nil
+}
+
+func (c *Client) findOpenPR(ctx context.Context, opts CreatePROptions) (string, error) {
+	args := []string{"pr", "list", "--state", "open", "--base", opts.Base, "--head", opts.Head, "--json", "url"}
+	res, err := c.run(ctx, args...)
+	if err != nil {
+		return "", fmt.Errorf("github: run gh pr list: %w", err)
+	}
+	if res.ExitCode != 0 {
+		return "", fmt.Errorf("github: gh pr list failed: %s", strings.TrimSpace(string(res.Stderr)))
+	}
+	var entries []struct {
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal(res.Stdout, &entries); err != nil {
+		return "", fmt.Errorf("github: parse gh pr list output: %w", err)
+	}
+	if len(entries) == 0 {
+		return "", nil
+	}
+	return entries[0].URL, nil
+}
+
+func (c *Client) MergeableState(ctx context.Context, prURL string) (string, error) {
+	if err := c.AuthStatus(ctx); err != nil {
+		return "", err
+	}
+	res, err := c.run(ctx, "pr", "view", prURL, "--json", "mergeStateStatus")
+	if err != nil {
+		return "", fmt.Errorf("github: run gh pr view: %w", err)
+	}
+	if res.ExitCode != 0 {
+		return "", fmt.Errorf("github: gh pr view failed: %s", strings.TrimSpace(string(res.Stderr)))
+	}
+	var payload struct {
+		MergeStateStatus string `json:"mergeStateStatus"`
+	}
+	if err := json.Unmarshal(res.Stdout, &payload); err != nil {
+		return "", fmt.Errorf("github: parse gh pr view output: %w", err)
+	}
+	return payload.MergeStateStatus, nil
 }
 
 func (c *Client) PRChecks(ctx context.Context, prURL string) (ChecksResult, error) {
+	if strings.TrimSpace(prURL) == "" {
+		return ChecksResult{}, fmt.Errorf("github: pull request URL is required for checks")
+	}
 	if err := c.AuthStatus(ctx); err != nil {
 		return ChecksResult{}, err
 	}
@@ -131,7 +186,11 @@ func (c *Client) CheckLogs(ctx context.Context, runID string) (string, error) {
 	if res.ExitCode != 0 {
 		return "", fmt.Errorf("github: gh run view failed: %s", strings.TrimSpace(string(res.Stderr)))
 	}
-	return string(res.Stdout), nil
+	output := res.Stdout
+	if len(output) > maxCheckLogBytes {
+		output = append(append([]byte(nil), output[:maxCheckLogBytes]...), []byte("\n[truncated]\n")...)
+	}
+	return string(output), nil
 }
 
 func (c *Client) RerunCheck(ctx context.Context, runID string) error {

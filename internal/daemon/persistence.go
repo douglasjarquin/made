@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/douglasjarquin/made/internal/evidence"
 )
 
 const (
@@ -260,6 +262,14 @@ func snapshotForStorage(snapshot RunSnapshot) RunSnapshot {
 		copy.Error = copy.Err.Error()
 	}
 	copy.Err = nil
+	copy.Message = redactString(copy.Message)
+	copy.Error = redactString(copy.Error)
+	copy.Errors = redactStrings(copy.Errors)
+	copy.Findings = redactFindings(copy.Findings)
+	copy.PendingFindings = redactPendingFindings(copy.PendingFindings)
+	copy.Decisions = redactDecisions(copy.Decisions)
+	copy.PRURL = redactString(copy.PRURL)
+	copy.SubmissionEvents = redactSubmissionEvents(copy.SubmissionEvents)
 	return copy
 }
 
@@ -291,8 +301,29 @@ func restoreSnapshot(snapshot RunSnapshot) RunSnapshot {
 	return snapshot
 }
 
+func redactString(value string) string {
+	return evidence.RedactString(value)
+}
+
+func redactDecisions(values map[string]string) map[string]string {
+	if values == nil {
+		return nil
+	}
+	out := make(map[string]string, len(values))
+	for key, value := range values {
+		out[key] = redactString(value)
+	}
+	return out
+}
+
 func cloneSnapshot(snapshot RunSnapshot) RunSnapshot {
 	copy := snapshot
+	copy.Errors = append([]string(nil), snapshot.Errors...)
+	copy.Findings = append([]RunFinding(nil), snapshot.Findings...)
+	for i := range copy.Findings {
+		copy.Findings[i].Paths = append([]string(nil), snapshot.Findings[i].Paths...)
+	}
+	copy.SubmissionEvents = append([]SubmissionEvent(nil), snapshot.SubmissionEvents...)
 	copy.Stages = append([]StageResult(nil), snapshot.Stages...)
 	for i := range copy.Stages {
 		copy.Stages[i].EvidenceRefs = append([]string(nil), snapshot.Stages[i].EvidenceRefs...)
@@ -331,7 +362,7 @@ func OpenRunManager(stateDir string) (*RunManager, error) {
 	}
 	rm.counter.Store(counter)
 	for _, snapshot := range runs {
-		if snapshot.Status == RunRunning {
+		if snapshot.Status == RunRunning || snapshot.Status == RunAwaitingReview {
 			snapshot.Status = RunFailed
 			snapshot.Error = "daemon restarted before run execution finished"
 			snapshot.Err = errors.New(snapshot.Error)
@@ -434,4 +465,12 @@ func (rm *RunManager) UpdateDecision(id, stage, decision string) error {
 		return err
 	}
 	return err
+}
+
+func NewPersistentRunManager(path string) (*RunManager, error) {
+	stateDir := path
+	if filepath.Ext(path) == ".wal" {
+		stateDir = filepath.Dir(path)
+	}
+	return OpenRunManager(stateDir)
 }

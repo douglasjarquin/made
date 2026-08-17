@@ -18,17 +18,19 @@ func run(args []string, stdout, stderr *os.File) int {
 	switch args[0] {
 	case "capabilities":
 		return runCapabilitiesCommand(args[1:], stdout, stderr)
-	case "daemon":
-		return runDaemonCommand(args[1:], stdout, stderr)
 	case "run":
 		return runRunCommand(args[1:], stdout, stderr)
 	case "status":
-		_, _ = fmt.Fprintln(stderr, "made: status is obsolete; use made run status <exact-run-id>")
+		_, _ = fmt.Fprintln(stderr, "made: status is obsolete; use made run status --json <exact-run-id>")
 		return 2
+	case "daemon":
+		return runDaemonCommand(args[1:], stdout, stderr)
 	case "review":
-		return runReviewCommand(args[1:], os.Stdin, stdout, stderr)
-	case "pr":
-		return runPRCommand(args[1:], stdout, stderr)
+		if len(args) > 1 && args[1] == "decide" {
+			return runReviewDecideCommand(args[2:], stdout, stderr)
+		}
+		_, _ = fmt.Fprintln(stderr, "made review: use the versioned decide subcommand")
+		return 2
 	case "doctor":
 		return runDoctorCommand(args[1:], stdout, stderr)
 	case "gate":

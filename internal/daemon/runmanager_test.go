@@ -46,7 +46,7 @@ func TestRunManager_SequentialQueuing(t *testing.T) {
 	deadline := time.After(2 * time.Second)
 	for {
 		s2, ok := rm.Snapshot(id2)
-		if ok && (s2.Status == RunCompleted || s2.Status == RunFailed) {
+		if ok && (s2.Status == RunSucceeded || s2.Status == RunFailed) {
 			break
 		}
 		select {
@@ -302,7 +302,7 @@ func TestRunManager_SupersedeQueuedDropsOnlyStillQueuedJobForBranch(t *testing.T
 
 	close(blockRelease)
 
-	waitForStatus(t, rm, id2, RunCompleted, 2*time.Second)
+	waitForStatus(t, rm, id2, RunSucceeded, 2*time.Second)
 
 	final1, ok := rm.Snapshot(id1)
 	if !ok {
@@ -352,7 +352,7 @@ func TestRunManager_SupersedeQueuedLeavesAlreadyStartedRunAlone(t *testing.T) {
 	}
 
 	close(release)
-	final := waitForStatus(t, rm, id, RunCompleted, 2*time.Second)
+	final := waitForStatus(t, rm, id, RunSucceeded, 2*time.Second)
 	if final.Err != nil {
 		t.Fatalf("expected already-started run to complete normally, got err %v", final.Err)
 	}
@@ -366,7 +366,7 @@ func TestRunManager_CancelTerminalRunErrors(t *testing.T) {
 		t.Fatalf("submit: %v", err)
 	}
 
-	waitForStatus(t, rm, id, RunCompleted, 2*time.Second)
+	waitForStatus(t, rm, id, RunSucceeded, 2*time.Second)
 
 	if err := rm.Cancel(id); err == nil {
 		t.Fatal("expected error cancelling an already-terminal run")

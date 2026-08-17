@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -47,7 +48,7 @@ func TestStatusJSON_SchemaValidity(t *testing.T) {
 	deadline := time.After(2 * time.Second)
 	for {
 		snap, ok := rm.Snapshot("run-test-1")
-		if ok && (snap.Status == daemon.RunCompleted || snap.Status == daemon.RunFailed) {
+		if ok && (snap.Status == daemon.RunSucceeded || snap.Status == daemon.RunFailed) {
 			break
 		}
 		select {
@@ -57,7 +58,7 @@ func TestStatusJSON_SchemaValidity(t *testing.T) {
 		}
 	}
 
-	out, errOut, code := runCapture(t, []string{"run", "status", "run-test-1", "--json"})
+	out, errOut, code := runCapture(t, []string{"run", "status", "--json", "run-test-1"})
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0; stdout=%s stderr=%s", code, out, errOut)
 	}
@@ -80,7 +81,7 @@ func TestStatusJSON_SchemaValidity(t *testing.T) {
 		t.Errorf("Branch = %q, want %q", report.Branch, "feature-x")
 	}
 	switch report.State {
-	case "queued", "running", "awaiting_merge", "succeeded", "failed", "canceled", "superseded":
+	case "queued", "running", "awaiting_review", "awaiting_merge", "succeeded", "failed", "canceled", "superseded":
 	default:
 		t.Errorf("State = %q, not one of the documented run states", report.State)
 	}
@@ -104,6 +105,55 @@ func TestStatusJSON_SchemaValidity(t *testing.T) {
 	}
 	if report.PendingFindings == nil {
 		t.Error("PendingFindings must be present (an empty slice, not null)")
+	}
+}
+
+func TestNewStatusReportRedactsSensitiveRunText(t *testing.T) {
+	secret := "token=status-secret"
+	report := newStatusReport(daemon.RunSnapshot{
+		ID:       "run-sensitive",
+		Errors:   []string{secret},
+		Findings: []daemon.RunFinding{{Message: secret}},
+	})
+	encoded, err := json.Marshal(report)
+	if err != nil {
+		t.Fatalf("marshal report: %v", err)
+	}
+	if strings.Contains(string(encoded), "status-secret") {
+		t.Fatalf("status report retained sensitive text: %s", encoded)
+	}
+}
+
+func TestNewStatusReportRedactsAllExternallySuppliedRunFields(t *testing.T) {
+	secret := "token=public-secret"
+	report := newStatusReport(daemon.RunSnapshot{
+		ID:        "run-sensitive-fields",
+		InputSHA:  "0123456789abcdef0123456789abcdef01234567",
+		OutputSHA: "89abcdef0123456789abcdef0123456789abcdef",
+		PRURL:     "https://user:public-secret@example.com/repo/pull/1",
+		Findings:  []daemon.RunFinding{{Message: "finding", Paths: []string{secret}}},
+		Decisions: map[string]string{"review": secret},
+		SubmissionEvents: []daemon.SubmissionEvent{{
+			Gate:      secret,
+			Ref:       secret,
+			InputSHA:  "0123456789abcdef0123456789abcdef01234567",
+			OutputSHA: "89abcdef0123456789abcdef0123456789abcdef",
+			Kind:      secret,
+		}},
+		PendingFindings: []daemon.AskUserFinding{{Message: secret}},
+	})
+	encoded, err := json.Marshal(report)
+	if err != nil {
+		t.Fatalf("marshal report: %v", err)
+	}
+	if strings.Contains(string(encoded), "public-secret") {
+		t.Fatalf("status report retained sensitive externally supplied text: %s", encoded)
+	}
+	if report.RunID != "run-sensitive-fields" {
+		t.Fatalf("status report rewrote exact run ID: %q", report.RunID)
+	}
+	if report.InputSHA != "0123456789abcdef0123456789abcdef01234567" || report.OutputSHA != "89abcdef0123456789abcdef0123456789abcdef" {
+		t.Fatalf("status report rewrote exact SHA identity: input=%q output=%q", report.InputSHA, report.OutputSHA)
 	}
 }
 
@@ -157,7 +207,7 @@ func TestStatusJSON_ReflectsRealStageUpdate(t *testing.T) {
 		t.Fatalf("UpdatePendingFindings: %v", err)
 	}
 
-	out, errOut, code := runCapture(t, []string{"run", "status", "run-real-stage-1", "--json"})
+	out, errOut, code := runCapture(t, []string{"run", "status", "--json", "run-real-stage-1"})
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0; stdout=%s stderr=%s", code, out, errOut)
 	}
@@ -168,17 +218,21 @@ func TestStatusJSON_ReflectsRealStageUpdate(t *testing.T) {
 	}
 
 	if len(report.Stages) != len(pipelineStages) {
-		t.Fatalf("Stages = %+v, want fixed ordered stages %+v", report.Stages, pipelineStages)
+		t.Fatalf("Stages = %+v, want %d ordered stages", report.Stages, len(pipelineStages))
 	}
 	for i, want := range wantStages {
 		if !reflect.DeepEqual(report.Stages[i], StageResult(want)) {
 			t.Errorf("Stages[%d] = %+v, want %+v", i, report.Stages[i], want)
 		}
 	}
-	for _, stage := range report.Stages[len(wantStages):] {
-		if stage.Result != StageResultPending {
-			t.Errorf("unreached stage %q = %q, want pending", stage.Name, stage.Result)
+	for i := len(wantStages); i < len(pipelineStages); i++ {
+		want := StageResult{Name: pipelineStages[i], Result: StageResultPending}
+		if !reflect.DeepEqual(report.Stages[i], want) {
+			t.Errorf("Stages[%d] = %+v, want %+v", i, report.Stages[i], want)
 		}
+	}
+	if report.CurrentStage != "review" {
+		t.Fatalf("CurrentStage = %q, want review", report.CurrentStage)
 	}
 
 	if len(report.PendingFindings) != len(wantFindings) {
@@ -213,7 +267,7 @@ func TestStatus_NoRunsReportsError(t *testing.T) {
 		}
 	})
 
-	_, _, code := runCapture(t, []string{"run", "status", "missing-run", "--json"})
+	_, _, code := runCapture(t, []string{"run", "status", "--json", "missing"})
 	if code == 0 {
 		t.Fatal("expected non-zero exit when no runs have been submitted")
 	}

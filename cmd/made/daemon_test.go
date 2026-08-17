@@ -112,8 +112,16 @@ func TestDaemonStop_CancelsInFlightRunBeforeProcessExits(t *testing.T) {
 
 	stopCmd := exec.Command(binPath, "daemon", "stop")
 	stopCmd.Env = env
+	if out, err := stopCmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "active or awaiting") {
+		t.Fatalf("daemon stop should refuse active work: %v\n%s", err, out)
+	}
+	if err := client.CallInto("run.cancel", map[string]string{"run_id": runID}, nil); err != nil {
+		t.Fatalf("cancel exact run: %v", err)
+	}
+	stopCmd = exec.Command(binPath, "daemon", "stop")
+	stopCmd.Env = env
 	if out, err := stopCmd.CombinedOutput(); err != nil {
-		t.Fatalf("daemon stop failed: %v\n%s", err, out)
+		t.Fatalf("daemon stop after cancellation failed: %v\n%s", err, out)
 	}
 
 	waitErr := make(chan error, 1)

@@ -41,10 +41,17 @@ func Run(ctx context.Context, worktreePath, runID string, testCommand []string, 
 	// Evidence must be written before Result is returned regardless of pass
 	// or fail, so a blocked pipeline still leaves a durable record of what
 	// the test command produced.
-	if evErr := store.WriteEvidence(runID, map[string][]byte{
+	evidenceFiles := map[string][]byte{
 		"stdout.log": res.Stdout,
 		"stderr.log": res.Stderr,
-	}); evErr != nil {
+	}
+	var evErr error
+	if contextual, ok := store.(evidence.ContextStore); ok {
+		evErr = contextual.WriteEvidenceContext(ctx, runID, evidenceFiles)
+	} else {
+		evErr = store.WriteEvidence(runID, evidenceFiles)
+	}
+	if evErr != nil {
 		return Result{}, fmt.Errorf("test: write evidence: %w", evErr)
 	}
 

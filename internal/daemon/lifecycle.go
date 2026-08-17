@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,11 +10,13 @@ import (
 )
 
 type Options struct {
-	LockPath    string
-	IdleTimeout time.Duration
-	OnReady     func(pid int)
-	ActivityCh  <-chan struct{}
-	ActiveFunc  func() bool
+	LockPath      string
+	Lock          *Lock
+	IdleTimeout   time.Duration
+	OnReady       func(pid int)
+	ActivityCh    <-chan struct{}
+	ActiveFunc    func() bool
+	UndrainedFunc func() bool
 }
 
 type StatusInfo struct {
@@ -24,9 +25,13 @@ type StatusInfo struct {
 }
 
 func Run(ctx context.Context, opts Options) error {
-	lock, err := AcquireLock(opts.LockPath)
-	if err != nil {
-		return err
+	lock := opts.Lock
+	if lock == nil {
+		var err error
+		lock, err = AcquireLock(opts.LockPath)
+		if err != nil {
+			return err
+		}
 	}
 	defer func() { _ = lock.Release() }()
 
@@ -57,6 +62,10 @@ func Run(ctx context.Context, opts Options) error {
 			return nil
 		case <-idleCh:
 			if opts.ActiveFunc != nil && opts.ActiveFunc() {
+				timer.Reset(opts.IdleTimeout)
+				continue
+			}
+			if opts.UndrainedFunc != nil && opts.UndrainedFunc() {
 				timer.Reset(opts.IdleTimeout)
 				continue
 			}
@@ -91,32 +100,5 @@ func Status(lockPath string) (StatusInfo, error) {
 }
 
 func Stop(lockPath string, timeout time.Duration) error {
-	pid, err := readLockPID(lockPath)
-	if err != nil {
-		return err
-	}
-	if pid == 0 {
-		return errors.New("daemon not running")
-	}
-
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return fmt.Errorf("find process %d: %w", pid, err)
-	}
-	if err := proc.Signal(syscall.SIGTERM); err != nil {
-		if errors.Is(err, os.ErrProcessDone) {
-			return nil
-		}
-		return fmt.Errorf("signal process %d: %w", pid, err)
-	}
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		st, err := Status(lockPath)
-		if err == nil && !st.Running {
-			return nil
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	return fmt.Errorf("daemon did not stop within %s", timeout)
+	return errors.New("daemon: shutdown requires the owner-only socket")
 }

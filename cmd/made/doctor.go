@@ -17,17 +17,10 @@ import (
 
 const doctorCheckTimeout = 5 * time.Second
 
-type doctorReport struct {
-	SchemaVersion   int               `json:"schema_version"`
-	ProtocolVersion int               `json:"protocol_version"`
-	Healthy         bool              `json:"healthy"`
-	Checks          map[string]string `json:"checks"`
-}
-
 func runDoctorCommand(args []string, stdout, stderr *os.File) int {
 	fs := flag.NewFlagSet("made doctor", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	jsonOutput := fs.Bool("json", false, "output structured JSON")
+	asJSON := fs.Bool("json", false, "output structured JSON")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -39,6 +32,9 @@ func runDoctorCommand(args []string, stdout, stderr *os.File) int {
 	if fs.NArg() == 1 {
 		targetPath = fs.Arg(0)
 	}
+	if *asJSON {
+		return runDoctorJSON(targetPath, stdout, stderr)
+	}
 
 	home, err := madeHome()
 	if err != nil {
@@ -49,67 +45,79 @@ func runDoctorCommand(args []string, stdout, stderr *os.File) int {
 	ctx, cancel := context.WithTimeout(context.Background(), doctorCheckTimeout)
 	defer cancel()
 
-	daemonErr := checkDaemon(api.SocketPath(home))
+	healthy := true
 
-	ghClient := &github.Client{Timeout: doctorCheckTimeout}
-	githubErr := ghClient.AuthStatus(ctx)
-	healthy := daemonErr == nil && githubErr == nil
-
-	herdrResult := herdrclient.Connect(ctx)
-
-	gateState := "not_initialized"
-
-	if gatePath, err := resolveGatePath(home, targetPath); err == nil && gateInitialized(gatePath) {
-		gateState = "initialized"
-	}
-
-	if *jsonOutput {
-		checks := map[string]string{
-			"daemon": "reachable",
-			"github": "authenticated",
-			"herdr":  herdrResult.State.String(),
-			"gate":   gateState,
-		}
-		if daemonErr != nil {
-			checks["daemon"] = "unreachable"
-		}
-		if githubErr != nil {
-			checks["github"] = "unavailable"
-		}
-		report := doctorReport{
-			SchemaVersion:   1,
-			ProtocolVersion: api.Version,
-			Healthy:         healthy,
-			Checks:          checks,
-		}
-		if err := json.NewEncoder(stdout).Encode(report); err != nil {
-			_, _ = fmt.Fprintln(stderr, "made doctor:", err)
-			return 1
-		}
-		if !healthy {
-			return 1
-		}
-		return 0
-	}
-
-	if daemonErr != nil {
-		_, _ = fmt.Fprintf(stdout, "daemon: unreachable (%v)\n", daemonErr)
+	if err := checkDaemon(api.SocketPath(home)); err != nil {
+		_, _ = fmt.Fprintf(stdout, "daemon: unreachable (%v)\n", err)
+		healthy = false
 	} else {
 		_, _ = fmt.Fprintln(stdout, "daemon: reachable")
 	}
-	if githubErr != nil {
-		_, _ = fmt.Fprintf(stdout, "gh: not authenticated (%v)\n", githubErr)
+
+	ghClient := &github.Client{Timeout: doctorCheckTimeout}
+	if err := ghClient.AuthStatus(ctx); err != nil {
+		_, _ = fmt.Fprintf(stdout, "gh: not authenticated (%v)\n", err)
+		healthy = false
 	} else {
 		_, _ = fmt.Fprintln(stdout, "gh: authenticated")
 	}
-	_, _ = fmt.Fprintf(stdout, "herdr: %s (informational only)\n", herdrResult.State.String())
 
-	if gateState == "initialized" {
+	herdrResult := herdrclient.Connect(ctx)
+	_, _ = fmt.Fprintf(stdout, "herdr: %s (informational only)\n", herdrResult.State)
+
+	if gatePath, err := resolveGatePath(home, targetPath); err == nil && gateInitialized(gatePath) {
 		_, _ = fmt.Fprintln(stdout, "gate: initialized")
 	} else {
 		_, _ = fmt.Fprintln(stdout, "gate: not initialized (run made gate init)")
 	}
 
+	if !healthy {
+		return 1
+	}
+	return 0
+}
+
+type doctorReport struct {
+	SchemaVersion   int               `json:"schema_version"`
+	ProtocolVersion int               `json:"protocol_version"`
+	Healthy         bool              `json:"healthy"`
+	Checks          map[string]string `json:"checks"`
+}
+
+func runDoctorJSON(targetPath string, stdout, stderr *os.File) int {
+	home, err := madeHome()
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "made doctor:", err)
+		return 1
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), doctorCheckTimeout)
+	defer cancel()
+	checks := make(map[string]string)
+	healthy := true
+	if err := checkDaemon(api.SocketPath(home)); err != nil {
+		checks["daemon"] = "unreachable"
+		healthy = false
+	} else {
+		checks["daemon"] = "reachable"
+	}
+	ghClient := &github.Client{Timeout: doctorCheckTimeout}
+	if err := ghClient.AuthStatus(ctx); err != nil {
+		checks["github"] = "unavailable"
+		healthy = false
+	} else {
+		checks["github"] = "authenticated"
+	}
+	checks["herdr"] = herdrclient.Connect(ctx).State.String()
+	if gatePath, gateErr := resolveGatePath(home, targetPath); gateErr == nil && gateInitialized(gatePath) {
+		checks["gate"] = "initialized"
+	} else {
+		checks["gate"] = "not_initialized"
+	}
+	encoder := json.NewEncoder(stdout)
+	if err := encoder.Encode(doctorReport{SchemaVersion: 1, ProtocolVersion: api.Version, Healthy: healthy, Checks: checks}); err != nil {
+		_, _ = fmt.Fprintln(stderr, "made doctor:", err)
+		return 1
+	}
 	if !healthy {
 		return 1
 	}
