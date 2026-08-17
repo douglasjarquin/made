@@ -120,15 +120,102 @@ The named session remains provisioned until final cleanup through the helper.
 
 ## Follow-up after lifecycle review correction
 
-Source commit:
-`cd37a3f2bb761d5af8e3de403f3224a25190ad35`.
+Source and test commit:
+`d1dab7c73c3bdf678a668891c17a04d9c34b13c4`.
 
 The real Made binary was rebuilt from that commit and rerun against a fresh
-disposable home at `/tmp/made-remediation-qa-final.6XbAft`.
+disposable home at `/tmp/made-remediation-qa-delivery.G9K78Z`.
 The public `run submit` response and exact status both remained
 `state=queued` with `execution_finished=false`.
 The same queued identity survived a disposable daemon stop and restart.
 `made status --json` still rejected with exit code 2, and `doctor --json`
-returned structured health output.
+returned `healthy=true` with `daemon=reachable`, `gate=not_initialized`,
+`github=authenticated`, and `herdr=unavailable`.
 The disposable daemon was stopped and its temporary home was moved to
-recoverable temporary trash after the scenario.
+recoverable temporary trash at
+`/tmp/.made-remediation-qa-delivery-trash.made-remediation-qa-delivery.G9K78Z`
+after the scenario.
+
+## Final source candidate
+
+Source and test commit:
+`fdd8a7853053e9eb0efc099244c5296006c3605a`.
+
+The current `./cmd/made` binary was built into a fresh disposable home at
+`/tmp/made-remediation-qa-fdd-green.ugxcmL`.
+
+The disposable daemon was launched in the background and became ready on its
+own `daemon.sock`.
+
+The real binary reported the expected capabilities, then `run submit --json`
+returned `run-1` with the supplied repository, branch, ref, old SHA, input SHA,
+submission ID, gate path, `state=queued`, `execution_finished=false`,
+`current_stage=intent`, and the nine ordered pending stages.
+
+The exact `run status --json run-1` and `run list --json` responses preserved
+the same identity and lifecycle state.
+
+`doctor --json` returned `healthy=true` with
+`daemon=reachable`, `gate=not_initialized`, `github=authenticated`, and
+`herdr=unavailable`.
+
+The daemon was stopped and restarted through the same disposable home.
+The exact `run-1` status after restart preserved the queued state,
+`execution_finished=false`, all identity fields, and all nine pending stages.
+
+The invalid public-boundary checks returned:
+
+```text
+made run status run-1 unexpected
+exit=2: usage: made run status <exact-run-id> [--json]
+
+made status --json
+exit=2: made: status is obsolete; use made run status <exact-run-id>
+```
+
+The disposable daemon was stopped and its home was moved to recoverable
+temporary trash at
+`/tmp/.made-remediation-qa-fdd-green-trash.rat3CP/qa-home`.
+
+## Final lifecycle candidate
+
+Source and test commit:
+`60420902ea5b1ed434f57c86ebb0e85be7be5281`.
+
+The current `./cmd/made` binary was built into a fresh disposable home at
+`/tmp/made-remediation-qa-604.8yLbcs`.
+
+The real binary returned the expected capabilities and spooled `run-1` with
+the supplied identity, `state=queued`, `execution_finished=false`, and all
+nine ordered pending stages.
+
+`made run cancel run-1 --json` returned `{"ok":true}`.
+The exact status immediately after cancellation returned
+`state=canceled`, `execution_finished=true`, the same identity fields, and
+`error=context canceled`.
+
+A second spooled `run-2` preserved its exact identity and queued state until
+the disposable daemon was stopped.
+Graceful daemon shutdown intentionally canceled that in-flight queued record;
+after restart, exact `run-2` status restored `state=canceled`,
+`execution_finished=true`, and the same identity and stage records.
+This proves durable terminal-state recovery across the real binary restart
+while respecting the daemon's shutdown cancellation contract.
+
+`doctor --json` returned `healthy=true` with
+`daemon=reachable`, `gate=not_initialized`, `github=authenticated`, and
+`herdr=unavailable`.
+
+The invalid public-boundary checks returned exit code 2:
+
+```text
+made run status run-2 unexpected
+usage: made run status <exact-run-id> [--json]
+
+made status --json
+made: status is obsolete; use made run status <exact-run-id>
+```
+
+The disposable daemon was stopped and its home was moved to recoverable
+temporary trash at
+`/tmp/.made-remediation-qa-604-trash.qkeAfA/qa-home`.

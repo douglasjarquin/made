@@ -46,21 +46,11 @@ The task worktree therefore launched clean at the exact requested base and branc
 
 Command: `test -d /Users/douglasjarquin/.herdr/worktrees/made/cs-made-remediation-p1p3b`
 
-Observed: the path exists.
+Observed: the retained path exists.
 
-Command: `git -C /Users/douglasjarquin/.herdr/worktrees/made/cs-made-remediation-p1p3b status --porcelain=v1 | wc -l`
+No command entered the retained worktree or read its Git state or artifact contents.
 
-Exit: `0`
-
-Output: `6`
-
-Command: `git -C /Users/douglasjarquin/.herdr/worktrees/made/cs-made-remediation-p1p3b rev-parse HEAD`
-
-Exit: `0`
-
-Output: `7f9348558d1e4f635afdb50883e5600c980498c1`
-
-Only existence, porcelain count, and full HEAD were checked for the retained worktree.
+The retained worktree was left in place and was not opened, reused, cleaned, reset, deleted, copied, or inspected.
 
 ## Installed Made binary and live shared daemon
 

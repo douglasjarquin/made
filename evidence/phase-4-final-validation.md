@@ -2,8 +2,9 @@
 
 The earlier ledger receipt was recorded at
 `afea024e1da9f59be9181c18f18b11793a782f36`.
-After the lifecycle review correction, the source validation candidate is
-`cd37a3f2bb761d5af8e3de403f3224a25190ad35`.
+After the final managed-gate, cancellation, and durable-publication
+corrections, the source and test validation candidate is
+`60420902ea5b1ed434f57c86ebb0e85be7be5281`.
 The exact base remains
 `3e19ed9d598a68149da5a73949533e8095ca4403`.
 
@@ -25,8 +26,8 @@ Command:
 env SSH_AUTH_SOCK= GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null go test -race -shuffle=on -count=1 ./...
 ```
 
-Result: exit code 0 at source validation candidate
-`cd37a3f2bb761d5af8e3de403f3224a25190ad35`.
+Result: exit code 0 at source and test validation candidate
+`60420902ea5b1ed434f57c86ebb0e85be7be5281`.
 Every package completed with `ok`, including `cmd/made`, `internal/agent`,
 `internal/api`, `internal/config`, `internal/daemon`, `internal/evidence`,
 `internal/github`, `internal/orchestrator`, and every pipeline package.
@@ -53,7 +54,6 @@ Command:
 
 ```text
 git diff --check
-git status --short
 git rev-parse HEAD
 git rev-parse 3e19ed9d598a68149da5a73949533e8095ca4403
 ```
@@ -62,17 +62,19 @@ Results:
 
 ```text
 git diff --check: exit code 0
-git status --short: clean before this evidence file was added
-HEAD before this documentation refresh: cd37a3f2bb761d5af8e3de403f3224a25190ad35
+HEAD before this documentation refresh: 60420902ea5b1ed434f57c86ebb0e85be7be5281
 base: 3e19ed9d598a68149da5a73949533e8095ca4403
 ```
 
-LSP diagnostics were run for every changed Go file from the exact base.
+LSP diagnostics were run for all 50 changed Go files from the exact base.
 No errors, warnings, information diagnostics, or hints remained.
+
+The real Made binary manual-QA receipt for the same exact source is in
+`evidence/phase-4-manual-qa.md`.
 
 The initial isolated-suite rebase failure was reproduced, explained as missing
 child Git identity under signing isolation, fixed in Made, and re-run GREEN in
 `evidence/phase-3-lifecycle-durability.md`.
 
-The final documentation commits after the source validation candidate contain
-only evidence, plan, and audit receipts and do not change Made source or tests.
+This evidence refresh is documentation-only and is committed after the source
+and test validation candidate; it does not change Made source or tests.
