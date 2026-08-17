@@ -33,7 +33,7 @@ type reviewDecisionReport struct {
 func reviewDecideRunHandler(rm *daemon.RunManager, store *daemon.ReviewDecisions) api.HandlerFunc {
 	return func(_ context.Context, params json.RawMessage) (any, error) {
 		var p reviewDecideParams
-		if err := json.Unmarshal(params, &p); err != nil {
+		if err := decodeStrictParams(params, &p); err != nil {
 			return nil, fmt.Errorf("review.decide: invalid params: %w", err)
 		}
 		if p.RunID == "" || p.Stage == "" {

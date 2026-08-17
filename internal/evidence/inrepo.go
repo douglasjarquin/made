@@ -187,10 +187,15 @@ func (s *InRepoStore) PublishEvidenceContext(ctx context.Context, runID string) 
 	if err := runEvidenceGit(ctx, repoPath, "add", "--", relPath); err != nil {
 		return fmt.Errorf("evidence: stage in-repo evidence: %w", err)
 	}
+	diffArgs, err := evidenceGitArgs(ctx, repoPath, "diff", "--cached", "--quiet", "--", relPath)
+	if err != nil {
+		return fmt.Errorf("evidence: prepare staged evidence inspection: %w", err)
+	}
 	diff, err := execpkg.Run(ctx, execpkg.Command{
 		Name:        "git",
-		Args:        []string{"diff", "--cached", "--quiet", "--", relPath},
+		Args:        diffArgs,
 		Dir:         repoPath,
+		Env:         controlledEvidenceGitEnvironment(),
 		Timeout:     evidenceGitTimeout,
 		OutputLimit: evidenceGitOutputCap,
 	})
@@ -202,10 +207,15 @@ func (s *InRepoStore) PublishEvidenceContext(ctx context.Context, runID string) 
 	} else if diff.ExitCode != 1 {
 		return fmt.Errorf("evidence: inspect staged evidence failed with exit code %d: %s", diff.ExitCode, RedactString(string(diff.Stdout)+string(diff.Stderr)))
 	}
+	titleArgs, err := evidenceGitArgs(ctx, repoPath, "log", "-1", "--format=%s")
+	if err != nil {
+		return fmt.Errorf("evidence: prepare commit subject inspection: %w", err)
+	}
 	titleResult, err := execpkg.Run(ctx, execpkg.Command{
 		Name:        "git",
-		Args:        []string{"log", "-1", "--format=%s"},
+		Args:        titleArgs,
 		Dir:         repoPath,
+		Env:         controlledEvidenceGitEnvironment(),
 		Timeout:     evidenceGitTimeout,
 		OutputLimit: evidenceGitOutputCap,
 	})
@@ -226,11 +236,15 @@ func (s *InRepoStore) PublishEvidenceContext(ctx context.Context, runID string) 
 }
 
 func runEvidenceGit(ctx context.Context, repoPath string, args ...string) error {
+	commandArgs, err := evidenceGitArgs(ctx, repoPath, args...)
+	if err != nil {
+		return fmt.Errorf("prepare git %s: %w", strings.Join(args, " "), err)
+	}
 	result, err := execpkg.Run(ctx, execpkg.Command{
 		Name: "git",
-		Args: args,
+		Args: commandArgs,
 		Dir:  repoPath,
-		Env: append(os.Environ(),
+		Env: controlledEvidenceGitEnvironment(
 			"GIT_AUTHOR_NAME=made-evidence",
 			"GIT_AUTHOR_EMAIL=made-evidence@localhost",
 			"GIT_COMMITTER_NAME=made-evidence",

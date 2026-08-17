@@ -68,7 +68,7 @@ func statusHandler(rm *daemon.RunManager) api.HandlerFunc {
 	return func(ctx context.Context, params json.RawMessage) (any, error) {
 		var p statusParams
 		if len(params) > 0 {
-			if err := json.Unmarshal(params, &p); err != nil {
+			if err := decodeStrictParams(params, &p); err != nil {
 				return nil, fmt.Errorf("status: invalid params: %w", err)
 			}
 		}

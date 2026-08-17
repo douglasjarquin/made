@@ -124,15 +124,15 @@ func (s *OrphanBranchStore) WriteEvidenceContext(ctx context.Context, runID stri
 }
 
 func (s *OrphanBranchStore) runGit(ctx context.Context, extraEnv []string, stdin []byte, args ...string) (string, error) {
-	var env []string
-	if extraEnv != nil {
-		env = append(os.Environ(), extraEnv...)
+	commandArgs, err := evidenceGitArgs(ctx, s.RepoPath, args...)
+	if err != nil {
+		return "", fmt.Errorf("prepare git %s: %w", strings.Join(args, " "), err)
 	}
 	result, err := execpkg.Run(ctx, execpkg.Command{
 		Name:        "git",
-		Args:        args,
+		Args:        commandArgs,
 		Dir:         s.RepoPath,
-		Env:         env,
+		Env:         controlledEvidenceGitEnvironment(extraEnv...),
 		Stdin:       stdin,
 		Timeout:     evidenceGitTimeout,
 		OutputLimit: evidenceGitOutputCap,

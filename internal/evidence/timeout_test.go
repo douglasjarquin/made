@@ -2,6 +2,7 @@ package evidence
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,18 +26,25 @@ func TestInRepoStore_PublishHonorsGitTimeout(t *testing.T) {
 	if err := store.WriteEvidence("run-timeout", map[string][]byte{"log.txt": []byte("evidence\n")}); err != nil {
 		t.Fatalf("WriteEvidence: %v", err)
 	}
-	hookDir := filepath.Join(repo, ".git", "hooks")
-	if err := os.WriteFile(filepath.Join(hookDir, "pre-commit"), []byte("#!/bin/sh\nsleep 5\n"), 0o700); err != nil {
-		t.Fatalf("write blocking hook: %v", err)
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatalf("locate real git: %v", err)
 	}
+	shimDir := t.TempDir()
+	shimPath := filepath.Join(shimDir, "git")
+	shim := fmt.Sprintf("#!/bin/sh\ncase \"$*\" in\n  *' add '*) sleep 5 ;;\n  *) exec %q \"$@\" ;;\nesac\n", realGit)
+	if err := os.WriteFile(shimPath, []byte(shim), 0o700); err != nil {
+		t.Fatalf("write blocking git shim: %v", err)
+	}
+	t.Setenv("PATH", shimDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	originalTimeout := evidenceGitTimeout
 	evidenceGitTimeout = 50 * time.Millisecond
 	t.Cleanup(func() { evidenceGitTimeout = originalTimeout })
 	started := time.Now()
-	err := store.PublishEvidenceContext(context.Background(), "run-timeout")
+	err = store.PublishEvidenceContext(context.Background(), "run-timeout")
 	if err == nil {
-		t.Fatal("PublishEvidenceContext returned nil despite a blocking git hook")
+		t.Fatal("PublishEvidenceContext returned nil despite a blocking git command")
 	}
 	if elapsed := time.Since(started); elapsed > time.Second {
 		t.Fatalf("PublishEvidenceContext exceeded bounded timeout: %s", elapsed)

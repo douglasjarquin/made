@@ -274,6 +274,13 @@ func TestRun_ListJSONExposesBatchActiveRunQuery(t *testing.T) {
 	}
 }
 
+func TestRunListHandlerRejectsUnknownParams(t *testing.T) {
+	_, err := runListHandler(daemon.NewRunManager())(context.Background(), []byte(`{"active":true,"unexpected":true}`))
+	if err == nil || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("run.list accepted unknown parameter field: %v", err)
+	}
+}
+
 func captureRun(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
 	outFile, err := os.CreateTemp(t.TempDir(), "stdout-")

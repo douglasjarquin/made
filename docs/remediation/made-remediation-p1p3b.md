@@ -98,6 +98,8 @@ The repository-hook follow-up is `a81179eae674b45e4086e8d758e8aac36bd4f92c` with
 
 The clean-filter follow-up is `738cc55b2d4b4dbdaadc05eb351f612be0eafcd5` with subject `fix: neutralize repository clean filters`.
 
+The portability follow-up is `0c3af42fd75d6f02412cde82b33c8341305243e3` with subject `fix: harden portable rebase validation`.
+
 Those follow-ups harden Made home ownership and permissions, private evidence permissions, version-only configuration rejection, disabled-stage representation, environment-injected real Consigliere compatibility testing, final review/API boundaries, bounded configuration and socket input, torn-tail WAL recovery, replacement-safe config reads, exact-cap durable replay, stalled-input resource bounds, review-agent isolation, evidence publication, subprocess timeouts, and public-field redaction.
 
 The implementation acquires the singleton before socket preparation, uses `lstat`, removes only a stale owner-owned Unix socket, rejects regular files, symlinks, and directories, preserves duplicate owners, and authorizes shutdown through the owner-only socket.
@@ -168,9 +170,11 @@ Pull-request GitHub authentication and API failures now remain infrastructure er
 
 The Made CI workflow validates the pinned Go version with race, vet, and pinned lint jobs.
 
+The CI portability fix uses Go's platform-independent Unix-socket mode inspection instead of Darwin-only `stat -f` flags, and clean rebase execution supplies deterministic committer identity, disabled signing, and disabled hooks at the Git boundary.
+
 ## Validation evidence
 
-The final executable source SHA covered by this validation section is `738cc55b2d4b4dbdaadc05eb351f612be0eafcd5`.
+The final executable source SHA covered by this validation section is `0c3af42fd75d6f02412cde82b33c8341305243e3`.
 
 The config descriptor-boundary commit adds replacement-safe reads from one opened descriptor and a regression proving a replaced path cannot bypass the byte cap.
 
@@ -212,6 +216,8 @@ The full validation command was rerun at the final executable SHA `a81179eae674b
 
 The full validation command was rerun at the final executable SHA `738cc55b2d4b4dbdaadc05eb351f612be0eafcd5`, and `/tmp/made-remediation-p1p3b-738cc55-validation.log` ends with `validation-738cc55=PASS`.
 
+The full validation command was rerun at the final executable SHA `0c3af42fd75d6f02412cde82b33c8341305243e3`, and `/tmp/made-remediation-p1p3b-0c3af42-validation-clean.log` ends with the pinned lint result `0 issues.` and exit `0`.
+
 The fresh real-process manual QA transcript for the final executable SHA is `/tmp/made-remediation-p1p3b-manual-e9aa0dd.log`, and its final marker was `manual-qa-e9aa0dd=PASS` at that full SHA.
 
 The exact current lifecycle and restart contract transcript is `/tmp/made-remediation-p1p3b-manual-contract-e9aa0dd.log`, and its final marker was `manual-contract-e9aa0dd=PASS`.
@@ -235,6 +241,10 @@ The fresh controlled auto-fix transcript is `/tmp/made-remediation-p1p3b-manual-
 The fresh real-process manual transcript at the final executable SHA is `/tmp/made-remediation-p1p3b-manual-738cc55.log`, and its final marker was `manual-qa-738cc55=PASS`.
 
 The fresh controlled auto-fix transcript is `/tmp/made-remediation-p1p3b-manual-review-738cc55.log`, and its final marker was `manual-review-738cc55=PASS`.
+
+The fresh exact-tip real-process transcript is `/tmp/made-remediation-p1p3b-manual-0c3af42.log`, and its final marker is `manual-qa-0c3af42=PASS`.
+
+That exact-tip scenario observed process-level cancellation, WAL restart persistence, gate-spool replay, duplicate singleton ownership, obsolete RPC rejection, and the hermetic real Made binary against the real Consigliere script with strict fake GitHub and unavailable Herdr boundaries.
 
 That exact-SHA scenario used a fresh final binary and task-local Made homes to observe daemon cancellation through a real process and doctor through the real Consigliere script.
 
@@ -260,7 +270,7 @@ The first full validation exposed a WAL replay ordering race where a stale `succ
 
 Serializing snapshot capture with WAL append removed that race, and `go test -shuffle=on -count=10 ./internal/daemon -run '^TestPersistentRunStateIncludesSubmissionAndDecisionData$'` passed afterward.
 
-The final changed-file authority is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..738cc55b2d4b4dbdaadc05eb351f612be0eafcd5`, which reports the Made-only paths from the custody base.
+The final changed-file authority is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..0c3af42fd75d6f02412cde82b33c8341305243e3`, which reports the Made-only paths from the custody base.
 
 At directory level, the base-to-final diff is limited to `.github/workflows/ci.yml`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `cmd/made`, `docs/remediation`, `internal/agent`, `internal/api`, `internal/config`, `internal/daemon`, `internal/evidence`, `internal/exec`, `internal/github`, `internal/orchestrator`, `internal/pipeline`, `internal/skill`, and `skills/made/SKILL.md`.
 

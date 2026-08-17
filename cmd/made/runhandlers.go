@@ -31,7 +31,7 @@ func runStatusHandler(rm *daemon.RunManager) api.HandlerFunc {
 func runSubmitHandler(rm *daemon.RunManager, reviewDecisions *daemon.ReviewDecisions, spool *daemon.GateSpool, admission ...*sync.Mutex) api.HandlerFunc {
 	return func(ctx context.Context, params json.RawMessage) (any, error) {
 		var p runSubmitParams
-		if err := json.Unmarshal(params, &p); err != nil {
+		if err := decodeStrictParams(params, &p); err != nil {
 			return nil, fmt.Errorf("run.submit: invalid params: %w", err)
 		}
 		if strings.TrimSpace(p.GatePath) == "" || strings.TrimSpace(p.Ref) == "" {
@@ -93,7 +93,7 @@ func runListHandler(rm *daemon.RunManager) api.HandlerFunc {
 	return func(_ context.Context, params json.RawMessage) (any, error) {
 		var p runListParams
 		if len(params) > 0 {
-			if err := json.Unmarshal(params, &p); err != nil {
+			if err := decodeStrictParams(params, &p); err != nil {
 				return nil, fmt.Errorf("run.list: invalid params: %w", err)
 			}
 		}
@@ -112,7 +112,7 @@ func runListHandler(rm *daemon.RunManager) api.HandlerFunc {
 func runCancelHandler(rm *daemon.RunManager) api.HandlerFunc {
 	return func(ctx context.Context, params json.RawMessage) (any, error) {
 		var p runCancelParams
-		if err := json.Unmarshal(params, &p); err != nil {
+		if err := decodeStrictParams(params, &p); err != nil {
 			return nil, fmt.Errorf("run.cancel: invalid params: %w", err)
 		}
 		if p.RunID == "" {

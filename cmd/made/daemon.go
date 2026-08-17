@@ -293,7 +293,7 @@ type gateAdmitPushResult struct {
 func gateAdmitPushHandler() api.HandlerFunc {
 	return func(_ context.Context, params json.RawMessage) (any, error) {
 		var p gateAdmitPushParams
-		if err := json.Unmarshal(params, &p); err != nil {
+		if err := decodeStrictParams(params, &p); err != nil {
 			return nil, fmt.Errorf("gate.admitPush: invalid params: %w", err)
 		}
 		if p.GatePath == "" {
@@ -360,7 +360,7 @@ type gateNotifyPushResult struct {
 func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.ReviewDecisions, spool *daemon.GateSpool, admission ...*sync.Mutex) api.HandlerFunc {
 	return func(ctx context.Context, params json.RawMessage) (any, error) {
 		var p gateNotifyPushParams
-		if err := json.Unmarshal(params, &p); err != nil {
+		if err := decodeStrictParams(params, &p); err != nil {
 			return nil, fmt.Errorf("gate.notifyPush: invalid params: %w", err)
 		}
 		if p.GatePath == "" || p.Ref == "" || p.NewSHA == "" {
@@ -556,7 +556,7 @@ type debugSubmitCancellableRunParams struct {
 func debugSubmitCancellableRunHandler(rm *daemon.RunManager) api.HandlerFunc {
 	return func(_ context.Context, params json.RawMessage) (any, error) {
 		var p debugSubmitCancellableRunParams
-		if err := json.Unmarshal(params, &p); err != nil {
+		if err := decodeStrictParams(params, &p); err != nil {
 			return nil, fmt.Errorf("decode params: %w", err)
 		}
 		work := func(workCtx context.Context, _ func(daemon.Event)) error {

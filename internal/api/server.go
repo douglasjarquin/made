@@ -2,6 +2,7 @@ package api
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -210,14 +211,31 @@ func (s *Server) serveConn(ctx context.Context, conn net.Conn) {
 		if len(value) == 0 {
 			continue
 		}
-		var req Request
-		if err := json.Unmarshal(value, &req); err != nil {
-			return
+		req, err := decodeRequest(value)
+		if err != nil {
+			var envelope struct {
+				ID string `json:"id"`
+			}
+			_ = json.Unmarshal(value, &envelope)
+			if err := enc.Encode(errorResponse(envelope.ID, ErrInvalidRequest, "invalid request")); err != nil {
+				return
+			}
+			continue
 		}
 		if err := enc.Encode(s.dispatch(ctx, req)); err != nil {
 			return
 		}
 	}
+}
+
+func decodeRequest(value []byte) (Request, error) {
+	decoder := json.NewDecoder(bytes.NewReader(value))
+	decoder.DisallowUnknownFields()
+	var req Request
+	if err := decoder.Decode(&req); err != nil {
+		return Request{}, err
+	}
+	return req, nil
 }
 
 func readRequestValue(reader *bufio.Reader, maxBytes int) ([]byte, error) {

@@ -80,6 +80,31 @@ func TestInRepoStore_PublishesEvidenceInAccessibleCommit(t *testing.T) {
 	}
 }
 
+func TestInRepoStore_PublishSuppressesRepositoryHooksAndAmbientGitConfig(t *testing.T) {
+	repo := initTargetRepo(t)
+	store := &evidence.InRepoStore{RepoPath: repo, Dir: ".made/evidence"}
+	if err := store.WriteEvidence("run-hooks", map[string][]byte{"log.txt": []byte("visible evidence\n")}); err != nil {
+		t.Fatalf("WriteEvidence: %v", err)
+	}
+	hooksDir := t.TempDir()
+	hookMarker := filepath.Join(t.TempDir(), "hook-fired")
+	if err := os.WriteFile(filepath.Join(hooksDir, "pre-commit"), []byte("#!/bin/sh\nprintf fired > '"+hookMarker+"'\n"), 0o700); err != nil {
+		t.Fatalf("write pre-commit hook: %v", err)
+	}
+	t.Setenv("GIT_CONFIG_COUNT", "2")
+	t.Setenv("GIT_CONFIG_KEY_0", "core.hooksPath")
+	t.Setenv("GIT_CONFIG_VALUE_0", hooksDir)
+	t.Setenv("GIT_CONFIG_KEY_1", "commit.gpgsign")
+	t.Setenv("GIT_CONFIG_VALUE_1", "false")
+
+	if err := store.PublishEvidence("run-hooks"); err != nil {
+		t.Fatalf("PublishEvidence: %v", err)
+	}
+	if _, err := os.Stat(hookMarker); !os.IsNotExist(err) {
+		t.Fatalf("evidence publication executed an inherited Git hook: %v", err)
+	}
+}
+
 func TestInRepoStore_PublishRejectsSymlinkedEvidenceFile(t *testing.T) {
 	repo := initTargetRepo(t)
 	store := &evidence.InRepoStore{RepoPath: repo, Dir: ".made/evidence"}
