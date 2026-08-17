@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -260,4 +261,51 @@ func TestRunManager_FailsRunWhenFinalPersistenceFails(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 	t.Fatal("run did not finish")
+}
+
+func TestOpenRunManager_PreservesStateAfterRecoveryFailure(t *testing.T) {
+	stateDir := t.TempDir()
+	rm, err := OpenRunManager(stateDir)
+	if err != nil {
+		t.Fatalf("OpenRunManager: %v", err)
+	}
+	if _, err := rm.SubmitSubmission(RunSubmission{
+		ID:     "run-recovery-preserve",
+		Repo:   "repo",
+		Branch: "branch",
+	}, nil); err != nil {
+		t.Fatalf("SubmitSubmission: %v", err)
+	}
+	if err := rm.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	wal, err := os.OpenFile(filepath.Join(stateDir, walFileName), os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		t.Fatalf("open WAL: %v", err)
+	}
+	if _, err := wal.WriteString("{not-valid-json}\n"); err != nil {
+		t.Fatalf("append corrupt WAL: %v", err)
+	}
+	if err := wal.Close(); err != nil {
+		t.Fatalf("close WAL: %v", err)
+	}
+
+	if _, err := OpenRunManager(stateDir); err == nil {
+		t.Fatal("OpenRunManager accepted non-final WAL corruption")
+	}
+	checkpoint, err := os.ReadFile(filepath.Join(stateDir, snapshotFileName))
+	if err != nil {
+		t.Fatalf("read checkpoint after failed recovery: %v", err)
+	}
+	if !strings.Contains(string(checkpoint), "run-recovery-preserve") {
+		t.Fatalf("failed recovery replaced the durable checkpoint: %s", checkpoint)
+	}
+	walData, err := os.ReadFile(filepath.Join(stateDir, walFileName))
+	if err != nil {
+		t.Fatalf("read WAL after failed recovery: %v", err)
+	}
+	if !strings.Contains(string(walData), "not-valid-json") {
+		t.Fatalf("failed recovery truncated the corrupt WAL for diagnosis: %s", walData)
+	}
 }

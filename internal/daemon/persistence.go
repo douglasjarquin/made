@@ -327,7 +327,6 @@ func OpenRunManager(stateDir string) (*RunManager, error) {
 	rm := newRunManager(store)
 	runs, counter, err := store.load()
 	if err != nil {
-		_ = store.close(nil, 0)
 		return nil, err
 	}
 	rm.counter.Store(counter)
@@ -353,7 +352,6 @@ func OpenRunManager(stateDir string) (*RunManager, error) {
 			rm.mu.Unlock()
 			if err != nil {
 				cancel()
-				_ = store.close(nil, 0)
 				return nil, err
 			}
 		}

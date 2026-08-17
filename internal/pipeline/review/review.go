@@ -9,7 +9,9 @@ package review
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -86,13 +88,26 @@ func applyAutoFix(worktreePath string, finding agent.Finding) (string, error) {
 		return "", fmt.Errorf("auto-fixable finding has no patch")
 	}
 
-	applyCmd := exec.Command("git", "-C", worktreePath, "apply", "--index", "--whitespace=fix", "-")
+	indexDir, err := os.MkdirTemp("", "made-review-index-")
+	if err != nil {
+		return "", fmt.Errorf("create isolated index: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(indexDir) }()
+	indexPath := filepath.Join(indexDir, "index")
+	if out, err := runGitWithIndex(worktreePath, indexPath, nil, "read-tree", "HEAD"); err != nil {
+		return "", fmt.Errorf("seed isolated index: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	if out, err := runGitWithIndex(worktreePath, indexPath, nil, "update-index", "--refresh"); err != nil {
+		return "", fmt.Errorf("refresh isolated index: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+
+	applyCmd := gitCommandWithIndex(worktreePath, indexPath, "apply", "--index", "--whitespace=fix", "-")
 	applyCmd.Stdin = strings.NewReader(finding.Patch)
 	if out, err := applyCmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("git apply: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 
-	filesOut, err := exec.Command("git", "-C", worktreePath, "diff", "--cached", "--name-only", "--diff-filter=ACMRTUXB").CombinedOutput()
+	filesOut, err := runGitWithIndex(worktreePath, indexPath, nil, "diff", "--cached", "--name-only", "--diff-filter=ACMRTUXB")
 	if err != nil {
 		return "", fmt.Errorf("git diff staged files: %w: %s", err, strings.TrimSpace(string(filesOut)))
 	}
@@ -104,7 +119,7 @@ func applyAutoFix(worktreePath string, finding agent.Finding) (string, error) {
 	if message == "" {
 		message = "made review: auto-fix"
 	}
-	commitCmd := exec.Command("git", "-C", worktreePath,
+	commitCmd := gitCommandWithIndex(worktreePath, indexPath,
 		"-c", "commit.gpgsign=false",
 		"-c", "user.name=made-review",
 		"-c", "user.email=made-review@local",
@@ -112,10 +127,33 @@ func applyAutoFix(worktreePath string, finding agent.Finding) (string, error) {
 	if out, err := commitCmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("git commit: %w: %s", err, strings.TrimSpace(string(out)))
 	}
+	for file := range strings.SplitSeq(strings.TrimSpace(string(filesOut)), "\n") {
+		if file == "" {
+			continue
+		}
+		if out, err := exec.Command("git", "-C", worktreePath, "reset", "HEAD", "--", file).CombinedOutput(); err != nil {
+			return "", fmt.Errorf("restore worktree index for %q: %w: %s", file, err, strings.TrimSpace(string(out)))
+		}
+	}
 
 	shaOut, err := exec.Command("git", "-C", worktreePath, "rev-parse", "HEAD").Output()
 	if err != nil {
 		return "", fmt.Errorf("git rev-parse HEAD: %w", err)
 	}
 	return strings.TrimSpace(string(shaOut)), nil
+}
+
+func gitCommandWithIndex(worktreePath, indexPath string, args ...string) *exec.Cmd {
+	cmd := exec.Command("git", append([]string{"-C", worktreePath}, args...)...)
+	cmd.Env = append(os.Environ(), "GIT_INDEX_FILE="+indexPath)
+	return cmd
+}
+
+func runGitWithIndex(worktreePath, indexPath string, stdin []byte, args ...string) ([]byte, error) {
+	cmd := gitCommandWithIndex(worktreePath, indexPath, args...)
+	if stdin != nil {
+		cmd.Stdin = strings.NewReader(string(stdin))
+	}
+	out, err := cmd.CombinedOutput()
+	return out, err
 }

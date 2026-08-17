@@ -23,6 +23,7 @@ func TestRun_AutoFixDoesNotStageUnrelatedChanges(t *testing.T) {
 	}()
 
 	writeFile(t, wt.Path, "unrelated.txt", "must not be committed\n")
+	run(t, wt.Path, "add", "unrelated.txt")
 	patch := autoFixPatch(t, wt.Path)
 	scenarioPath := writeScenario(t, agent.Findings{Findings: []agent.Finding{{
 		Kind: agent.FindingAutoFixable, Description: "contained fix", Patch: patch,
@@ -45,6 +46,10 @@ func TestRun_AutoFixDoesNotStageUnrelatedChanges(t *testing.T) {
 	files := run(t, wt.Path, "show", "--format=", "--name-only", result.AutoFixed[0])
 	if strings.Contains(files, "unrelated.txt") {
 		t.Fatalf("unrelated file was included in auto-fix commit: %s", files)
+	}
+	staged := run(t, wt.Path, "diff", "--cached", "--name-only")
+	if !strings.Contains(staged, "unrelated.txt") {
+		t.Fatalf("pre-staged unrelated file was lost from the worktree index: %s", staged)
 	}
 	if _, err := os.Stat(filepath.Join(wt.Path, "unrelated.txt")); err != nil {
 		t.Fatalf("unrelated fixture disappeared: %v", err)
