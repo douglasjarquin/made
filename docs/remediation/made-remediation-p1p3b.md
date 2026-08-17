@@ -92,6 +92,8 @@ The review-isolation commit is `6f7d25458177f8b17271a28e7953ebc5c69a9fac` with s
 
 The review-setup injection follow-up is `a51dbec4e97a924a503389c13c1e9aef089a31e6` with subject `fix: close review setup injection boundary`.
 
+The controlled auto-fix Git follow-up is `5e263785b7313523fdeec648ea3475ac9d446543` with subject `fix: sanitize controlled review Git commands`.
+
 Those follow-ups harden Made home ownership and permissions, private evidence permissions, version-only configuration rejection, disabled-stage representation, environment-injected real Consigliere compatibility testing, final review/API boundaries, bounded configuration and socket input, torn-tail WAL recovery, replacement-safe config reads, exact-cap durable replay, stalled-input resource bounds, review-agent isolation, evidence publication, subprocess timeouts, and public-field redaction.
 
 The implementation acquires the singleton before socket preparation, uses `lstat`, removes only a stale owner-owned Unix socket, rejects regular files, symlinks, and directories, preserves duplicate owners, and authorizes shutdown through the owner-only socket.
@@ -115,6 +117,8 @@ Restored queued, running, and awaiting-review snapshots are reconciled to durabl
 Review agents run against a detached clone made without local hardlinks, with the exact source HEAD verified before launch, the clone and Git metadata made non-writable, escaping symlinks rejected, and delivery-path Git environment variables removed.
 
 Review setup removes all inherited `GIT_*` injection variables, disables global and system Git configuration for clone and checkout, and tests template hooks, injected config, exact HEAD, cleanup, and escaping symlinks.
+
+Controlled auto-fix Git commands use the same bounded execution contract with all ambient `GIT_*` routing and hook configuration removed before status, apply, add, commit, and validation operations.
 
 Pending gate submissions are replayed on daemon startup and remain undrained when their external boundary is unavailable.
 
@@ -158,7 +162,7 @@ The Made CI workflow validates the pinned Go version with race, vet, and pinned 
 
 ## Validation evidence
 
-The final executable source SHA covered by this validation section is `a51dbec4e97a924a503389c13c1e9aef089a31e6`.
+The final executable source SHA covered by this validation section is `5e263785b7313523fdeec648ea3475ac9d446543`.
 
 The config descriptor-boundary commit adds replacement-safe reads from one opened descriptor and a regression proving a replaced path cannot bypass the byte cap.
 
@@ -174,6 +178,8 @@ The review-isolation commit adds the final RED/GREEN contract for the supported 
 
 The review-setup injection follow-up adds the RED/GREEN contract for Git template and config hook suppression, review-clone cleanup, exact-HEAD verification, and escaping-symlink rejection, while splitting the isolation implementation into its own module.
 
+The controlled auto-fix Git follow-up adds the RED/GREEN contract for ambient `GIT_DIR` routing and pre-commit hook suppression, and bounds all auto-fix Git subprocesses.
+
 The validation shell exported `GIT_CONFIG_COUNT=1`, `GIT_CONFIG_KEY_0=commit.gpgsign`, `GIT_CONFIG_VALUE_0=false`, `SSH_AUTH_SOCK=`, and `GOTOOLCHAIN=local` for deterministic fixture commits and toolchain selection.
 
 It ran `gofmt -l internal cmd`, `go build ./...`, `go test -count=1 -timeout=10m ./...`, `go test -race -shuffle=on -count=1 -timeout=10m ./...`, `go vet ./...`, and `golangci-lint run --timeout=5m --max-issues-per-linter=0 --max-same-issues=0 ./...` at the exact final source SHA.
@@ -188,6 +194,8 @@ The full validation command was rerun at the final executable SHA `6f7d25458177f
 
 The full validation command was rerun at the final executable SHA `a51dbec4e97a924a503389c13c1e9aef089a31e6`, and `/tmp/made-remediation-p1p3b-a51dbec-validation.log` ends with `validation-a51dbec=PASS`.
 
+The full validation command was rerun at the final executable SHA `5e263785b7313523fdeec648ea3475ac9d446543`, and `/tmp/made-remediation-p1p3b-5e26378-validation.log` ends with `validation-5e26378=PASS`.
+
 The fresh real-process manual QA transcript for the final executable SHA is `/tmp/made-remediation-p1p3b-manual-e9aa0dd.log`, and its final marker was `manual-qa-e9aa0dd=PASS` at that full SHA.
 
 The exact current lifecycle and restart contract transcript is `/tmp/made-remediation-p1p3b-manual-contract-e9aa0dd.log`, and its final marker was `manual-contract-e9aa0dd=PASS`.
@@ -199,6 +207,10 @@ The fresh review-isolation manual contract transcript is `/tmp/made-remediation-
 The fresh real-process manual transcript at the final executable SHA is `/tmp/made-remediation-p1p3b-manual-a51dbec.log`, and its final marker was `manual-qa-a51dbec=PASS`.
 
 The fresh review-setup isolation transcript is `/tmp/made-remediation-p1p3b-manual-review-a51dbec.log`, and its final marker was `manual-review-a51dbec=PASS`.
+
+The fresh real-process manual transcript at the final executable SHA is `/tmp/made-remediation-p1p3b-manual-5e26378.log`, and its final marker was `manual-qa-5e26378=PASS`.
+
+The fresh controlled auto-fix transcript is `/tmp/made-remediation-p1p3b-manual-review-5e26378.log`, and its final marker was `manual-review-5e26378=PASS`.
 
 That exact-SHA scenario used a fresh final binary and task-local Made homes to observe daemon cancellation through a real process and doctor through the real Consigliere script.
 
@@ -224,7 +236,7 @@ The first full validation exposed a WAL replay ordering race where a stale `succ
 
 Serializing snapshot capture with WAL append removed that race, and `go test -shuffle=on -count=10 ./internal/daemon -run '^TestPersistentRunStateIncludesSubmissionAndDecisionData$'` passed afterward.
 
-The final changed-file authority is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..a51dbec4e97a924a503389c13c1e9aef089a31e6`, which reports the Made-only paths from the custody base.
+The final changed-file authority is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..5e263785b7313523fdeec648ea3475ac9d446543`, which reports the Made-only paths from the custody base.
 
 At directory level, the base-to-final diff is limited to `.github/workflows/ci.yml`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `cmd/made`, `docs/remediation`, `internal/agent`, `internal/api`, `internal/config`, `internal/daemon`, `internal/evidence`, `internal/exec`, `internal/github`, `internal/orchestrator`, `internal/pipeline`, `internal/skill`, and `skills/made/SKILL.md`.
 
