@@ -327,7 +327,9 @@ func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.Review
 			}
 			return gateNotifyPushResult{RunID: existing.ID}, nil
 		}
-		rm.SupersedeQueued(repo, branch)
+		if err := rm.SupersedeQueued(repo, branch); err != nil {
+			return nil, fmt.Errorf("gate.notifyPush: supersede queued run: %w", err)
+		}
 
 		if _, err := rm.SubmitSubmission(submission, work); err != nil {
 			return nil, fmt.Errorf("gate.notifyPush: submit run: %w", err)

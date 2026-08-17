@@ -2,6 +2,7 @@ package evidence_test
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -43,6 +44,26 @@ func TestOrphanBranchStore_ConcurrentWritesRetainBothRuns(t *testing.T) {
 		if !containsLine(tree, filepath.Join(runID, "result.json")) {
 			t.Fatalf("evidence branch missing %s: %s", runID, tree)
 		}
+	}
+}
+
+func TestInRepoStoreRejectsSymlinkedEvidenceDirectory(t *testing.T) {
+	repo := t.TempDir()
+	outside := t.TempDir()
+	evidenceRoot := filepath.Join(repo, ".made", "evidence")
+	if err := os.MkdirAll(filepath.Dir(evidenceRoot), 0o755); err != nil {
+		t.Fatalf("create evidence parent: %v", err)
+	}
+	if err := os.Symlink(outside, evidenceRoot); err != nil {
+		t.Fatalf("create evidence symlink: %v", err)
+	}
+
+	store := &evidence.InRepoStore{RepoPath: repo, Dir: ".made/evidence"}
+	if err := store.WriteEvidence("run-escape", map[string][]byte{"result.json": []byte("secret")}); err == nil {
+		t.Fatal("WriteEvidence accepted a symlinked evidence directory")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "run-escape", "result.json")); !os.IsNotExist(err) {
+		t.Fatalf("symlinked evidence directory received data: err=%v", err)
 	}
 }
 

@@ -23,11 +23,16 @@ func (rm *RunManager) UpdateStages(id string, stages []StageResult) error {
 	if !ok {
 		return fmt.Errorf("daemon: no run %q", id)
 	}
+	previous := r.snapshot()
 	r.update(func(s *RunSnapshot) {
 		s.Stages = cloneStageResults(stages)
 		s.CurrentStage = currentStage(s.Stages)
 	})
-	return rm.persistRun(r)
+	if err := rm.persistRun(r); err != nil {
+		r.replace(previous)
+		return err
+	}
+	return nil
 }
 
 func (rm *RunManager) UpdatePendingFindings(id string, findings []AskUserFinding) error {
@@ -35,10 +40,15 @@ func (rm *RunManager) UpdatePendingFindings(id string, findings []AskUserFinding
 	if !ok {
 		return fmt.Errorf("daemon: no run %q", id)
 	}
+	previous := r.snapshot()
 	r.update(func(s *RunSnapshot) {
 		s.PendingFindings = append([]AskUserFinding(nil), findings...)
 	})
-	return rm.persistRun(r)
+	if err := rm.persistRun(r); err != nil {
+		r.replace(previous)
+		return err
+	}
+	return nil
 }
 
 func (rm *RunManager) SetCurrentStage(id, stage string) error {
@@ -46,10 +56,15 @@ func (rm *RunManager) SetCurrentStage(id, stage string) error {
 	if !ok {
 		return fmt.Errorf("daemon: no run %q", id)
 	}
+	previous := r.snapshot()
 	r.update(func(s *RunSnapshot) {
 		s.CurrentStage = stage
 	})
-	return rm.persistRun(r)
+	if err := rm.persistRun(r); err != nil {
+		r.replace(previous)
+		return err
+	}
+	return nil
 }
 
 func (rm *RunManager) AddEvidenceRef(id, ref string) error {
@@ -57,12 +72,17 @@ func (rm *RunManager) AddEvidenceRef(id, ref string) error {
 	if !ok {
 		return fmt.Errorf("daemon: no run %q", id)
 	}
+	previous := r.snapshot()
 	r.update(func(s *RunSnapshot) {
 		if !slices.Contains(s.EvidenceRefs, ref) {
 			s.EvidenceRefs = append(s.EvidenceRefs, ref)
 		}
 	})
-	return rm.persistRun(r)
+	if err := rm.persistRun(r); err != nil {
+		r.replace(previous)
+		return err
+	}
+	return nil
 }
 
 func (rm *RunManager) UpdateSubmissionOutput(id, outputSHA string) error {
@@ -70,10 +90,15 @@ func (rm *RunManager) UpdateSubmissionOutput(id, outputSHA string) error {
 	if !ok {
 		return fmt.Errorf("daemon: no run %q", id)
 	}
+	previous := r.snapshot()
 	r.update(func(s *RunSnapshot) {
 		s.OutputSHA = outputSHA
 	})
-	return rm.persistRun(r)
+	if err := rm.persistRun(r); err != nil {
+		r.replace(previous)
+		return err
+	}
+	return nil
 }
 
 func cloneStageResults(stages []StageResult) []StageResult {

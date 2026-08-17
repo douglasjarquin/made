@@ -260,14 +260,7 @@ func (rm *RunManager) execute(r *run, work WorkFunc) {
 		return
 	}
 	if err := rm.persistRun(r); err != nil {
-		r.update(func(s *RunSnapshot) {
-			s.Status = RunFailed
-			s.Err = err
-			s.Error = err.Error()
-			s.ExecutionFinished = true
-			s.EndedAt = time.Now()
-		})
-		_ = rm.persistRun(r)
+		rm.failAfterPersistenceError(r, err)
 		return
 	}
 	rm.mailbox.Publish(Event{RunID: id, Kind: EventRunStarted, Time: started})
@@ -310,7 +303,10 @@ func (rm *RunManager) execute(r *run, work WorkFunc) {
 			s.Status = RunSucceeded
 		}
 	})
-	_ = rm.persistRun(r)
+	if err := rm.persistRun(r); err != nil {
+		rm.failAfterPersistenceError(r, err)
+		return
+	}
 
 	snapshot := r.snapshot()
 	var finalKind EventKind
@@ -370,8 +366,8 @@ func (rm *RunManager) Cancel(id string) error {
 		return fmt.Errorf("daemon: run %q is already %s", id, snapshot.Status)
 	}
 	if snapshot.Status == RunQueued {
-		if rm.cancelQueued(r) {
-			return nil
+		if handled, err := rm.cancelQueued(r); handled {
+			return err
 		}
 	}
 	r.cancel()
@@ -387,13 +383,42 @@ func (rm *RunManager) Finish(id string, status RunStatus, message string) error 
 	if !ok {
 		return fmt.Errorf("daemon: no run %q", id)
 	}
+	previous := r.snapshot()
 	r.update(func(s *RunSnapshot) {
 		s.Status = status
 		s.Message = message
 		s.ExecutionFinished = status == RunAwaitingMerge || isTerminalRunStatus(status)
 		s.finalized = true
 	})
-	return rm.persistRun(r)
+	if err := rm.persistRun(r); err != nil {
+		r.replace(previous)
+		return err
+	}
+	return nil
+}
+
+func (rm *RunManager) failAfterPersistenceError(r *run, persistErr error) {
+	failure := fmt.Errorf("daemon: durable run state unavailable: %w", persistErr)
+	ended := time.Now()
+	r.update(func(s *RunSnapshot) {
+		s.Status = RunFailed
+		s.Err = failure
+		s.Error = failure.Error()
+		s.Message = "run state persistence failed"
+		s.EndedAt = ended
+		s.ExecutionFinished = true
+		s.finalized = true
+	})
+	if retryErr := rm.persistRun(r); retryErr != nil {
+		failure = fmt.Errorf("%w; retrying failed state also failed: %v", failure, retryErr)
+		r.update(func(s *RunSnapshot) {
+			s.Err = failure
+			s.Error = failure.Error()
+		})
+	}
+	snapshot := r.snapshot()
+	rm.mailbox.Publish(Event{RunID: snapshot.ID, Kind: EventRunFailed, Time: ended, Err: failure})
+	rm.signalActivity()
 }
 
 var ErrRunSuperseded = errors.New("daemon: run superseded by a newer push to the same branch")
@@ -404,12 +429,12 @@ var ErrRunSuperseded = errors.New("daemon: run superseded by a newer push to the
 // inspected, so a job already popped off the queue - running or terminal -
 // is left completely alone, matching a fresh push's right to replace a
 // stale intent that hasn't started yet, but never a run already underway.
-func (rm *RunManager) SupersedeQueued(repo, branch string) {
+func (rm *RunManager) SupersedeQueued(repo, branch string) error {
 	rm.mu.Lock()
 	rq, ok := rm.repos[repo]
 	rm.mu.Unlock()
 	if !ok {
-		return
+		return nil
 	}
 
 	rq.mu.Lock()
@@ -426,6 +451,7 @@ func (rm *RunManager) SupersedeQueued(repo, branch string) {
 	rq.mu.Unlock()
 
 	now := time.Now()
+	var firstErr error
 	for _, j := range dropped {
 		j.run.update(func(s *RunSnapshot) {
 			s.Status = RunSuperseded
@@ -434,19 +460,26 @@ func (rm *RunManager) SupersedeQueued(repo, branch string) {
 			s.ExecutionFinished = true
 			s.EndedAt = now
 		})
-		_ = rm.persistRun(j.run)
+		if err := rm.persistRun(j.run); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			rm.failAfterPersistenceError(j.run, err)
+			continue
+		}
 		rm.mailbox.Publish(Event{RunID: j.run.snapshot().ID, Kind: EventRunCanceled, Time: now, Err: ErrRunSuperseded})
 		rm.signalActivity()
 	}
+	return firstErr
 }
 
-func (rm *RunManager) cancelQueued(target *run) bool {
+func (rm *RunManager) cancelQueued(target *run) (bool, error) {
 	snapshot := target.snapshot()
 	rm.mu.Lock()
 	rq := rm.repos[snapshot.Repo]
 	rm.mu.Unlock()
 	if rq == nil {
-		return false
+		return false, nil
 	}
 	rq.mu.Lock()
 	removed := false
@@ -459,7 +492,7 @@ func (rm *RunManager) cancelQueued(target *run) bool {
 	}
 	rq.mu.Unlock()
 	if !removed {
-		return false
+		return false, nil
 	}
 	now := time.Now()
 	target.cancel()
@@ -470,10 +503,13 @@ func (rm *RunManager) cancelQueued(target *run) bool {
 		s.EndedAt = now
 		s.ExecutionFinished = true
 	})
-	_ = rm.persistRun(target)
+	if err := rm.persistRun(target); err != nil {
+		rm.failAfterPersistenceError(target, err)
+		return true, err
+	}
 	rm.mailbox.Publish(Event{RunID: snapshot.ID, Kind: EventRunCanceled, Time: now, Err: context.Canceled})
 	rm.signalActivity()
-	return true
+	return true, nil
 }
 
 func (rm *RunManager) persistRun(r *run) error {

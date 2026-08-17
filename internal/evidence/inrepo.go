@@ -1,6 +1,7 @@
 package evidence
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -38,11 +39,59 @@ func (s *InRepoStore) WriteEvidence(runID string, files map[string][]byte) error
 			return fmt.Errorf("evidence: invalid file name %q: %w", name, err)
 		}
 		dest := filepath.Join(runDir, name)
+		if err := ensureNoSymlinkPath(s.RepoPath, dest); err != nil {
+			return fmt.Errorf("evidence: unsafe path %q: %w", name, err)
+		}
 		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 			return fmt.Errorf("evidence: create evidence dir for %q: %w", name, err)
 		}
 		if err := writeAtomic(dest, data, 0o644); err != nil {
 			return fmt.Errorf("evidence: write evidence file %q: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func ensureNoSymlinkPath(repoPath, target string) error {
+	root, err := filepath.Abs(repoPath)
+	if err != nil {
+		return fmt.Errorf("resolve repository path: %w", err)
+	}
+	target, err = filepath.Abs(target)
+	if err != nil {
+		return fmt.Errorf("resolve target path: %w", err)
+	}
+	rel, err := filepath.Rel(root, target)
+	if err != nil {
+		return fmt.Errorf("relate target to repository: %w", err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("path escapes repository")
+	}
+
+	rootInfo, err := os.Lstat(root)
+	if err != nil {
+		return fmt.Errorf("inspect repository path: %w", err)
+	}
+	if rootInfo.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("repository path is a symlink")
+	}
+
+	current := root
+	for part := range strings.SplitSeq(rel, string(filepath.Separator)) {
+		if part == "" || part == "." {
+			continue
+		}
+		current = filepath.Join(current, part)
+		info, err := os.Lstat(current)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("inspect path component: %w", err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("path component %q is a symlink", current)
 		}
 	}
 	return nil

@@ -198,3 +198,66 @@ func TestReviewDecisions_RestoreAndRejectConflict(t *testing.T) {
 		t.Fatalf("conflicting decision error = %v, want ErrDecisionAlreadyRecorded", err)
 	}
 }
+
+func TestRunManager_UpdateStagesRollsBackOnPersistenceFailure(t *testing.T) {
+	stateDir := t.TempDir()
+	rm, err := OpenRunManager(stateDir)
+	if err != nil {
+		t.Fatalf("OpenRunManager: %v", err)
+	}
+	if _, err := rm.SubmitSubmission(RunSubmission{
+		ID:     "run-persist-failure",
+		Repo:   "repo",
+		Branch: "branch",
+	}, nil); err != nil {
+		t.Fatalf("SubmitSubmission: %v", err)
+	}
+	if err := rm.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	err = rm.UpdateStages("run-persist-failure", []StageResult{{Name: "intent", Result: "pass"}})
+	if err == nil {
+		t.Fatal("UpdateStages succeeded with a closed durable store")
+	}
+	snapshot, ok := rm.Snapshot("run-persist-failure")
+	if !ok {
+		t.Fatal("run disappeared after persistence failure")
+	}
+	if len(snapshot.Stages) != 0 {
+		t.Fatalf("in-memory stage update survived persistence failure: %+v", snapshot.Stages)
+	}
+}
+
+func TestRunManager_FailsRunWhenFinalPersistenceFails(t *testing.T) {
+	stateDir := t.TempDir()
+	rm, err := OpenRunManager(stateDir)
+	if err != nil {
+		t.Fatalf("OpenRunManager: %v", err)
+	}
+	if _, err := rm.SubmitSubmission(RunSubmission{
+		ID:     "run-final-persist-failure",
+		Repo:   "repo",
+		Branch: "branch",
+	}, func(context.Context, func(Event)) error {
+		if err := rm.Close(); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("SubmitSubmission: %v", err)
+	}
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		snapshot, ok := rm.Snapshot("run-final-persist-failure")
+		if ok && snapshot.ExecutionFinished {
+			if snapshot.Status != RunFailed {
+				t.Fatalf("run status = %s after final persistence failure, want failed", snapshot.Status)
+			}
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("run did not finish")
+}

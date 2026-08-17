@@ -117,8 +117,28 @@ func runReviewCommand(args []string, stdin io.Reader, stdout, stderr *os.File) i
 
 	scanner := bufio.NewScanner(stdin)
 	anyRejected := false
-	for _, f := range report.PendingFindings {
-		_, _ = fmt.Fprintf(stdout, "[%s] %s\n", f.Stage, f.Message)
+	groups := make([]struct {
+		stage    string
+		findings []AskUserFinding
+	}, 0, len(report.PendingFindings))
+	groupIndex := make(map[string]int)
+	for _, finding := range report.PendingFindings {
+		index, ok := groupIndex[finding.Stage]
+		if !ok {
+			index = len(groups)
+			groupIndex[finding.Stage] = index
+			groups = append(groups, struct {
+				stage    string
+				findings []AskUserFinding
+			}{stage: finding.Stage})
+		}
+		groups[index].findings = append(groups[index].findings, finding)
+	}
+
+	for _, group := range groups {
+		for _, finding := range group.findings {
+			_, _ = fmt.Fprintf(stdout, "[%s] %s\n", finding.Stage, finding.Message)
+		}
 		_, _ = fmt.Fprint(stdout, "approve/reject? [a/r]: ")
 
 		decision, err := readDecision(scanner)
@@ -129,14 +149,14 @@ func runReviewCommand(args []string, stdin io.Reader, stdout, stderr *os.File) i
 
 		if err := client.CallInto("review.decide", reviewDecideParams{
 			RunID:    report.RunID,
-			Stage:    f.Stage,
+			Stage:    group.stage,
 			Decision: decision,
 		}, nil); err != nil {
 			_, _ = fmt.Fprintln(stderr, "made review:", err)
 			return 1
 		}
 
-		_, _ = fmt.Fprintf(stdout, "%s: %s\n", decision, f.Stage)
+		_, _ = fmt.Fprintf(stdout, "%s: %s\n", decision, group.stage)
 		if decision == ReviewRejected {
 			anyRejected = true
 		}

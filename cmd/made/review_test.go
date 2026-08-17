@@ -11,10 +11,9 @@ import (
 	"github.com/douglasjarquin/made/internal/api"
 )
 
-// startReviewTestServer fakes only the "status" handler's PendingFindings
-// (real runs never populate that field yet, per status.go) while wiring the
-// real review.decide/review.decision handlers, so the round trip under test
-// is genuine except for the one field no orchestrator produces yet.
+// startReviewTestServer fakes only the status response while wiring the real
+// review.decide/review.decision handlers, so the decision round trip remains
+// genuine.
 func startReviewTestServer(t *testing.T, fixture StatusReport) string {
 	t.Helper()
 
@@ -167,5 +166,36 @@ func TestReview_NoPendingFindings(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "no pending findings") {
 		t.Errorf("stdout = %s, want mention of no pending findings", out)
+	}
+}
+
+func TestReview_MultipleFindingsInOneStageUseOneDecision(t *testing.T) {
+	fixture := StatusReport{
+		SchemaVersion: statusSchemaVersion,
+		RunID:         "run-grouped-review-1",
+		Repo:          "example/repo",
+		Branch:        "feature-x",
+		State:         "running",
+		Stages:        []StageResult{{Name: "review", Result: StageResultPending}},
+		PendingFindings: []AskUserFinding{
+			{Stage: "review", Message: "First review finding"},
+			{Stage: "review", Message: "Second review finding"},
+		},
+	}
+	home := startReviewTestServer(t, fixture)
+
+	out, errOut, code := runReviewCapture(t, []string{"--run", "run-grouped-review-1"}, "a\n")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stdout=%s stderr=%s", code, out, errOut)
+	}
+	if prompts := strings.Count(string(out), "approve/reject?"); prompts != 1 {
+		t.Fatalf("decision prompts = %d, want one per stage; stdout=%s", prompts, out)
+	}
+	if !strings.Contains(string(out), "First review finding") || !strings.Contains(string(out), "Second review finding") {
+		t.Fatalf("stdout missing grouped findings: %s", out)
+	}
+	decision, found := queryDecision(t, home, "run-grouped-review-1", "review")
+	if !found || decision != ReviewApproved {
+		t.Fatalf("decision = %q (found=%v), want approved", decision, found)
 	}
 }
