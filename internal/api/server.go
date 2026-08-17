@@ -14,7 +14,11 @@ import (
 	"time"
 )
 
-const maxRequestBytes = 1 << 20
+const (
+	maxRequestBytes          = 1 << 20
+	maxConcurrentConnections = 64
+	requestReadTimeout       = time.Second
+)
 
 type HandlerFunc func(ctx context.Context, params json.RawMessage) (any, error)
 
@@ -25,12 +29,14 @@ type Server struct {
 
 	mu       sync.RWMutex
 	handlers map[string]HandlerFunc
+	slots    chan struct{}
 }
 
 func NewServer(socketPath string) *Server {
 	s := &Server{
 		socketPath: socketPath,
 		handlers:   make(map[string]HandlerFunc),
+		slots:      make(chan struct{}, maxConcurrentConnections),
 	}
 	s.Handle("ping", handlePing)
 	return s
@@ -160,7 +166,12 @@ func (s *Server) Serve(ctx context.Context) error {
 				return fmt.Errorf("accept: %w", err)
 			}
 		}
-		go s.serveConn(ctx, conn)
+		select {
+		case s.slots <- struct{}{}:
+			go s.serveConn(ctx, conn)
+		default:
+			_ = conn.Close()
+		}
 	}
 }
 
@@ -176,13 +187,22 @@ func (s *Server) Close() error {
 }
 
 func (s *Server) serveConn(ctx context.Context, conn net.Conn) {
-	defer func() { _ = conn.Close() }()
+	defer func() {
+		_ = conn.Close()
+		<-s.slots
+	}()
 
 	reader := bufio.NewReader(conn)
 	enc := json.NewEncoder(conn)
 	for {
+		if err := conn.SetReadDeadline(time.Now().Add(requestReadTimeout)); err != nil {
+			return
+		}
 		value, err := readRequestValue(reader, maxRequestBytes)
 		if err != nil {
+			return
+		}
+		if err := conn.SetReadDeadline(time.Time{}); err != nil {
 			return
 		}
 		if len(value) == 0 {

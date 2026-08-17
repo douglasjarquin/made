@@ -135,6 +135,31 @@ func TestServerRejectsOversizedRequestLine(t *testing.T) {
 	}
 }
 
+func TestServerClosesStalledInputConnection(t *testing.T) {
+	path := filepath.Join(tempSocketDir(t), "daemon.sock")
+	server := api.NewServer(path)
+	if err := server.Listen(); err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	defer func() { _ = server.Close() }()
+	go func() { _ = server.Serve(ctx) }()
+
+	conn, err := net.DialTimeout("unix", path, time.Second)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+	if err := conn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatalf("set read deadline: %v", err)
+	}
+	var response [1]byte
+	if _, err := conn.Read(response[:]); err == nil || errors.Is(err, os.ErrDeadlineExceeded) {
+		t.Fatalf("stalled input connection was not closed by server: %v", err)
+	}
+}
+
 func TestServer_DuplicateListenPreservesOriginalOwner(t *testing.T) {
 	path := filepath.Join(tempSocketDir(t), "daemon.sock")
 	first := api.NewServer(path)
