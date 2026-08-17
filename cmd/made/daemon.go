@@ -239,7 +239,7 @@ func validateManagedGatePath(home, gatePath string) error {
 		return fmt.Errorf("gate path hash has invalid length")
 	}
 	for _, char := range parts[1] {
-		if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f')) {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
 			return fmt.Errorf("gate path hash is not lowercase hexadecimal")
 		}
 	}
