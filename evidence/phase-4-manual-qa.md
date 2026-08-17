@@ -117,3 +117,18 @@ socket: /Users/douglasjarquin/.config/herdr/sessions/cs-lab-made-remediation-971
 ```
 
 The named session remains provisioned until final cleanup through the helper.
+
+## Follow-up after lifecycle review correction
+
+Source commit:
+`cd37a3f2bb761d5af8e3de403f3224a25190ad35`.
+
+The real Made binary was rebuilt from that commit and rerun against a fresh
+disposable home at `/tmp/made-remediation-qa-final.6XbAft`.
+The public `run submit` response and exact status both remained
+`state=queued` with `execution_finished=false`.
+The same queued identity survived a disposable daemon stop and restart.
+`made status --json` still rejected with exit code 2, and `doctor --json`
+returned structured health output.
+The disposable daemon was stopped and its temporary home was moved to
+recoverable temporary trash after the scenario.

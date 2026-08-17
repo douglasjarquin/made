@@ -59,7 +59,7 @@ func TestRunManager_AwaitingMergeDoesNotEmitTerminalCompletion(t *testing.T) {
 	events, unsubscribe := rm.Subscribe(runID)
 	defer unsubscribe()
 	if _, err := rm.Submit(runID, "repo-awaiting-merge", "feature", func(ctx context.Context, emit func(Event)) error {
-		if err := rm.Finish(runID, RunRunning, "all stages passed, PR open, awaiting merge"); err != nil {
+		if err := rm.Finish(runID, RunAwaitingMerge, "all stages passed, PR open, awaiting merge"); err != nil {
 			return err
 		}
 		return nil
@@ -84,8 +84,8 @@ func TestRunManager_AwaitingMergeDoesNotEmitTerminalCompletion(t *testing.T) {
 	}
 
 	snap, ok := rm.Snapshot(runID)
-	if !ok || snap.Status != RunRunning {
-		t.Fatalf("awaiting-merge status = %+v (ok=%v), want running", snap, ok)
+	if !ok || snap.Status != RunAwaitingMerge {
+		t.Fatalf("awaiting-merge status = %+v (ok=%v), want awaiting_merge", snap, ok)
 	}
 }
 

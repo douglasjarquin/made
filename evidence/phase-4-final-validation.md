@@ -1,7 +1,9 @@
 # Phase 4 final local validation evidence
 
-Validation candidate before this evidence commit:
+The earlier ledger receipt was recorded at
 `afea024e1da9f59be9181c18f18b11793a782f36`.
+After the lifecycle review correction, the source validation candidate is
+`cd37a3f2bb761d5af8e3de403f3224a25190ad35`.
 The exact base remains
 `3e19ed9d598a68149da5a73949533e8095ca4403`.
 
@@ -23,7 +25,8 @@ Command:
 env SSH_AUTH_SOCK= GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null go test -race -shuffle=on -count=1 ./...
 ```
 
-Result: exit code 0.
+Result: exit code 0 at source validation candidate
+`cd37a3f2bb761d5af8e3de403f3224a25190ad35`.
 Every package completed with `ok`, including `cmd/made`, `internal/agent`,
 `internal/api`, `internal/config`, `internal/daemon`, `internal/evidence`,
 `internal/github`, `internal/orchestrator`, and every pipeline package.
@@ -60,7 +63,7 @@ Results:
 ```text
 git diff --check: exit code 0
 git status --short: clean before this evidence file was added
-HEAD: afea024e1da9f59be9181c18f18b11793a782f36
+HEAD before this documentation refresh: cd37a3f2bb761d5af8e3de403f3224a25190ad35
 base: 3e19ed9d598a68149da5a73949533e8095ca4403
 ```
 
@@ -70,3 +73,6 @@ No errors, warnings, information diagnostics, or hints remained.
 The initial isolated-suite rebase failure was reproduced, explained as missing
 child Git identity under signing isolation, fixed in Made, and re-run GREEN in
 `evidence/phase-3-lifecycle-durability.md`.
+
+The final documentation commits after the source validation candidate contain
+only evidence, plan, and audit receipts and do not change Made source or tests.
