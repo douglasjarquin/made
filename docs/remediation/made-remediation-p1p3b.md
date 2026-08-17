@@ -100,6 +100,10 @@ The clean-filter follow-up is `738cc55b2d4b4dbdaadc05eb351f612be0eafcd5` with su
 
 The portability follow-up is `0c3af42fd75d6f02412cde82b33c8341305243e3` with subject `fix: harden portable rebase validation`.
 
+The final review-boundary follow-up is `c3b002e1faa4fccb20fc4f9f63600a425b5c5e52` with subject `fix: harden evidence and API boundaries`.
+
+The final strict-boundary follow-up is `3fc98f031613e7be77abf0152cb1eb5b3d1baeaf` with subject `fix: isolate rebase and no-param API`.
+
 Those follow-ups harden Made home ownership and permissions, private evidence permissions, version-only configuration rejection, disabled-stage representation, environment-injected real Consigliere compatibility testing, final review/API boundaries, bounded configuration and socket input, torn-tail WAL recovery, replacement-safe config reads, exact-cap durable replay, stalled-input resource bounds, review-agent isolation, evidence publication, subprocess timeouts, and public-field redaction.
 
 The implementation acquires the singleton before socket preparation, uses `lstat`, removes only a stale owner-owned Unix socket, rejects regular files, symlinks, and directories, preserves duplicate owners, and authorizes shutdown through the owner-only socket.
@@ -111,6 +115,8 @@ Run snapshots remain retained in the local WAL until explicit operator archival 
 Submission admission is closed under the same mutex as the shutdown check, so a concurrent run or gate submission cannot arrive after a successful shutdown decision.
 
 The public surface is versioned and structured through `made capabilities --json`, `made run submit`, `made run status`, `made run list`, `made run cancel`, `made review decide`, and `made doctor --json`.
+
+The Unix-socket envelope and every public daemon parameter object now reject unknown fields and non-object parameter values instead of silently accepting an unversioned shape.
 
 The lifecycle states are `queued`, `running`, `awaiting_review`, `awaiting_merge`, `succeeded`, `failed`, `canceled`, and `superseded`.
 
@@ -156,6 +162,10 @@ Rebase failures are classified as conflicts only when unmerged paths exist.
 
 Evidence is run- and stage-specific, bounded, redacted for common credential assignments and URLs, symlink-safe, and published only through accessible paths.
 
+Every evidence Git command runs with inherited `GIT_*` and SSH-agent routing removed, global and system configuration disabled, hooks and fsmonitor disabled, external diff disabled, and repository-local clean/process/smudge filters overridden.
+
+Rebase Git commands use the same bounded, sanitized environment and filter overrides, so ambient `GIT_DIR`, hooks, configuration, and filters cannot redirect or execute during trusted-branch preparation.
+
 In-repository evidence is committed into the pushed branch before the push stage completes, while orphan evidence remains on its dedicated evidence branch.
 
 When a remote default ref disappears, Made deletes the cached trusted ref before resolving policy, preventing stale trusted configuration from surviving refresh.
@@ -174,7 +184,7 @@ The CI portability fix uses Go's platform-independent Unix-socket mode inspectio
 
 ## Validation evidence
 
-The final executable source SHA covered by this validation section is `0c3af42fd75d6f02412cde82b33c8341305243e3`.
+The final executable source SHA covered by this validation section is `3fc98f031613e7be77abf0152cb1eb5b3d1baeaf`.
 
 The config descriptor-boundary commit adds replacement-safe reads from one opened descriptor and a regression proving a replaced path cannot bypass the byte cap.
 
@@ -218,6 +228,10 @@ The full validation command was rerun at the final executable SHA `738cc55b2d4b4
 
 The full validation command was rerun at the final executable SHA `0c3af42fd75d6f02412cde82b33c8341305243e3`, and `/tmp/made-remediation-p1p3b-0c3af42-validation-clean.log` ends with the pinned lint result `0 issues.` and exit `0`.
 
+The full validation command was rerun at the final executable SHA `c3b002e1faa4fccb20fc4f9f63600a425b5c5e52`, and `/tmp/made-remediation-p1p3b-c3b002e-validation.log` ends with `validation-c3b002e=PASS` and the pinned lint result `0 issues.`.
+
+The full validation command was rerun at the final executable SHA `3fc98f031613e7be77abf0152cb1eb5b3d1baeaf`, and `/tmp/made-remediation-p1p3b-3fc98f0-validation.log` ends with `validation-3fc98f0=PASS` and the pinned lint result `0 issues.`.
+
 The fresh real-process manual QA transcript for the final executable SHA is `/tmp/made-remediation-p1p3b-manual-e9aa0dd.log`, and its final marker was `manual-qa-e9aa0dd=PASS` at that full SHA.
 
 The exact current lifecycle and restart contract transcript is `/tmp/made-remediation-p1p3b-manual-contract-e9aa0dd.log`, and its final marker was `manual-contract-e9aa0dd=PASS`.
@@ -246,6 +260,16 @@ The fresh exact-tip real-process transcript is `/tmp/made-remediation-p1p3b-manu
 
 That exact-tip scenario observed process-level cancellation, WAL restart persistence, gate-spool replay, duplicate singleton ownership, obsolete RPC rejection, and the hermetic real Made binary against the real Consigliere script with strict fake GitHub and unavailable Herdr boundaries.
 
+The final exact-tip focused evidence and review transcript is `/tmp/made-remediation-p1p3b-manual-review-c3b002e.log`, and its final marker is `manual-review-c3b002e=PASS`.
+
+The final executable exact-tip transcript is `/tmp/made-remediation-p1p3b-manual-3fc98f0.log`, and its final marker is `manual-qa-3fc98f0=PASS`.
+
+The final executable exact-tip focused API, evidence, agent, rebase, and review transcript is `/tmp/made-remediation-p1p3b-manual-review-3fc98f0.log`, and its final marker is `manual-review-3fc98f0=PASS`.
+
+The exact-tip API and evidence RED log is `/tmp/made-remediation-p1p3b-strict-boundary-red.log`, and the green rerun is covered by `/tmp/made-remediation-p1p3b-c3b002e-validation.log` plus the evidence-focused `/tmp/made-remediation-p1p3b-manual-review-c3b002e.log`.
+
+The no-parameter API and ambient-rebase RED log is `/tmp/made-remediation-p1p3b-strict-no-params-red.log` plus `/tmp/made-remediation-p1p3b-rebase-boundary-red.log`, and the focused green rerun is the exact-tip rebase/API test pass immediately before commit `3fc98f031613e7be77abf0152cb1eb5b3d1baeaf`.
+
 That exact-SHA scenario used a fresh final binary and task-local Made homes to observe daemon cancellation through a real process and doctor through the real Consigliere script.
 
 The companion exact-SHA contract scenario observed restart durability, gate-spool replay, duplicate singleton ownership, obsolete RPC rejection, oversized and stalled socket rejection, raw protocol-version rejection, preserved socket ownership, replacement-safe config reads, torn-tail recovery, and exact-cap durable replay.
@@ -270,7 +294,7 @@ The first full validation exposed a WAL replay ordering race where a stale `succ
 
 Serializing snapshot capture with WAL append removed that race, and `go test -shuffle=on -count=10 ./internal/daemon -run '^TestPersistentRunStateIncludesSubmissionAndDecisionData$'` passed afterward.
 
-The final changed-file authority is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..0c3af42fd75d6f02412cde82b33c8341305243e3`, which reports the Made-only paths from the custody base.
+The final changed-file authority is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..3fc98f031613e7be77abf0152cb1eb5b3d1baeaf`, which reports the Made-only paths from the custody base.
 
 At directory level, the base-to-final diff is limited to `.github/workflows/ci.yml`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `cmd/made`, `docs/remediation`, `internal/agent`, `internal/api`, `internal/config`, `internal/daemon`, `internal/evidence`, `internal/exec`, `internal/github`, `internal/orchestrator`, `internal/pipeline`, `internal/skill`, and `skills/made/SKILL.md`.
 
@@ -284,6 +308,6 @@ No Consigliere repository file, GitHub issue, default branch, merge, or shared d
 
 ## Delivery dependency
 
-The remaining dependency after this report is the exact-SHA review pass and direct PR on `cs/made-remediation-p1p3b` against `main`.
+The remaining dependency after this report is the final exact-SHA review pass and direct PR on `cs/made-remediation-p1p3b` against `main`.
 
 The branch must be committed, pushed only to `origin/cs/made-remediation-p1p3b`, and opened as a direct PR before the Made lane reports done.
