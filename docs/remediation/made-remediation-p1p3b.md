@@ -36,6 +36,8 @@ Each failure exercised a production boundary with a strict assertion on the requ
 
 The later config replacement RED regression exited at compile time because the opened-descriptor reader did not yet exist; `/tmp/made-remediation-p1p3b-config-boundary-red.log` records that missing production behavior before the fix.
 
+The exact-cap durable RED regression failed on replay because the newline delimiter was counted against the payload cap; `/tmp/made-remediation-p1p3b-durable-cap-red.log` records that missing recovery behavior before the fix.
+
 The compatibility fake GitHub boundary rejected PR URLs where workflow run IDs were required and modeled check status, conclusion, workflow run ID, and details URL.
 
 The fake Codex boundary accepted only the installed `codex exec --cd --json --output-schema` invocation and strict structured output.
@@ -64,7 +66,9 @@ The final input-boundary commit is `8d196c4af539c6cae53fb308c029fb7c700b992f` wi
 
 The final config descriptor-boundary commit is `6cab7c9603dc8f0d1fce1c7b114282867ff64c95` with subject `fix: close config read race`.
 
-Those follow-ups harden Made home ownership and permissions, private evidence permissions, version-only configuration rejection, disabled-stage representation, environment-injected real Consigliere compatibility testing, final review/API boundaries, bounded configuration and socket input, torn-tail WAL recovery, and replacement-safe config reads.
+The final durable replay-boundary commit is `5cf18b3d491f4f244f9c586907ab70509b978317` with subject `fix: replay exact-cap durable records`.
+
+Those follow-ups harden Made home ownership and permissions, private evidence permissions, version-only configuration rejection, disabled-stage representation, environment-injected real Consigliere compatibility testing, final review/API boundaries, bounded configuration and socket input, torn-tail WAL recovery, replacement-safe config reads, and exact-cap durable replay.
 
 The implementation acquires the singleton before socket preparation, uses `lstat`, removes only a stale owner-owned Unix socket, rejects regular files, symlinks, and directories, preserves duplicate owners, and authorizes shutdown through the owner-only socket.
 
@@ -126,9 +130,11 @@ The Made CI workflow validates the pinned Go version with race, vet, and pinned 
 
 ## Validation evidence
 
-The final executable source SHA covered by this validation section is `6cab7c9603dc8f0d1fce1c7b114282867ff64c95`.
+The final executable source SHA covered by this validation section is `5cf18b3d491f4f244f9c586907ab70509b978317`.
 
 The config descriptor-boundary commit adds replacement-safe reads from one opened descriptor and a regression proving a replaced path cannot bypass the byte cap.
+
+The durable replay-boundary commit permits the newline delimiter for exact-cap payloads and adds WAL and spool reopen regressions for the exact append limit.
 
 The validation shell exported `GIT_CONFIG_GLOBAL=/dev/null`, `GIT_CONFIG_SYSTEM=/dev/null`, `GOTOOLCHAIN=local`, and deterministic Git author and committer identities for the fixture rebase commits.
 
@@ -136,15 +142,15 @@ It ran `gofmt -l internal cmd`, `go build ./...`, `go test -count=1 -timeout=10m
 
 All final validation commands exited `0`, and golangci-lint reported `0 issues`.
 
-The full validation transcript is `/tmp/made-remediation-p1p3b-6cab7c9-validation.log`.
+The full validation transcript is `/tmp/made-remediation-p1p3b-5cf18b3-validation.log`.
 
-The fresh real-process manual QA transcript for the final executable SHA is `/tmp/made-remediation-p1p3b-manual-6cab7c9.log`, and its final marker was `manual-qa-6cab7c9=PASS` at that full SHA.
+The fresh real-process manual QA transcript for the final executable SHA is `/tmp/made-remediation-p1p3b-manual-5cf18b3.log`, and its final marker was `manual-qa-5cf18b3=PASS` at that full SHA.
 
-That exact-SHA scenario used a fresh final binary and task-local Made homes to observe daemon cancellation through a real process, doctor through the real Consigliere script, oversized socket rejection, duplicate singleton ownership, raw protocol-version rejection, preserved socket ownership, and replacement-safe config reads.
+That exact-SHA scenario used a fresh final binary and task-local Made homes to observe daemon cancellation through a real process, doctor through the real Consigliere script, oversized socket rejection, duplicate singleton ownership, raw protocol-version rejection, preserved socket ownership, replacement-safe config reads, torn-tail recovery, and exact-cap durable replay.
 
 The preceding full-pipeline manual scenario at `a724f6c857e903ce52d62d803c540b27a221d6f3` observed real gate initialization and hook execution, native `run.submit` pipeline execution, durable offline gate spooling and replay, exact submission and SHA preservation, exact status and active-list queries, versioned review decision output, WAL restart, duplicate singleton start, and predecessor command rejection.
 
-The `8d196c4` changes are limited to input bounds and durable tail recovery, and the `6cab7c9` change is limited to replacement-safe config reads, while the exact-SHA focused scenario covers all changed runtime surfaces and preserves the full-pipeline evidence from the unchanged executable ancestor.
+The `8d196c4` changes are limited to input bounds and durable tail recovery, the `6cab7c9` change is limited to replacement-safe config reads, and the `5cf18b3` change is limited to exact-cap durable replay, while the exact-SHA focused scenario covers all changed runtime surfaces and preserves the full-pipeline evidence from the unchanged executable ancestor.
 
 The compatibility subscenario used the real `bin/cs-made-lib.sh` script, the real Made binary, a strict fake `gh auth status` boundary, a task-local unavailable Herdr socket, and accepted the expected nonzero health exit only after asserting valid versioned JSON and authenticated GitHub state.
 
@@ -156,11 +162,11 @@ The first full validation exposed a WAL replay ordering race where a stale `succ
 
 Serializing snapshot capture with WAL append removed that race, and `go test -shuffle=on -count=10 ./internal/daemon -run '^TestPersistentRunStateIncludesSubmissionAndDecisionData$'` passed afterward.
 
-The final changed-file authority is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..6cab7c9603dc8f0d1fce1c7b114282867ff64c95`, which reports the Made-only paths from the custody base.
+The final changed-file authority is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..5cf18b3d491f4f244f9c586907ab70509b978317`, which reports the Made-only paths from the custody base.
 
 At directory level, the base-to-final diff is limited to `.github/workflows/ci.yml`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `cmd/made`, `docs/remediation`, `internal/agent`, `internal/api`, `internal/config`, `internal/daemon`, `internal/evidence`, `internal/exec`, `internal/github`, `internal/orchestrator`, `internal/pipeline`, `internal/skill`, and `skills/made/SKILL.md`.
 
-The final config-boundary commit-only diff is `git diff --name-status 8d196c4af539c6cae53fb308c029fb7c700b992f..6cab7c9603dc8f0d1fce1c7b114282867ff64c95` and contains only config implementation and contract-test files.
+The final durable-boundary commit-only diff is `git diff --name-status 6cab7c9603dc8f0d1fce1c7b114282867ff64c95..5cf18b3d491f4f244f9c586907ab70509b978317` and contains only daemon implementation and contract-test files.
 
 The separate Made project plan `plans/made-rewrite.md` retains its broader F3 checkbox because that criterion requires running the full Consigliere `--mode made` soldier flow and changing shared Herdr lifecycle state.
 
