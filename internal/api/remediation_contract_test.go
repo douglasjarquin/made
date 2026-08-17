@@ -152,6 +152,34 @@ func TestServerRejectsUnknownEnvelopeFields(t *testing.T) {
 	}
 }
 
+func TestServerRejectsUnknownPingParams(t *testing.T) {
+	path := filepath.Join(tempSocketDir(t), "daemon.sock")
+	server := api.NewServer(path)
+	if err := server.Listen(); err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	defer func() { _ = server.Close() }()
+	go func() { _ = server.Serve(ctx) }()
+
+	conn, err := net.DialTimeout("unix", path, time.Second)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+	if _, err := conn.Write([]byte(`{"made.protocol":1,"id":"ping-strict","method":"ping","params":{"unexpected":true}}`)); err != nil {
+		t.Fatalf("write request: %v", err)
+	}
+	var response api.Response
+	if err := json.NewDecoder(conn).Decode(&response); err != nil {
+		t.Fatalf("decode strict rejection response: %v", err)
+	}
+	if response.Error == nil {
+		t.Fatalf("ping accepted unknown params: %+v", response)
+	}
+}
+
 func TestServerRejectsOversizedRequestLine(t *testing.T) {
 	path := filepath.Join(tempSocketDir(t), "daemon.sock")
 	server := api.NewServer(path)

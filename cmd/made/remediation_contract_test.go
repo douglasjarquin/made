@@ -281,6 +281,17 @@ func TestRunListHandlerRejectsUnknownParams(t *testing.T) {
 	}
 }
 
+func TestDaemonShutdownHandlerRejectsUnknownParams(t *testing.T) {
+	spool, err := daemon.OpenGateSpool(filepath.Join(t.TempDir(), "gate.spool"))
+	if err != nil {
+		t.Fatalf("OpenGateSpool: %v", err)
+	}
+	_, err = daemonShutdownHandler(daemon.NewRunManager(), spool, func() {})(context.Background(), []byte(`{"unexpected":true}`))
+	if err == nil || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("daemon.shutdown accepted unknown parameter field: %v", err)
+	}
+}
+
 func captureRun(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
 	outFile, err := os.CreateTemp(t.TempDir(), "stdout-")

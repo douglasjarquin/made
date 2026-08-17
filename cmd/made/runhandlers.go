@@ -141,7 +141,11 @@ func runCancelHandler(rm *daemon.RunManager) api.HandlerFunc {
 }
 
 func daemonShutdownHandler(rm *daemon.RunManager, spool *daemon.GateSpool, cancel context.CancelFunc, admission ...*sync.Mutex) api.HandlerFunc {
-	return func(_ context.Context, _ json.RawMessage) (any, error) {
+	return func(_ context.Context, params json.RawMessage) (any, error) {
+		var noParams struct{}
+		if err := decodeStrictParams(params, &noParams); err != nil {
+			return nil, fmt.Errorf("daemon.shutdown: invalid params: %w", err)
+		}
 		unlock := lockAdmission(admission)
 		defer unlock()
 		if spool.HasPending() {

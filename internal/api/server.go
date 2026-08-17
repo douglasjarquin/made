@@ -306,6 +306,33 @@ func readRequestValue(reader *bufio.Reader, maxBytes int) ([]byte, error) {
 	}
 }
 
+func validateEmptyParams(params json.RawMessage) error {
+	trimmed := bytes.TrimSpace(params)
+	if len(trimmed) == 0 {
+		return nil
+	}
+	if trimmed[0] != '{' {
+		return fmt.Errorf("params must be a JSON object")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(trimmed))
+	decoder.DisallowUnknownFields()
+	var fields map[string]json.RawMessage
+	if err := decoder.Decode(&fields); err != nil {
+		return err
+	}
+	var extra json.RawMessage
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return fmt.Errorf("params contain multiple JSON values")
+		}
+		return err
+	}
+	if len(fields) != 0 {
+		return fmt.Errorf("params contain unknown fields")
+	}
+	return nil
+}
+
 func isJSONSpace(b byte) bool {
 	return b == ' ' || b == '\t' || b == '\r' || b == '\n'
 }
@@ -347,6 +374,9 @@ type pingResult struct {
 	Message string `json:"message"`
 }
 
-func handlePing(context.Context, json.RawMessage) (any, error) {
+func handlePing(_ context.Context, params json.RawMessage) (any, error) {
+	if err := validateEmptyParams(params); err != nil {
+		return nil, fmt.Errorf("ping: invalid params: %w", err)
+	}
 	return pingResult{Message: "pong"}, nil
 }

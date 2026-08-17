@@ -45,6 +45,28 @@ func TestRun_CleanRebaseProceeds(t *testing.T) {
 	}
 }
 
+func TestRun_CleanRebaseIgnoresAmbientGitRouting(t *testing.T) {
+	f := setupFixture(t, "", "", "")
+	wt := f.addWorktree(t)
+	defer func() {
+		if err := wt.Remove(); err != nil {
+			t.Errorf("Remove: %v", err)
+		}
+	}()
+
+	ambientGitDir := t.TempDir()
+	run(t, ambientGitDir, "init", "--bare", "-q")
+	t.Setenv("GIT_DIR", ambientGitDir)
+
+	result, err := rebase.Run(wt.Path, f.defaultBranch)
+	if err != nil {
+		t.Fatalf("Run with ambient GIT_DIR: %v", err)
+	}
+	if !result.OK {
+		t.Fatalf("expected OK=true despite ambient GIT_DIR, got %+v", result)
+	}
+}
+
 func TestRun_ConflictingRebaseHalts(t *testing.T) {
 	f := setupFixture(t, "shared.txt", "main version\n", "feature version\n")
 	wt := f.addWorktree(t)
