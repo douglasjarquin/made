@@ -82,6 +82,8 @@ The final stalled-input-boundary commit is `8b4ab6c98190f3c304ff0518c86e9bdf9097
 
 The security-boundary follow-up commit is `42ddaef20e59bc42ede3863aecd1d7b2ef59fc94` with subject `fix: close review and evidence security boundaries`.
 
+The exact-identity follow-up commit is `e9aa0ddd72e38d2625cd37e95e7968d8c1d7dc61` with subject `fix: preserve exact run identities during redaction`.
+
 Those follow-ups harden Made home ownership and permissions, private evidence permissions, version-only configuration rejection, disabled-stage representation, environment-injected real Consigliere compatibility testing, final review/API boundaries, bounded configuration and socket input, torn-tail WAL recovery, replacement-safe config reads, exact-cap durable replay, stalled-input resource bounds, review-agent isolation, evidence publication, subprocess timeouts, and public-field redaction.
 
 The implementation acquires the singleton before socket preparation, uses `lstat`, removes only a stale owner-owned Unix socket, rejects regular files, symlinks, and directories, preserves duplicate owners, and authorizes shutdown through the owner-only socket.
@@ -144,7 +146,7 @@ The Made CI workflow validates the pinned Go version with race, vet, and pinned 
 
 ## Validation evidence
 
-The final executable source SHA covered by this validation section is `42ddaef20e59bc42ede3863aecd1d7b2ef59fc94`.
+The final executable source SHA covered by this validation section is `e9aa0ddd72e38d2625cd37e95e7968d8c1d7dc61`.
 
 The config descriptor-boundary commit adds replacement-safe reads from one opened descriptor and a regression proving a replaced path cannot bypass the byte cap.
 
@@ -154,6 +156,8 @@ The stalled-input-boundary commit caps concurrent socket handlers and closes con
 
 The security-boundary commit rejects direct agent worktree edits, filters secret-bearing review environment variables, rechecks and redacts every in-repo evidence file before staging, bounds evidence Git subprocesses with stage context and output caps, and redacts status, API, and durable event fields.
 
+The exact-identity follow-up preserves valid run IDs, repository identity, refs, and SHA fields while still redacting untrusted messages, paths, decisions, event labels, PR URLs, and errors, and it rejects symlinked configured evidence roots before publication.
+
 The validation shell exported `GIT_CONFIG_COUNT=1`, `GIT_CONFIG_KEY_0=commit.gpgsign`, `GIT_CONFIG_VALUE_0=false`, `SSH_AUTH_SOCK=`, and `GOTOOLCHAIN=local` for deterministic fixture commits and toolchain selection.
 
 It ran `gofmt -l internal cmd`, `go build ./...`, `go test -count=1 -timeout=10m ./...`, `go test -race -shuffle=on -count=1 -timeout=10m ./...`, `go vet ./...`, and `golangci-lint run --timeout=5m --max-issues-per-linter=0 --max-same-issues=0 ./...` at the exact final source SHA.
@@ -162,11 +166,11 @@ All final validation commands exited `0`, and golangci-lint reported `0 issues`.
 
 The full validation transcript for the unchanged executable ancestor is `/tmp/made-remediation-p1p3b-8b4ab6c-validation.log`.
 
-The same full validation command was rerun after the security-boundary commit at executable SHA `42ddaef20e59bc42ede3863aecd1d7b2ef59fc94` and exited `0`, with no source changes between that run and this documentation update.
+The same full validation command was rerun after the exact-identity follow-up at executable SHA `e9aa0ddd72e38d2625cd37e95e7968d8c1d7dc61`, and `/tmp/made-remediation-p1p3b-e9aa0dd-validation.log` ends with `validation-e9aa0dd=PASS`.
 
-The fresh real-process manual QA transcript for the final executable SHA is `/tmp/made-remediation-p1p3b-manual-42ddaef.log`, and its final marker was `manual-qa-42ddaef=PASS` at that full SHA.
+The fresh real-process manual QA transcript for the final executable SHA is `/tmp/made-remediation-p1p3b-manual-e9aa0dd.log`, and its final marker was `manual-qa-e9aa0dd=PASS` at that full SHA.
 
-The exact current lifecycle and restart contract transcript is `/tmp/made-remediation-p1p3b-manual-contract-42ddaef.log`, and its final marker was `manual-contract-42ddaef=PASS`.
+The exact current lifecycle and restart contract transcript is `/tmp/made-remediation-p1p3b-manual-contract-e9aa0dd.log`, and its final marker was `manual-contract-e9aa0dd=PASS`.
 
 That exact-SHA scenario used a fresh final binary and task-local Made homes to observe daemon cancellation through a real process and doctor through the real Consigliere script.
 
@@ -192,11 +196,11 @@ The first full validation exposed a WAL replay ordering race where a stale `succ
 
 Serializing snapshot capture with WAL append removed that race, and `go test -shuffle=on -count=10 ./internal/daemon -run '^TestPersistentRunStateIncludesSubmissionAndDecisionData$'` passed afterward.
 
-The final changed-file authority is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..42ddaef20e59bc42ede3863aecd1d7b2ef59fc94`, which reports the Made-only paths from the custody base.
+The final changed-file authority is `git diff --name-status 3e19ed9d598a68149da5a73949533e8095ca4403..e9aa0ddd72e38d2625cd37e95e7968d8c1d7dc61`, which reports the Made-only paths from the custody base.
 
 At directory level, the base-to-final diff is limited to `.github/workflows/ci.yml`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `cmd/made`, `docs/remediation`, `internal/agent`, `internal/api`, `internal/config`, `internal/daemon`, `internal/evidence`, `internal/exec`, `internal/github`, `internal/orchestrator`, `internal/pipeline`, `internal/skill`, and `skills/made/SKILL.md`.
 
-The final API-boundary commit-only diff is `git diff --name-status 5cf18b3d491f4f244f9c586907ab70509b978317..42ddaef20e59bc42ede3863aecd1d7b2ef59fc94` and contains only API implementation and contract-test files.
+The final API-boundary commit-only diff is `git diff --name-status 5cf18b3d491f4f244f9c586907ab70509b978317..e9aa0ddd72e38d2625cd37e95e7968d8c1d7dc61` and contains only API implementation and contract-test files.
 
 The separate Made project plan `plans/made-rewrite.md` retains its broader F3 checkbox because that criterion requires running the full Consigliere `--mode made` soldier flow and changing shared Herdr lifecycle state.
 
