@@ -414,18 +414,15 @@ func (rm *RunManager) UpdateDecision(id, stage, decision string) error {
 	if !ok {
 		return fmt.Errorf("daemon: no run %q", id)
 	}
-	previous := r.snapshot()
-	r.update(func(snapshot *RunSnapshot) {
-		if snapshot.Decisions == nil {
-			snapshot.Decisions = make(map[string]string)
-		}
-		snapshot.Decisions[stage] = decision
-	})
-	rm.mu.Lock()
-	err := rm.persistSnapshotLocked(r.snapshot())
-	rm.mu.Unlock()
-	if err != nil {
-		r.replace(previous)
+	candidate := r.snapshot()
+	if candidate.Decisions == nil {
+		candidate.Decisions = make(map[string]string)
 	}
+	candidate.Decisions[stage] = decision
+	err := rm.persistSnapshot(candidate)
+	if err != nil {
+		return err
+	}
+	r.replace(candidate)
 	return err
 }

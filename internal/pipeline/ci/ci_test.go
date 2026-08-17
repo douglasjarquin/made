@@ -58,6 +58,30 @@ func TestRun_TransientFailureRecoversWithinBudget(t *testing.T) {
 	}
 }
 
+func TestRun_DoesNotRerunPendingChecks(t *testing.T) {
+	stateDir := t.TempDir()
+	logPath := filepath.Join(t.TempDir(), "invocations.log")
+	c := newClient(t, []string{
+		"FAKE_GH_CHECKS_BUCKETS=pending,pass",
+		"FAKE_GH_STATE_DIR=" + stateDir,
+	}, logPath)
+
+	result, err := ci.Run(context.Background(), c, "https://github.com/example/repo/pull/11", 2, testPollInterval)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !result.OK || result.RerunsUsed != 0 {
+		t.Fatalf("pending check was rerun: %+v", result)
+	}
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read invocation log: %v", err)
+	}
+	if strings.Contains(string(data), "run rerun") {
+		t.Fatalf("pending check triggered a rerun: %s", data)
+	}
+}
+
 func TestRun_BudgetExhaustionSurfacesFinalFailure(t *testing.T) {
 	c := newClient(t, []string{
 		"FAKE_GH_CHECKS_BUCKETS=fail",

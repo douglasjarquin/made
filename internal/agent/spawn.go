@@ -55,6 +55,7 @@ func Spawn(ctx context.Context, kind Kind, params SpawnParams) (Findings, error)
 			"--json",
 			"--output-schema", schemaPath,
 			"--output-last-message", lastMessagePath,
+			"--sandbox", "read-only",
 			"--ephemeral",
 			"-C", params.WorktreePath,
 			task,

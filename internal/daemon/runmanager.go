@@ -247,22 +247,21 @@ func (rm *RunManager) execute(r *run, work WorkFunc) {
 	}
 	id := initial.ID
 	started := time.Now()
-	startedRun := false
-	r.update(func(s *RunSnapshot) {
-		if s.Status != RunQueued {
-			return
-		}
-		s.Status = RunRunning
-		s.StartedAt = started
-		startedRun = true
-	})
-	if !startedRun {
+	startedSnapshot := r.snapshot()
+	if startedSnapshot.Status != RunQueued {
 		return
 	}
-	if err := rm.persistRun(r); err != nil {
+	startedSnapshot.Status = RunRunning
+	startedSnapshot.StartedAt = started
+	if err := rm.persistSnapshot(startedSnapshot); err != nil {
 		rm.failAfterPersistenceError(r, err)
 		return
 	}
+	r.update(func(snapshot *RunSnapshot) {
+		if snapshot.Status == RunQueued && !snapshot.finalized {
+			*snapshot = cloneSnapshot(startedSnapshot)
+		}
+	})
 	rm.mailbox.Publish(Event{RunID: id, Kind: EventRunStarted, Time: started})
 	rm.signalActivity()
 
@@ -284,29 +283,28 @@ func (rm *RunManager) execute(r *run, work WorkFunc) {
 	rm.signalActivity()
 
 	ended := time.Now()
-	r.update(func(s *RunSnapshot) {
-		s.EndedAt = ended
-		s.ExecutionFinished = true
-		if s.finalized {
-			return
-		}
-		s.Err = err
-		s.Error = ""
+	finishedSnapshot := r.snapshot()
+	finishedSnapshot.EndedAt = ended
+	finishedSnapshot.ExecutionFinished = true
+	if !finishedSnapshot.finalized {
+		finishedSnapshot.Err = err
+		finishedSnapshot.Error = ""
 		if err != nil {
-			s.Error = err.Error()
+			finishedSnapshot.Error = err.Error()
 			if errors.Is(err, context.Canceled) {
-				s.Status = RunCanceled
+				finishedSnapshot.Status = RunCanceled
 			} else {
-				s.Status = RunFailed
+				finishedSnapshot.Status = RunFailed
 			}
 		} else {
-			s.Status = RunSucceeded
+			finishedSnapshot.Status = RunSucceeded
 		}
-	})
-	if err := rm.persistRun(r); err != nil {
+	}
+	if err := rm.persistSnapshot(finishedSnapshot); err != nil {
 		rm.failAfterPersistenceError(r, err)
 		return
 	}
+	r.replace(finishedSnapshot)
 
 	snapshot := r.snapshot()
 	var finalKind EventKind
@@ -383,17 +381,15 @@ func (rm *RunManager) Finish(id string, status RunStatus, message string) error 
 	if !ok {
 		return fmt.Errorf("daemon: no run %q", id)
 	}
-	previous := r.snapshot()
-	r.update(func(s *RunSnapshot) {
-		s.Status = status
-		s.Message = message
-		s.ExecutionFinished = status == RunAwaitingMerge || isTerminalRunStatus(status)
-		s.finalized = true
-	})
-	if err := rm.persistRun(r); err != nil {
-		r.replace(previous)
+	candidate := r.snapshot()
+	candidate.Status = status
+	candidate.Message = message
+	candidate.ExecutionFinished = status == RunAwaitingMerge || isTerminalRunStatus(status)
+	candidate.finalized = true
+	if err := rm.persistSnapshot(candidate); err != nil {
 		return err
 	}
+	r.replace(candidate)
 	return nil
 }
 
@@ -513,9 +509,13 @@ func (rm *RunManager) cancelQueued(target *run) (bool, error) {
 }
 
 func (rm *RunManager) persistRun(r *run) error {
+	return rm.persistSnapshot(r.snapshot())
+}
+
+func (rm *RunManager) persistSnapshot(snapshot RunSnapshot) error {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
-	return rm.persistSnapshotLocked(r.snapshot())
+	return rm.persistSnapshotLocked(snapshot)
 }
 
 func (rm *RunManager) HasActiveRuns() bool {

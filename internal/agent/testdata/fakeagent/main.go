@@ -56,16 +56,16 @@ func main() {
 const agentKindCodex = "codex"
 
 func validateInvocation(args []string) error {
-	if len(args) != 10 {
-		return fmt.Errorf("want 10 arguments, got %d", len(args))
+	if len(args) != 12 {
+		return fmt.Errorf("want 12 arguments, got %d", len(args))
 	}
-	if args[0] != "exec" || args[1] != "--json" || args[2] != "--output-schema" || args[4] != "--output-last-message" || args[6] != "--ephemeral" || args[7] != "-C" {
+	if args[0] != "exec" || args[1] != "--json" || args[2] != "--output-schema" || args[4] != "--output-last-message" || args[6] != "--sandbox" || args[7] != "read-only" || args[8] != "--ephemeral" || args[9] != "-C" {
 		return fmt.Errorf("expected codex exec structured flags, got %v", args)
 	}
 	if filepath.IsAbs(args[3]) == false || filepath.IsAbs(args[5]) == false {
 		return fmt.Errorf("schema and output paths must be absolute")
 	}
-	if args[8] == "" || args[9] == "" {
+	if args[10] == "" || args[11] == "" {
 		return fmt.Errorf("worktree and task are required")
 	}
 	return nil

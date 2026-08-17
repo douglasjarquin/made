@@ -62,6 +62,14 @@ func Run(ctx context.Context, ghClient *github.Client, prURL string, rerunBudget
 				RerunsUsed: reruns,
 			}, nil
 		}
+		if hasPendingChecks(checks.Checks) {
+			select {
+			case <-ctx.Done():
+				return Result{OK: false, Message: ctx.Err().Error(), RerunsUsed: reruns}, nil
+			case <-time.After(pollInterval):
+				continue
+			}
+		}
 
 		if reruns >= rerunBudget {
 			runID := firstWorkflowRunID(checks.Checks)
@@ -112,4 +120,15 @@ func firstWorkflowRunID(checks []github.CheckResult) string {
 		}
 	}
 	return ""
+}
+
+func hasPendingChecks(checks []github.CheckResult) bool {
+	for _, check := range checks {
+		state := strings.ToUpper(strings.TrimSpace(check.State))
+		bucket := strings.ToLower(strings.TrimSpace(check.Bucket))
+		if bucket == "pending" || state == "PENDING" || state == "QUEUED" || state == "IN_PROGRESS" || state == "WAITING" || state == "EXPECTED" {
+			return true
+		}
+	}
+	return false
 }

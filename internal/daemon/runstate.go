@@ -23,15 +23,13 @@ func (rm *RunManager) UpdateStages(id string, stages []StageResult) error {
 	if !ok {
 		return fmt.Errorf("daemon: no run %q", id)
 	}
-	previous := r.snapshot()
-	r.update(func(s *RunSnapshot) {
-		s.Stages = cloneStageResults(stages)
-		s.CurrentStage = currentStage(s.Stages)
-	})
-	if err := rm.persistRun(r); err != nil {
-		r.replace(previous)
+	candidate := r.snapshot()
+	candidate.Stages = cloneStageResults(stages)
+	candidate.CurrentStage = currentStage(candidate.Stages)
+	if err := rm.persistSnapshot(candidate); err != nil {
 		return err
 	}
+	r.replace(candidate)
 	return nil
 }
 
@@ -40,14 +38,12 @@ func (rm *RunManager) UpdatePendingFindings(id string, findings []AskUserFinding
 	if !ok {
 		return fmt.Errorf("daemon: no run %q", id)
 	}
-	previous := r.snapshot()
-	r.update(func(s *RunSnapshot) {
-		s.PendingFindings = append([]AskUserFinding(nil), findings...)
-	})
-	if err := rm.persistRun(r); err != nil {
-		r.replace(previous)
+	candidate := r.snapshot()
+	candidate.PendingFindings = append([]AskUserFinding(nil), findings...)
+	if err := rm.persistSnapshot(candidate); err != nil {
 		return err
 	}
+	r.replace(candidate)
 	return nil
 }
 
@@ -56,14 +52,12 @@ func (rm *RunManager) SetCurrentStage(id, stage string) error {
 	if !ok {
 		return fmt.Errorf("daemon: no run %q", id)
 	}
-	previous := r.snapshot()
-	r.update(func(s *RunSnapshot) {
-		s.CurrentStage = stage
-	})
-	if err := rm.persistRun(r); err != nil {
-		r.replace(previous)
+	candidate := r.snapshot()
+	candidate.CurrentStage = stage
+	if err := rm.persistSnapshot(candidate); err != nil {
 		return err
 	}
+	r.replace(candidate)
 	return nil
 }
 
@@ -72,16 +66,14 @@ func (rm *RunManager) AddEvidenceRef(id, ref string) error {
 	if !ok {
 		return fmt.Errorf("daemon: no run %q", id)
 	}
-	previous := r.snapshot()
-	r.update(func(s *RunSnapshot) {
-		if !slices.Contains(s.EvidenceRefs, ref) {
-			s.EvidenceRefs = append(s.EvidenceRefs, ref)
-		}
-	})
-	if err := rm.persistRun(r); err != nil {
-		r.replace(previous)
+	candidate := r.snapshot()
+	if !slices.Contains(candidate.EvidenceRefs, ref) {
+		candidate.EvidenceRefs = append(candidate.EvidenceRefs, ref)
+	}
+	if err := rm.persistSnapshot(candidate); err != nil {
 		return err
 	}
+	r.replace(candidate)
 	return nil
 }
 
@@ -90,14 +82,12 @@ func (rm *RunManager) UpdateSubmissionOutput(id, outputSHA string) error {
 	if !ok {
 		return fmt.Errorf("daemon: no run %q", id)
 	}
-	previous := r.snapshot()
-	r.update(func(s *RunSnapshot) {
-		s.OutputSHA = outputSHA
-	})
-	if err := rm.persistRun(r); err != nil {
-		r.replace(previous)
+	candidate := r.snapshot()
+	candidate.OutputSHA = outputSHA
+	if err := rm.persistSnapshot(candidate); err != nil {
 		return err
 	}
+	r.replace(candidate)
 	return nil
 }
 
