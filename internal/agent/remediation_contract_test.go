@@ -11,7 +11,7 @@ import (
 )
 
 func TestSpawn_CodexUsesSupportedExecStructuredContract(t *testing.T) {
-	worktree := t.TempDir()
+	worktree := agentWorktree(t)
 	t.Setenv("MADE_REVIEW_SECRET", "must-not-reach-agent")
 	logPath := filepath.Join(t.TempDir(), "invocation.log")
 	script := filepath.Join(t.TempDir(), "strict-codex")
@@ -21,7 +21,9 @@ func TestSpawn_CodexUsesSupportedExecStructuredContract(t *testing.T) {
 		"printf '%s\\n' \"$@\" > \"$STRICT_CODEX_LOG\"",
 		"[ \"$1\" = \"exec\" ]",
 		"[ \"$2\" = \"--cd\" ]",
-		"[ \"$3\" = \"$STRICT_CODEX_WORKTREE\" ]",
+		"[ \"$3\" != \"$STRICT_CODEX_WORKTREE\" ]",
+		"[ -d \"$3\" ]",
+		"if (umask 077; : > \"$3/.agent-write-probe\") 2>/dev/null; then exit 1; fi",
 		"shift 3",
 		"has_json=0",
 		"has_schema=0",
@@ -60,7 +62,8 @@ func TestSpawn_CodexUsesSupportedExecStructuredContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read invocation log: %v", err)
 	}
-	if strings.Contains(string(data), "review") {
+	args := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(args) > 0 && args[0] == "review" {
 		t.Fatalf("Codex invocation used obsolete review command: %s", data)
 	}
 }

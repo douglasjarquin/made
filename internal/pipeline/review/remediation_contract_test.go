@@ -52,6 +52,12 @@ func TestRun_RejectsDirectAgentWorktreeEdits(t *testing.T) {
 	if err == nil {
 		t.Fatal("review accepted direct agent edits to the worktree")
 	}
+	if _, statErr := os.Stat(filepath.Join(wt.Path, "unreviewed.txt")); !os.IsNotExist(statErr) {
+		t.Fatalf("direct agent edit escaped review isolation: %v", statErr)
+	}
+	if got := run(t, wt.Path, "status", "--porcelain", "--untracked-files=all"); got != "" {
+		t.Fatalf("direct agent edit left delivery worktree dirty: %q", got)
+	}
 }
 
 func TestRun_AutoFixRejectsUnauthorizedDeletionBeforeApplyingPatch(t *testing.T) {
