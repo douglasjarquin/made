@@ -36,8 +36,8 @@ func TestAuthStatus_FailureReturnsAuthError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error from AuthStatus")
 	}
-	var authErr *github.AuthError
-	if !errors.As(err, &authErr) {
+	authErr, ok := errors.AsType[*github.AuthError](err)
+	if !ok {
 		t.Fatalf("expected *github.AuthError, got %T: %v", err, err)
 	}
 	if !strings.Contains(authErr.Error(), "not logged into") {
@@ -66,8 +66,8 @@ func TestCreatePR_AuthFailurePreventsPRCall(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected CreatePR to fail when auth fails")
 	}
-	var authErr *github.AuthError
-	if !errors.As(err, &authErr) {
+	_, ok := errors.AsType[*github.AuthError](err)
+	if !ok {
 		t.Fatalf("expected *github.AuthError, got %T: %v", err, err)
 	}
 

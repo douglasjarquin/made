@@ -53,7 +53,7 @@ func TestRun_PassesWorkflowRunIDToLogsAndRerun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read invocation log: %v", err)
 	}
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		if strings.HasPrefix(line, "invoked: args=run ") && strings.Contains(line, prURL) {
 			t.Fatalf("PR URL was passed to a workflow-run command: %s", data)
 		}

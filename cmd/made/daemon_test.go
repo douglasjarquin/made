@@ -57,6 +57,9 @@ func TestDaemonStop_CancelsInFlightRunBeforeProcessExits(t *testing.T) {
 		}
 		for scanner.Scan() {
 		}
+		if err := scanner.Err(); err != nil {
+			return
+		}
 	}()
 
 	select {
@@ -70,7 +73,7 @@ func TestDaemonStop_CancelsInFlightRunBeforeProcessExits(t *testing.T) {
 
 	socketPath := api.SocketPath(home)
 	var client *api.Client
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		client, err = api.Dial(socketPath)
 		if err == nil {
 			break
