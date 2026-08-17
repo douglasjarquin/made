@@ -77,3 +77,29 @@ The branch was not rebased onto the moving default branch because the task
 requires preserving exact base custody.
 
 No default-branch push, merge, auto-merge, or remote branch deletion occurred.
+
+## Conflict-repair final review supersession
+
+The earlier review table above is historical and is superseded for delivery by the fresh review wave bound to source-and-test SHA `12b83a6649b5e198049754f1cb6427d7b0dc51a0`.
+
+The requested exact base remains `3e19ed9d598a68149da5a73949533e8095ca4403` and is an ancestor of the reviewed SHA.
+
+| Lane | Agent ID | Verdict | Scope receipt |
+| --- | --- | --- | --- |
+| Goal and constraint reviewer | `01a011f8-c310-7543-9e71-fe7403dcce30` | PASS, HIGH | Exact ancestry, all binding Made-only criteria, local final commands, and direct PR state passed. |
+| Bounded CLI QA executor | `01a011f8-c408-7c32-a3a5-13fd4f7a85b9` | PASS | Capabilities, obsolete status, disposable daemon start/status/list/missing-ID/stop, and cleanup passed on the exact SHA. |
+| Code reviewer | `01a011f8-c4e3-71b0-b0b8-6f25448d3db6` | PASS, no blockers | Compaction candidate overlay, restart regression, strict adapters, evidence CAS, and lint passed; the persistence module size is a non-blocking watch item. |
+| Bounded security reviewer | `01a01201-3c47-72e0-9711-c6dba6334a97` | PASS, severity NONE | Agent, evidence, WAL, managed gate path, socket, and public CLI boundaries have no HIGH or CRITICAL issue. |
+| Context and delivery reviewer | `01a01203-31cb-7562-bd18-c08105de5b52` | PASS | Exact base ancestry and direct-PR custody passed; GitHub PR base ref `main` is correctly treated as a branch ref, not a detached required base SHA. |
+
+The first context read during this wave was superseded after hosted checks completed and after the brief's distinction between worktree base SHA and PR base branch ref was reverified.
+
+The hosted check `build-test-lint` for exact head `12b83a6649b5e198049754f1cb6427d7b0dc51a0` completed with conclusion `success` in check run `95537594230`.
+
+The final read-only PR state is `state=open`, `merged=false`, `head=cs/made-remediation-continuation`, `head_sha=12b83a6649b5e198049754f1cb6427d7b0dc51a0`, `base=main`, `base_sha=34d44be504291482d973c65bd427ba964df5e0e9`, `mergeable=true`, `mergeable_state=clean`, and `auto_merge=null`.
+
+The branch was pushed only to `origin/cs/made-remediation-continuation`.
+
+The final review artifacts were moved to recoverable temporary storage and are not part of the Made branch.
+
+The review lane source receipt is intentionally bound to `12b83a6649b5e198049754f1cb6427d7b0dc51a0`; the pending follow-up commit contains only this evidence/ledger update and no source or test changes.

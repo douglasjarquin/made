@@ -1487,12 +1487,12 @@ Historical task claims above remain unchanged.
 
   **Evidence**: `evidence/phase-4-manual-qa.md` and `evidence/phase-4-final-validation.md`.
 
-- [ ] Fresh review-work/runtime-audit receipts are bound to the final documentation SHA and PR #2 is pushed and verified conflict-free.
+- [x] Fresh review-work/runtime-audit receipts are bound to the final source SHA, and PR #2 is pushed and verified conflict-free.
 
-  **Acceptance Criteria**: All applicable review lanes have terminal verdicts with exact final SHA receipts; only `cs/made-remediation-continuation` is pushed; PR #2 head matches the final branch and reports clean mergeability when GitHub exposes it.
+  **Acceptance Criteria**: All applicable review lanes have terminal verdicts bound to source SHA `12b83a6649b5e198049754f1cb6427d7b0dc51a0`; only `cs/made-remediation-continuation` is pushed; PR #2 head matches the final source branch and reports clean mergeability.
 
   **QA Scenario**: Run the review audit, inspect the exact commit list and changed-file scope, push only the task branch with `gh-axi`, and read PR #2 metadata without merging.
 
-  **Evidence**: `evidence/phase-4-review-audit.md`, `evidence/phase-4-conflict-repair.md`, and the final PR read receipt.
+  **Evidence**: `evidence/phase-4-review-audit.md`, `evidence/phase-4-conflict-repair.md`, the successful hosted check `95537594230`, and the final PR read receipt.
 
   **Commit**: YES | Message: `fix(made): preserve compaction transition during conflict repair` | Files: `internal/daemon/persistence.go`, `internal/daemon/persistence_contract_test.go`, phase-scoped evidence, and this continuation receipt.

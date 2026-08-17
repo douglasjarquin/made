@@ -113,3 +113,13 @@ It observed capabilities JSON, explicit obsolete-status rejection, a disposable 
 No real project, gate, pipeline, default branch, shared daemon, remote deletion, merge, auto-merge, or ask-user finding was used.
 
 The separate review suggestion to invoke `make lint all` is not the repository-configured lint command and is not a brief requirement; the configured `make lint` target passed.
+
+## Final direct-PR delivery read
+
+The branch was pushed only to `origin/cs/made-remediation-continuation` at `12b83a6649b5e198049754f1cb6427d7b0dc51a0`.
+
+The hosted `build-test-lint` check for that exact head completed successfully as check run `95537594230`.
+
+The final read-only PR state is `open`, `merged=false`, `head=cs/made-remediation-continuation`, `head_sha=12b83a6649b5e198049754f1cb6427d7b0dc51a0`, `base=main`, `base_sha=34d44be504291482d973c65bd427ba964df5e0e9`, `mergeable=true`, `mergeable_state=clean`, and `auto_merge=null`.
+
+The PR base is the GitHub `main` branch ref, while the exact requested base is preserved as local and remote branch ancestry through the explicit task worktree and conflict-repair merge.
