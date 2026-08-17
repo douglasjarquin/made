@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -26,7 +27,7 @@ func TestOrphanBranchStore_ConcurrentWritesRetainBothRuns(t *testing.T) {
 			defer wg.Done()
 			<-start
 			errCh <- store.WriteEvidence(id, map[string][]byte{
-				"result.json": []byte(fmt.Sprintf(`{"run_id":%q}`, id)),
+				"result.json": fmt.Appendf(nil, `{"run_id":%q}`, id),
 			})
 		}(runID)
 	}
@@ -86,10 +87,5 @@ func gitOutput(t *testing.T, dir string, args ...string) string {
 }
 
 func containsLine(output, want string) bool {
-	for _, line := range strings.Split(output, "\n") {
-		if line == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(strings.Split(output, "\n"), want)
 }

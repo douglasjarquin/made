@@ -145,7 +145,7 @@ func TestRunManager_WALRetentionIsBounded(t *testing.T) {
 	if _, err := rm.Submit("run-retention", "repo", "branch", func(context.Context, func(Event)) error { return nil }); err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	for i := 0; i < maxWALRecords+10; i++ {
+	for i := range maxWALRecords + 10 {
 		if err := rm.UpdateStages("run-retention", []StageResult{{Name: "stage", Result: "pass", Message: "update"}}); err != nil {
 			t.Fatalf("UpdateStages %d: %v", i, err)
 		}
