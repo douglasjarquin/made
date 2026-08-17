@@ -94,7 +94,11 @@ func runExactStatusCommand(args []string, stdout, stderr *os.File) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if fs.NArg() == 2 && fs.Arg(1) == "--json" {
+	if fs.NArg() > 1 && (fs.NArg() != 2 || fs.Arg(1) != "--json") {
+		_, _ = fmt.Fprintln(stderr, "usage: made run status <exact-run-id> [--json]")
+		return 2
+	}
+	if fs.NArg() == 2 {
 		*jsonOutput = true
 	}
 	if (fs.NArg() != 1 && fs.NArg() != 2) || fs.Arg(0) == "" {
@@ -158,7 +162,11 @@ func runCancelCommand(args []string, stdout, stderr *os.File) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if fs.NArg() == 2 && fs.Arg(1) == "--json" {
+	if fs.NArg() > 1 && (fs.NArg() != 2 || fs.Arg(1) != "--json") {
+		_, _ = fmt.Fprintln(stderr, "usage: made run cancel <exact-run-id> [--json]")
+		return 2
+	}
+	if fs.NArg() == 2 {
 		*jsonOutput = true
 	}
 	if (fs.NArg() != 1 && fs.NArg() != 2) || fs.Arg(0) == "" {
