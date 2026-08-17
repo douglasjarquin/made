@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -126,47 +125,6 @@ func invocation(kind Kind, worktree, task string) ([]string, func(), string, err
 		task = "Review the current worktree and return only the structured findings object required by the output schema."
 	}
 	return []string{"exec", "--json", "--output-schema", schemaPath, "--output-last-message", outputPath, "--sandbox", "read-only", "--ephemeral", "-C", worktree, task}, func() { _ = os.RemoveAll(dir) }, outputPath, nil
-}
-
-func decodeFindings(data []byte) (Findings, error) {
-	var direct Findings
-	if err := json.Unmarshal(data, &direct); err == nil {
-		var envelope map[string]json.RawMessage
-		if json.Unmarshal(data, &envelope) == nil {
-			if raw, ok := envelope["findings"]; ok {
-				if string(raw) == "null" {
-					return Findings{Findings: []Finding{}}, nil
-				}
-				if values, err := strictFindings(data); err == nil {
-					return values, nil
-				}
-			}
-		}
-	}
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	scanner.Buffer(make([]byte, 4096), 4*1024*1024)
-	var last string
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if strings.HasPrefix(line, "{") {
-			var event struct {
-				Item struct {
-					Type string `json:"type"`
-					Text string `json:"text"`
-				} `json:"item"`
-			}
-			if json.Unmarshal([]byte(line), &event) == nil && event.Item.Type == "agent_message" {
-				last = event.Item.Text
-			}
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return Findings{}, err
-	}
-	if last == "" {
-		return Findings{}, fmt.Errorf("structured findings payload was not found")
-	}
-	return strictFindings([]byte(last))
 }
 
 func strictFindings(data []byte) (Findings, error) {

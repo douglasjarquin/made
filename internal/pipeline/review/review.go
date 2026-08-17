@@ -231,17 +231,6 @@ func runGitWithIndex(ctx context.Context, worktreePath, indexPath string, stdin 
 	return result, nil
 }
 
-func requireCleanWorktree(ctx context.Context, worktreePath string) error {
-	status, err := gitOutput(ctx, worktreePath, "status", "--porcelain", "--untracked-files=all")
-	if err != nil {
-		return fmt.Errorf("inspect clean worktree: %w", err)
-	}
-	if strings.TrimSpace(status) != "" {
-		return fmt.Errorf("auto-fix requires a clean worktree")
-	}
-	return nil
-}
-
 func patchPaths(patch string) ([]string, error) {
 	seen := make(map[string]struct{})
 	var oldPath string
@@ -300,20 +289,4 @@ func cleanReturnedPath(path string) (string, error) {
 		return "", fmt.Errorf("auto-fix returned forbidden path %q", path)
 	}
 	return filepath.ToSlash(clean), nil
-}
-
-func statusPaths(status string) []string {
-	var paths []string
-	for _, line := range strings.Split(status, "\n") {
-		line = strings.TrimSpace(line)
-		if len(line) < 4 {
-			continue
-		}
-		path := strings.TrimSpace(line[2:])
-		if strings.Contains(path, " -> ") {
-			path = strings.TrimSpace(strings.SplitN(path, " -> ", 2)[1])
-		}
-		paths = append(paths, filepath.ToSlash(path))
-	}
-	return paths
 }
