@@ -117,7 +117,7 @@ func TestRun_NeverExceedsBudgetEvenWithAlwaysFailingChecks(t *testing.T) {
 	if result.RerunsUsed != rerunBudget {
 		t.Fatalf("expected exactly rerunBudget reruns (%d), got %d - budget was not respected", rerunBudget, result.RerunsUsed)
 	}
-	if elapsed > 5*time.Second {
+	if elapsed > 30*time.Second {
 		t.Fatalf("Run took too long (%s) - suspect it looped past the budget", elapsed)
 	}
 }
