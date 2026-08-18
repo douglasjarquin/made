@@ -61,13 +61,18 @@ func TestRun_RejectsUnresolvedCandidateOutputSHA(t *testing.T) {
 	f := setupFixture(t)
 	wt := f.addWorktree(t)
 	t.Cleanup(func() { _ = wt.Remove() })
+	scenarioPath := writeScenario(t, agent.Findings{})
 
 	_, err := review.Run(context.Background(), wt.Path, agent.KindCodex, review.Options{
 		BinaryPath:         bin,
 		BaseBranch:         "HEAD",
 		CandidateOutputSHA: strings.Repeat("d", 40),
+		ExtraEnv: []string{
+			"FAKE_AGENT_KIND=codex",
+			"FAKE_AGENT_SCENARIO=" + scenarioPath,
+		},
 	})
-	if err == nil || !strings.Contains(err.Error(), "does not match the current review candidate") {
+	if err == nil || !strings.Contains(err.Error(), "does not match resolved HEAD") {
 		t.Fatalf("review.Run error = %v, want unresolved candidate output rejection", err)
 	}
 }

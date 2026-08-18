@@ -119,6 +119,9 @@ func Run(ctx context.Context, worktreePath string, agentKind agent.Kind, opts Op
 	if len(postFixSHAs) > 0 && outputSHA != postFixSHAs[len(postFixSHAs)-1] {
 		return Result{}, fmt.Errorf("review: candidate output SHA %q does not match the last auto-fix commit %q", outputSHA, postFixSHAs[len(postFixSHAs)-1])
 	}
+	if opts.CandidateOutputSHA != "" && opts.CandidateOutputSHA != outputSHA {
+		return Result{}, fmt.Errorf("review: supplied candidate output SHA %q does not match resolved HEAD %q", opts.CandidateOutputSHA, outputSHA)
+	}
 	if err := writeReviewEvidence(ctx, opts, task, spawned.Response, outputSHA); err != nil {
 		return Result{}, err
 	}
