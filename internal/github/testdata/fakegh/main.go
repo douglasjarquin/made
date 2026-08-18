@@ -40,9 +40,20 @@ func main() {
 		failIfScripted()
 		fmt.Fprint(os.Stdout, envOr("FAKE_GH_PR_LIST_JSON", "[]"))
 	case len(args) == 5 && args[0] == "pr" && args[1] == "checks" && args[3] == "--json" && args[4] == "name,state,bucket,link":
-		payload := checksResponse()
+		payload := checksResponse(false)
 		fmt.Fprint(os.Stdout, payload)
 		if code := envExitCode("FAKE_GH_CHECKS_EXIT_CODE"); code != 0 {
+			fmt.Fprintln(os.Stderr, envOr("FAKE_GH_STDERR", "fakegh: scripted checks failure"))
+			os.Exit(code)
+		}
+		if checksFail(payload) {
+			os.Exit(1)
+		}
+	case len(args) == 6 && args[0] == "pr" && args[1] == "checks" && args[3] == "--required" && args[4] == "--json" && args[5] == "name,state,bucket,link":
+		payload := checksResponse(true)
+		fmt.Fprint(os.Stdout, payload)
+		if code := envExitCode("FAKE_GH_CHECKS_EXIT_CODE"); code != 0 {
+			fmt.Fprintln(os.Stderr, envOr("FAKE_GH_STDERR", "fakegh: scripted checks failure"))
 			os.Exit(code)
 		}
 		if checksFail(payload) {
@@ -118,8 +129,11 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
-func checksResponse() string {
+func checksResponse(required bool) string {
 	raw := envOr("FAKE_GH_CHECKS_JSON", `[{"name":"build","state":"COMPLETED","bucket":"pass","link":"https://github.com/example/repo/actions/runs/12345"}]`)
+	if required {
+		raw = envOr("FAKE_GH_REQUIRED_CHECKS_JSON", raw)
+	}
 	var checks []map[string]string
 	if err := json.Unmarshal([]byte(raw), &checks); err != nil {
 		fmt.Fprintf(os.Stderr, "fakegh: invalid FAKE_GH_CHECKS_JSON: %v\n", err)

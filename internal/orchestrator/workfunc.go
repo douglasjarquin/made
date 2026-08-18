@@ -423,7 +423,7 @@ func (c *chain) ciStage(prURL string) error {
 	ciCtx, cancel := context.WithTimeout(c.ctx, c.rc.Config.StageTimeout(stageNameCI))
 	defer cancel()
 
-	result, err := ci.Run(ciCtx, c.rc.GitHub, prURL, c.rc.Config.CI.RerunBudget, ciPollInterval)
+	result, err := ci.Run(ciCtx, c.rc.GitHub, prURL, c.rc.Config.CI.CheckScope, c.rc.Config.CI.RerunBudget, ciPollInterval)
 	if err != nil {
 		return err
 	}
