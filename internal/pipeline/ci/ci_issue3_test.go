@@ -181,8 +181,8 @@ func TestRun_FailureEvidenceNamesCheckAndRun(t *testing.T) {
 	if result.OK || !strings.Contains(result.Message, "build") || !strings.Contains(result.Message, "501") {
 		t.Fatalf("failure message omitted check/run identity: %+v", result)
 	}
-	if !strings.Contains(result.Message, "build failed at step 3") {
-		t.Fatalf("failure evidence omitted workflow output: %q", result.Message)
+	if len(result.FailureEvidence) != 1 || !strings.Contains(result.FailureEvidence[0].Excerpt, "build failed at step 3") {
+		t.Fatalf("failure evidence omitted workflow output: %+v", result.FailureEvidence)
 	}
 }
 

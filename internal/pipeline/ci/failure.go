@@ -146,9 +146,6 @@ func formatFailureMessage(prURL string, rounds, budget int, evidence []FailureEv
 		if item.DetailsLink != "" {
 			fmt.Fprintf(&builder, " (%s)", item.DetailsLink)
 		}
-		if item.Excerpt != "" {
-			fmt.Fprintf(&builder, ": %s", item.Excerpt)
-		}
 		if builder.Len() >= maxFailureEvidenceBytes {
 			break
 		}

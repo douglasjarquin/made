@@ -78,8 +78,8 @@ func TestRun_BudgetExhaustionSurfacesFinalFailure(t *testing.T) {
 	if len(result.FailureEvidence) == 0 {
 		t.Fatal("expected failure evidence on final failure")
 	}
-	if !strings.Contains(result.Message, "build failed at step 3") {
-		t.Fatalf("expected failure message to contain the check's log output, got %q", result.Message)
+	if len(result.FailureEvidence) != 1 || !strings.Contains(result.FailureEvidence[0].Excerpt, "build failed at step 3") {
+		t.Fatalf("expected failure evidence to contain the check's log output, got %+v", result.FailureEvidence)
 	}
 }
 

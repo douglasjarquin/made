@@ -26,8 +26,8 @@ func TestRun_BoundsAggregatedFailureEvidence(t *testing.T) {
 	if len(messageTail) > 32 {
 		messageTail = messageTail[len(messageTail)-32:]
 	}
-	if result.OK || len(result.Message) > 256*1024 || !strings.Contains(result.Message, "[truncated]") {
-		t.Fatalf("failure evidence was not bounded: len=%d message suffix=%q", len(result.Message), messageTail)
+	if result.OK || len(result.FailureEvidence) != 1 || len(result.FailureEvidence[0].Excerpt) > 64*1024+len("\n[truncated]\n") || !strings.Contains(result.FailureEvidence[0].Excerpt, "[truncated]") || strings.Contains(result.Message, "[truncated]") {
+		t.Fatalf("failure evidence was not bounded outside the durable message: len=%d message suffix=%q evidence=%+v", len(result.Message), messageTail, result.FailureEvidence)
 	}
 }
 
@@ -53,8 +53,8 @@ func TestRun_BoundsFailureLogFetchesAcrossRuns(t *testing.T) {
 	if got := strings.Count(string(data), "run view "); got != 4 {
 		t.Fatalf("expected at most four bounded log fetches, got %d, log:\n%s", got, data)
 	}
-	if !strings.Contains(result.Message, "905") || !strings.Contains(result.Message, "[log excerpt omitted after evidence limit]") {
-		t.Fatalf("bounded evidence omitted the skipped run identity or marker: %q", result.Message)
+	if len(result.FailureEvidence) != 5 || !strings.Contains(result.Message, "905") || !strings.Contains(result.FailureEvidence[4].Excerpt, "[log excerpt omitted after evidence limit]") {
+		t.Fatalf("bounded evidence omitted the skipped run identity or marker: message=%q evidence=%+v", result.Message, result.FailureEvidence)
 	}
 }
 
@@ -68,7 +68,7 @@ func TestRun_RedactsSecretsFromFailureEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if strings.Contains(result.Message, "workflow-secret") || !strings.Contains(result.Message, "token=[REDACTED]") {
-		t.Fatalf("failure evidence did not redact the secret: %q", result.Message)
+	if strings.Contains(result.Message, "workflow-secret") || strings.Contains(result.FailureEvidence[0].Excerpt, "workflow-secret") || !strings.Contains(result.FailureEvidence[0].Excerpt, "token=[REDACTED]") {
+		t.Fatalf("failure evidence did not redact the secret: message=%q evidence=%+v", result.Message, result.FailureEvidence)
 	}
 }
