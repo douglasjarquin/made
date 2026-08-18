@@ -23,7 +23,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "fakeagent: invalid invocation: %v\n", err)
 		os.Exit(2)
 	}
-	for _, key := range []string{"MADE_TEST_SECRET", "DATABASE_URL", "COOKIE", "JWT_KEY", "KUBECONFIG"} {
+	for _, key := range []string{"MADE_TEST_SECRET", "DATABASE_URL", "COOKIE", "JWT_KEY", "KUBECONFIG", "LC_REVIEW_SECRET"} {
 		if os.Getenv(key) != "" {
 			fmt.Fprintf(os.Stderr, "fakeagent: sensitive environment %s was exposed\n", key)
 			os.Exit(3)
@@ -68,10 +68,10 @@ func main() {
 const agentKindCodex = "codex"
 
 func validateInvocation(args []string) error {
-	if len(args) != 7 {
-		return fmt.Errorf("want 7 arguments, got %d", len(args))
+	if len(args) != 10 {
+		return fmt.Errorf("want 10 arguments, got %d", len(args))
 	}
-	if args[0] != "exec" || args[1] != "--cd" || args[3] != "--json" || args[4] != "--output-schema" || args[6] != "-" {
+	if args[0] != "exec" || args[1] != "--cd" || args[3] != "--json" || args[4] != "--output-schema" || args[6] != "--sandbox" || args[7] != "read-only" || args[8] != "--ephemeral" || args[9] != "-" {
 		return fmt.Errorf("expected codex exec structured flags, got %v", args)
 	}
 	if filepath.IsAbs(args[2]) == false || filepath.IsAbs(args[5]) == false {

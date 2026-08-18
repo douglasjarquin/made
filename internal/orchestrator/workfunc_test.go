@@ -238,9 +238,11 @@ func TestNewWorkFunc_FullPassEndsRunningWithAwaitingMergeMessage(t *testing.T) {
 	rm := daemon.NewRunManager()
 	reviewDecisions := daemon.NewReviewDecisions()
 	runID := rm.NewRunID()
+	expectedOutputSHA := strings.Repeat("d", 40)
 
 	wf := NewWorkFunc(rm, reviewDecisions, nil, runID, f.defaultBranch, branch, Options{
-		ReviewOptions: cleanReviewOptions(t),
+		ReviewOptions:      cleanReviewOptions(t),
+		CandidateOutputSHA: expectedOutputSHA,
 	})
 	submitWorkFunc(t, rm, runID, "repo-full-pass", branch, wf, rc)
 
@@ -253,6 +255,14 @@ func TestNewWorkFunc_FullPassEndsRunningWithAwaitingMergeMessage(t *testing.T) {
 	}
 	if len(snap.OutputSHA) != 40 {
 		t.Fatalf("expected durable output SHA after push preparation, got %q", snap.OutputSHA)
+	}
+	metadataPath := filepath.Join(wt.Path, ".made", "evidence", runID, "review-contract.json")
+	metadata, err := os.ReadFile(metadataPath)
+	if err != nil {
+		t.Fatalf("read review contract evidence: %v", err)
+	}
+	if !strings.Contains(string(metadata), `"candidate_output_sha":"`+expectedOutputSHA+`"`) {
+		t.Fatalf("review contract evidence omitted submitted candidate output SHA %q: %s", expectedOutputSHA, metadata)
 	}
 	assertAllStagesPassed(t, snap.Stages)
 

@@ -22,7 +22,7 @@ The signing override was needed because the inherited global SSH signing configu
 
 The installed Codex CLI was `/opt/homebrew/bin/codex` version `codex-cli 0.147.0`.
 
-The supported invocation is `codex exec --cd <directory> --json --output-schema <schema> -`.
+The supported invocation is `codex exec --cd <directory> --json --output-schema <schema> --sandbox read-only --ephemeral -`.
 
 ## Phase 1 RED contract
 
@@ -54,7 +54,7 @@ Those failures prove missing production boundaries rather than fixture defects b
 
 The compatibility fake GitHub boundary rejected PR URLs where workflow run IDs were required and modeled check status, conclusion, workflow run ID, and details URL.
 
-The fake Codex boundary accepted only the installed `codex exec --cd --json --output-schema` invocation and strict structured output.
+The fake Codex boundary accepted only the installed `codex exec --cd --json --output-schema --sandbox read-only --ephemeral` invocation and strict structured output.
 
 The old mocks were updated or removed so they do not authorize commands that the real Made binary does not implement.
 

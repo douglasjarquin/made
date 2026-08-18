@@ -37,7 +37,7 @@ func TestSpawn_CodexUsesStructuredExecContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read invocation log: %v", err)
 	}
-	for _, token := range []string{"exec", "--cd", "--json", "--output-schema", "-"} {
+	for _, token := range []string{"exec", "--cd", "--json", "--output-schema", "--sandbox", "read-only", "--ephemeral", "-"} {
 		if !strings.Contains(string(data), token) {
 			t.Fatalf("expected Codex structured invocation token %q, got %s", token, data)
 		}
@@ -66,6 +66,7 @@ func TestSpawn_DoesNotPassSensitiveEnvironmentToCodex(t *testing.T) {
 			"COOKIE=must-not-reach-review-agent",
 			"JWT_KEY=must-not-reach-review-agent",
 			"KUBECONFIG=/must-not-reach-review-agent",
+			"LC_REVIEW_SECRET=must-not-reach-review-agent",
 		},
 	}); err != nil {
 		t.Fatalf("Spawn exposed sensitive environment: %v", err)

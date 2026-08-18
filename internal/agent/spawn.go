@@ -128,7 +128,7 @@ func reviewEnvironmentKey(name string) bool {
 		"FAKE_AGENT_KIND", "FAKE_AGENT_SCENARIO", "FAKE_AGENT_LOG_FILE", "FAKE_AGENT_EXIT_CODE", "FAKE_AGENT_WRITE_PATH", "FAKE_AGENT_WRITE_DATA", "FAKE_AGENT_BASE_SHA":
 		return true
 	}
-	return strings.HasPrefix(name, "LC_")
+	return false
 }
 
 func invocation(kind Kind, worktree string) ([]string, func(), error) {
@@ -144,7 +144,7 @@ func invocation(kind Kind, worktree string) ([]string, func(), error) {
 		_ = os.RemoveAll(dir)
 		return nil, nil, fmt.Errorf("agent: write Codex output schema: %w", err)
 	}
-	return []string{"exec", "--cd", worktree, "--json", "--output-schema", schemaPath, "-"}, func() { _ = os.RemoveAll(dir) }, nil
+	return []string{"exec", "--cd", worktree, "--json", "--output-schema", schemaPath, "--sandbox", "read-only", "--ephemeral", "-"}, func() { _ = os.RemoveAll(dir) }, nil
 }
 
 func extractStructuredResponse(data []byte) ([]byte, error) {
