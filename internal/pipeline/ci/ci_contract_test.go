@@ -21,7 +21,7 @@ func TestRun_UsesPrChecksJSONContract(t *testing.T) {
 		ExtraEnv: append(os.Environ(), "FAKE_GH_LOG_FILE="+logPath),
 	}
 
-	_, _ = ci.Run(context.Background(), c, "https://github.com/example/repo/pull/7", 0, 0)
+	_, _ = ci.Run(context.Background(), c, "https://github.com/example/repo/pull/7", github.CheckScopeRequired, 0, 0)
 	data, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("read invocation log: %v", err)
@@ -48,7 +48,7 @@ func TestRun_PassesWorkflowRunIDToLogsAndRerun(t *testing.T) {
 		),
 	}
 
-	_, _ = ci.Run(context.Background(), c, prURL, 1, 0)
+	_, _ = ci.Run(context.Background(), c, prURL, github.CheckScopeRequired, 1, 0)
 	data, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("read invocation log: %v", err)

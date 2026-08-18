@@ -66,9 +66,38 @@ func TestLive_AuthStatusAndPRCreation(t *testing.T) {
 	}
 	t.Logf("created PR: %s", url)
 
-	checks, err := c.PRChecks(context.Background(), url)
+	checks, err := c.PRChecks(context.Background(), url, github.CheckScopeAll)
 	if err != nil {
 		t.Fatalf("PRChecks: %v", err)
 	}
 	t.Logf("checks: %+v", checks)
+}
+
+func TestLive_CIWorkflowOwnershipSmoke(t *testing.T) {
+	repoDir := os.Getenv("MADE_GITHUB_SMOKE_REPO")
+	prURL := os.Getenv("MADE_GITHUB_SMOKE_PR_URL")
+	if repoDir == "" || prURL == "" {
+		t.Skip("set MADE_GITHUB_SMOKE_REPO and MADE_GITHUB_SMOKE_PR_URL for the disposable-repository smoke")
+	}
+
+	c := &github.Client{Dir: repoDir}
+	if err := c.AuthStatus(context.Background()); err != nil {
+		t.Fatalf("AuthStatus: %v", err)
+	}
+	checks, err := c.PRChecks(context.Background(), prURL, github.CheckScopeAll)
+	if err != nil {
+		t.Fatalf("PRChecks: %v", err)
+	}
+	if len(checks.Checks) == 0 {
+		t.Fatal("expected the disposable PR to expose at least one check")
+	}
+	for _, check := range checks.Checks {
+		if !check.InScope {
+			t.Fatalf("all-scope check was not marked in scope: %+v", check)
+		}
+		if check.Rerunnable && (!check.ActionsBacked || check.WorkflowRunID == "") {
+			t.Fatalf("rerunnable check lacks Actions ownership: %+v", check)
+		}
+		t.Logf("check name=%q required=%t actions_backed=%t rerunnable=%t run_id=%q link=%q", check.Name, check.Required, check.ActionsBacked, check.Rerunnable, check.WorkflowRunID, check.DetailsLink)
+	}
 }

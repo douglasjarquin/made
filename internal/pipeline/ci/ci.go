@@ -1,8 +1,3 @@
-// Package ci is stage 9 of made's pipeline (Intent -> Rebase -> Review ->
-// Test -> Document -> Lint -> Push -> PR -> CI): after a PR is opened it
-// polls the PR's checks and, within a hard rerun budget, auto-reruns
-// failures that might be transient (flaky infra, a network blip in CI)
-// before giving up and reporting a final failure with a log excerpt.
 package ci
 
 import (
@@ -14,33 +9,27 @@ import (
 	"github.com/douglasjarquin/made/internal/github"
 )
 
-const (
-	defaultPollInterval = 2 * time.Second
-)
+const defaultPollInterval = 2 * time.Second
 
 type Result struct {
-	OK         bool
-	Message    string
-	RerunsUsed int
-	LogExcerpt string
+	OK              bool
+	Message         string
+	RerunRoundsUsed int
+	FailureEvidence []FailureEvidence
 }
 
-// Run's error return is reserved for infrastructure/configuration failures
-// (a nil client, missing PR URL, negative budget); a check that fails on
-// GitHub - even after exhausting the rerun budget - is a normal outcome
-// reported via Result.OK, not an error, following the pr stage's convention
-// (internal/pipeline/pr).
-//
-// rerunBudget is a hard cap on auto-reruns: without one, a genuinely broken
-// (non-transient) check would rerun forever, burning CI minutes and GitHub
-// API quota. pollInterval controls the wait between status checks; pass 0
-// to use a production-sized default, or a short duration in tests.
-func Run(ctx context.Context, ghClient *github.Client, prURL string, rerunBudget int, pollInterval time.Duration) (Result, error) {
+func Run(ctx context.Context, ghClient *github.Client, prURL string, scope github.CheckScope, rerunBudget int, pollInterval time.Duration) (Result, error) {
 	if ghClient == nil {
 		return Result{}, fmt.Errorf("ci: ghClient must not be nil")
 	}
 	if strings.TrimSpace(prURL) == "" {
 		return Result{}, fmt.Errorf("ci: prURL must not be empty")
+	}
+	if scope == "" {
+		scope = github.CheckScopeRequired
+	}
+	if !scope.Valid() {
+		return Result{}, fmt.Errorf("ci: unsupported check scope %q", scope)
 	}
 	if rerunBudget < 0 {
 		return Result{}, fmt.Errorf("ci: rerunBudget must not be negative")
@@ -49,86 +38,100 @@ func Run(ctx context.Context, ghClient *github.Client, prURL string, rerunBudget
 		pollInterval = defaultPollInterval
 	}
 
-	reruns := 0
+	rounds := 0
 	for {
-		checks, err := ghClient.PRChecks(ctx, prURL)
+		checks, err := ghClient.PRChecks(ctx, prURL, scope)
 		if err != nil {
+			if ctx.Err() != nil {
+				return Result{OK: false, Message: ctx.Err().Error(), RerunRoundsUsed: rounds}, nil
+			}
 			return Result{}, err
 		}
-		if hasPendingChecks(checks.Checks) {
-			select {
-			case <-ctx.Done():
-				return Result{OK: false, Message: ctx.Err().Error(), RerunsUsed: reruns}, nil
-			case <-time.After(pollInterval):
-				continue
-			}
+		if len(checks.Checks) == 0 {
+			return Result{OK: false, Message: fmt.Sprintf("no applicable %s checks for %s", scope, prURL), RerunRoundsUsed: rounds}, nil
 		}
-		if checks.ExitCode == 0 {
+
+		pending, failures := terminalFailures(checks.Checks)
+		if pending {
+			if err := waitForPoll(ctx, pollInterval); err != nil {
+				return Result{OK: false, Message: err.Error(), RerunRoundsUsed: rounds}, nil
+			}
+			continue
+		}
+		if len(failures) == 0 {
 			return Result{
-				OK:         true,
-				Message:    fmt.Sprintf("checks passed for %s after %d rerun(s)", prURL, reruns),
-				RerunsUsed: reruns,
+				OK:              true,
+				Message:         fmt.Sprintf("checks passed for %s after %d rerun round(s)", prURL, rounds),
+				RerunRoundsUsed: rounds,
 			}, nil
 		}
 
-		if reruns >= rerunBudget {
-			runID := firstWorkflowRunID(checks.Checks)
-			if runID == "" {
-				return Result{
-					OK:         false,
-					Message:    fmt.Sprintf("checks failed for %s after exhausting rerun budget (%d), but no workflow run ID was present in gh pr checks output", prURL, rerunBudget),
-					RerunsUsed: reruns,
-				}, nil
+		if rounds >= rerunBudget {
+			logs, err := fetchFailureLogs(ctx, ghClient, failures)
+			if err != nil {
+				if ctx.Err() != nil {
+					return Result{OK: false, Message: ctx.Err().Error(), RerunRoundsUsed: rounds}, nil
+				}
+				return Result{}, err
 			}
-			excerpt, logErr := ghClient.CheckLogs(ctx, runID)
-			if logErr != nil {
-				return Result{}, logErr
-			}
+			evidence := collectFailureEvidence(failures, logs)
 			return Result{
-				OK:         false,
-				Message:    fmt.Sprintf("checks still failing for %s after exhausting rerun budget (%d)", prURL, rerunBudget),
-				RerunsUsed: reruns,
-				LogExcerpt: excerpt,
+				OK:              false,
+				Message:         formatFailureMessage(prURL, rounds, rerunBudget, evidence),
+				RerunRoundsUsed: rounds,
+				FailureEvidence: evidence,
 			}, nil
 		}
 
-		runID := firstWorkflowRunID(checks.Checks)
-		if runID == "" {
+		runIDs := rerunnableRunIDs(failures)
+		if len(runIDs) == 0 {
+			evidence := collectFailureEvidence(failures, nil)
 			return Result{
-				OK:         false,
-				Message:    fmt.Sprintf("checks failed for %s but gh pr checks returned no workflow run ID for rerun", prURL),
-				RerunsUsed: reruns,
+				OK:              false,
+				Message:         formatFailureMessage(prURL, rounds, rerunBudget, evidence),
+				RerunRoundsUsed: rounds,
+				FailureEvidence: evidence,
 			}, nil
 		}
-		if err := ghClient.RerunCheck(ctx, runID); err != nil {
-			return Result{}, err
+		for _, runID := range runIDs {
+			if err := ghClient.RerunCheck(ctx, runID); err != nil {
+				if ctx.Err() != nil {
+					return Result{OK: false, Message: ctx.Err().Error(), RerunRoundsUsed: rounds}, nil
+				}
+				return Result{}, err
+			}
 		}
-		reruns++
+		rounds++
 
-		select {
-		case <-ctx.Done():
-			return Result{OK: false, Message: ctx.Err().Error(), RerunsUsed: reruns}, nil
-		case <-time.After(pollInterval):
+		if err := waitForPoll(ctx, pollInterval); err != nil {
+			return Result{OK: false, Message: err.Error(), RerunRoundsUsed: rounds}, nil
 		}
 	}
 }
 
-func firstWorkflowRunID(checks []github.CheckResult) string {
-	for _, check := range checks {
-		if check.RunID != "" {
-			return check.RunID
+func fetchFailureLogs(ctx context.Context, ghClient *github.Client, failures []github.CheckResult) (map[string]string, error) {
+	logs := make(map[string]string)
+	for index, runID := range rerunnableRunIDs(failures) {
+		if index >= maxFailureLogRuns {
+			logs[runID] = omittedFailureLog
+			continue
 		}
+		excerpt, err := ghClient.CheckLogs(ctx, runID)
+		if err != nil {
+			return nil, err
+		}
+		logs[runID] = excerpt
 	}
-	return ""
+	return logs, nil
 }
 
-func hasPendingChecks(checks []github.CheckResult) bool {
-	for _, check := range checks {
-		state := strings.ToUpper(strings.TrimSpace(check.State))
-		bucket := strings.ToLower(strings.TrimSpace(check.Bucket))
-		if bucket == "pending" || state == "PENDING" || state == "QUEUED" || state == "IN_PROGRESS" || state == "WAITING" || state == "EXPECTED" {
-			return true
-		}
+func waitForPoll(ctx context.Context, interval time.Duration) error {
+	timer := time.NewTimer(interval)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
 	}
-	return false
 }

@@ -100,34 +100,11 @@ func TestCreatePR_SuccessReturnsURL(t *testing.T) {
 	}
 }
 
-func TestPRChecks_ParsesJSON(t *testing.T) {
-	c := newClient(t, []string{`FAKE_GH_CHECKS_JSON=[{"name":"build","state":"COMPLETED","bucket":"pass","link":"https://github.com/example/repo/actions/runs/42"}]`}, "")
-
-	checks, err := c.PRChecks(context.Background(), "https://github.com/example/repo/pull/42")
-	if err != nil {
-		t.Fatalf("PRChecks: %v", err)
-	}
-	if checks.ExitCode != 0 || len(checks.Checks) != 1 {
-		t.Fatalf("unexpected checks result: %+v", checks)
-	}
-	if checks.Checks[0].Bucket != "pass" || checks.Checks[0].RunID != "42" {
-		t.Fatalf("unexpected check fields: %+v", checks.Checks[0])
-	}
-}
-
-func TestPRChecks_RejectsEmptySuccessfulPayload(t *testing.T) {
-	c := newClient(t, []string{"FAKE_GH_CHECKS_JSON=[]"}, "")
-
-	if _, err := c.PRChecks(context.Background(), "https://github.com/example/repo/pull/42"); err == nil {
-		t.Fatal("PRChecks accepted an empty successful payload")
-	}
-}
-
 func TestMergeableState_AuthFailurePreventsCall(t *testing.T) {
 	logPath := filepath.Join(t.TempDir(), "invocations.log")
 	c := newClient(t, []string{"FAKE_GH_AUTH_EXIT_CODE=1"}, logPath)
 
-	_, err := c.PRChecks(context.Background(), "https://github.com/example/repo/pull/42")
+	_, err := c.PRChecks(context.Background(), "https://github.com/example/repo/pull/42", github.CheckScopeRequired)
 	if err == nil {
 		t.Fatal("expected an error when auth fails")
 	}

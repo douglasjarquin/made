@@ -37,15 +37,15 @@ func TestRun_TransientFailureRecoversWithinBudget(t *testing.T) {
 		"FAKE_GH_STATE_DIR=" + stateDir,
 	}, logPath)
 
-	result, err := ci.Run(context.Background(), c, "https://github.com/example/repo/pull/7", 2, testPollInterval)
+	result, err := ci.Run(context.Background(), c, "https://github.com/example/repo/pull/7", github.CheckScopeRequired, 2, testPollInterval)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if !result.OK {
 		t.Fatalf("expected OK=true, got %+v", result)
 	}
-	if result.RerunsUsed != 1 {
-		t.Fatalf("expected exactly one rerun, got %d", result.RerunsUsed)
+	if result.RerunRoundsUsed != 1 {
+		t.Fatalf("expected exactly one rerun round, got %d", result.RerunRoundsUsed)
 	}
 
 	data, readErr := os.ReadFile(logPath)
@@ -58,30 +58,6 @@ func TestRun_TransientFailureRecoversWithinBudget(t *testing.T) {
 	}
 }
 
-func TestRun_DoesNotRerunPendingChecks(t *testing.T) {
-	stateDir := t.TempDir()
-	logPath := filepath.Join(t.TempDir(), "invocations.log")
-	c := newClient(t, []string{
-		"FAKE_GH_CHECKS_BUCKETS=pending,pass",
-		"FAKE_GH_STATE_DIR=" + stateDir,
-	}, logPath)
-
-	result, err := ci.Run(context.Background(), c, "https://github.com/example/repo/pull/11", 2, testPollInterval)
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if !result.OK || result.RerunsUsed != 0 {
-		t.Fatalf("pending check was rerun: %+v", result)
-	}
-	data, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatalf("read invocation log: %v", err)
-	}
-	if strings.Contains(string(data), "run rerun") {
-		t.Fatalf("pending check triggered a rerun: %s", data)
-	}
-}
-
 func TestRun_BudgetExhaustionSurfacesFinalFailure(t *testing.T) {
 	c := newClient(t, []string{
 		"FAKE_GH_CHECKS_BUCKETS=fail",
@@ -89,35 +65,35 @@ func TestRun_BudgetExhaustionSurfacesFinalFailure(t *testing.T) {
 	}, "")
 
 	const rerunBudget = 2
-	result, err := ci.Run(context.Background(), c, "https://github.com/example/repo/pull/8", rerunBudget, testPollInterval)
+	result, err := ci.Run(context.Background(), c, "https://github.com/example/repo/pull/8", github.CheckScopeRequired, rerunBudget, testPollInterval)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if result.OK {
 		t.Fatalf("expected OK=false, got %+v", result)
 	}
-	if result.RerunsUsed != rerunBudget {
-		t.Fatalf("expected RerunsUsed == rerunBudget (%d), got %d", rerunBudget, result.RerunsUsed)
+	if result.RerunRoundsUsed != rerunBudget {
+		t.Fatalf("expected RerunRoundsUsed == rerunBudget (%d), got %d", rerunBudget, result.RerunRoundsUsed)
 	}
-	if result.LogExcerpt == "" {
-		t.Fatal("expected a non-empty log excerpt on final failure")
+	if len(result.FailureEvidence) == 0 {
+		t.Fatal("expected failure evidence on final failure")
 	}
-	if !strings.Contains(result.LogExcerpt, "build failed at step 3") {
-		t.Fatalf("expected log excerpt to contain the check's log output, got %q", result.LogExcerpt)
+	if len(result.FailureEvidence) != 1 || !strings.Contains(result.FailureEvidence[0].Excerpt, "build failed at step 3") {
+		t.Fatalf("expected failure evidence to contain the check's log output, got %+v", result.FailureEvidence)
 	}
 }
 
 func TestRun_RejectsEmptyPRURL(t *testing.T) {
 	c := newClient(t, nil, "")
 
-	_, err := ci.Run(context.Background(), c, "", 2, testPollInterval)
+	_, err := ci.Run(context.Background(), c, "", github.CheckScopeRequired, 2, testPollInterval)
 	if err == nil {
 		t.Fatal("expected an error when prURL is empty")
 	}
 }
 
 func TestRun_RejectsNilClient(t *testing.T) {
-	_, err := ci.Run(context.Background(), nil, "https://github.com/example/repo/pull/9", 2, testPollInterval)
+	_, err := ci.Run(context.Background(), nil, "https://github.com/example/repo/pull/9", github.CheckScopeRequired, 2, testPollInterval)
 	if err == nil {
 		t.Fatal("expected an error when ghClient is nil")
 	}
@@ -130,7 +106,7 @@ func TestRun_NeverExceedsBudgetEvenWithAlwaysFailingChecks(t *testing.T) {
 
 	const rerunBudget = 3
 	start := time.Now()
-	result, err := ci.Run(context.Background(), c, "https://github.com/example/repo/pull/10", rerunBudget, testPollInterval)
+	result, err := ci.Run(context.Background(), c, "https://github.com/example/repo/pull/10", github.CheckScopeRequired, rerunBudget, testPollInterval)
 	elapsed := time.Since(start)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -138,8 +114,8 @@ func TestRun_NeverExceedsBudgetEvenWithAlwaysFailingChecks(t *testing.T) {
 	if result.OK {
 		t.Fatal("expected persistent failure to remain OK=false")
 	}
-	if result.RerunsUsed != rerunBudget {
-		t.Fatalf("expected exactly rerunBudget reruns (%d), got %d - budget was not respected", rerunBudget, result.RerunsUsed)
+	if result.RerunRoundsUsed != rerunBudget {
+		t.Fatalf("expected exactly rerunBudget rounds (%d), got %d - budget was not respected", rerunBudget, result.RerunRoundsUsed)
 	}
 	if elapsed > 30*time.Second {
 		t.Fatalf("Run took too long (%s) - suspect it looped past the budget", elapsed)

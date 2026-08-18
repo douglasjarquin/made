@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/douglasjarquin/made/internal/agent"
+	"github.com/douglasjarquin/made/internal/github"
 )
 
 const trustedFixtureWithEvidenceModeAndBudget = `
@@ -70,6 +71,36 @@ func TestCI_RerunBudgetHonorsExplicitValue(t *testing.T) {
 
 	if cfg.CI.RerunBudget != 5 {
 		t.Errorf("CI.RerunBudget = %d, want 5 (explicit trusted copy value)", cfg.CI.RerunBudget)
+	}
+}
+
+func TestCI_CheckScopeCanBeConfiguredAsAll(t *testing.T) {
+	dir := t.TempDir()
+	trustedPath := writeConfigFile(t, dir, "trusted.yaml", `version: 1
+ci:
+  required: true
+  check_scope: all
+`)
+
+	cfg, err := LoadEffectiveConfig(trustedPath, "")
+	if err != nil {
+		t.Fatalf("LoadEffectiveConfig rejected configured CI check scope: %v", err)
+	}
+	if cfg.CI.CheckScope != github.CheckScopeAll {
+		t.Fatalf("CI.CheckScope = %q, want %q", cfg.CI.CheckScope, github.CheckScopeAll)
+	}
+}
+
+func TestCI_CheckScopeDefaultsToRequired(t *testing.T) {
+	dir := t.TempDir()
+	trustedPath := writeConfigFile(t, dir, "trusted.yaml", trustedFixture)
+
+	cfg, err := LoadEffectiveConfig(trustedPath, "")
+	if err != nil {
+		t.Fatalf("LoadEffectiveConfig: %v", err)
+	}
+	if cfg.CI.CheckScope != github.CheckScopeRequired {
+		t.Fatalf("CI.CheckScope = %q, want %q", cfg.CI.CheckScope, github.CheckScopeRequired)
 	}
 }
 

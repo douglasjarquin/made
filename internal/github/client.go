@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/douglasjarquin/made/internal/exec"
@@ -18,9 +18,12 @@ type Client struct {
 	Binary   string
 	ExtraEnv []string
 	Timeout  time.Duration
+
+	authMu    sync.Mutex
+	authUntil time.Time
 }
 
-const maxCheckLogBytes = 64 * 1024
+const authCacheTTL = time.Minute
 
 type AuthError struct {
 	Detail string
@@ -30,6 +33,15 @@ func (e *AuthError) Error() string {
 	return fmt.Sprintf("github: not authenticated: %s", e.Detail)
 }
 
+type RateLimitError struct {
+	Operation string
+	Detail    string
+}
+
+func (e *RateLimitError) Error() string {
+	return fmt.Sprintf("github: rate limit during %s: %s", e.Operation, e.Detail)
+}
+
 type CreatePROptions struct {
 	Title string
 	Body  string
@@ -37,27 +49,25 @@ type CreatePROptions struct {
 	Head  string
 }
 
-type CheckResult struct {
-	Name   string `json:"name"`
-	State  string `json:"state"`
-	Bucket string `json:"bucket"`
-	Link   string `json:"link"`
-	RunID  string `json:"-"`
-}
-
-type ChecksResult struct {
-	Checks   []CheckResult
-	ExitCode int
-}
-
 func (c *Client) AuthStatus(ctx context.Context) error {
+	c.authMu.Lock()
+	defer c.authMu.Unlock()
+	if time.Now().Before(c.authUntil) {
+		return nil
+	}
+
 	res, err := c.run(ctx, "auth", "status")
 	if err != nil {
 		return fmt.Errorf("github: run gh auth status: %w", err)
 	}
 	if res.ExitCode != 0 {
-		return &AuthError{Detail: strings.TrimSpace(string(res.Stderr))}
+		detail := strings.TrimSpace(string(res.Stderr))
+		if isRateLimitDetail(detail) {
+			return &RateLimitError{Operation: "gh auth status", Detail: detail}
+		}
+		return &AuthError{Detail: detail}
 	}
+	c.authUntil = time.Now().Add(authCacheTTL)
 	return nil
 }
 
@@ -134,83 +144,6 @@ func (c *Client) MergeableState(ctx context.Context, prURL string) (string, erro
 	return payload.MergeStateStatus, nil
 }
 
-func (c *Client) PRChecks(ctx context.Context, prURL string) (ChecksResult, error) {
-	if strings.TrimSpace(prURL) == "" {
-		return ChecksResult{}, fmt.Errorf("github: pull request URL is required for checks")
-	}
-	if err := c.AuthStatus(ctx); err != nil {
-		return ChecksResult{}, err
-	}
-
-	res, err := c.run(ctx, "pr", "checks", prURL, "--json", "name,state,bucket,link")
-	if err != nil {
-		return ChecksResult{}, fmt.Errorf("github: run gh pr checks: %w", err)
-	}
-	if len(strings.TrimSpace(string(res.Stdout))) == 0 {
-		return ChecksResult{}, fmt.Errorf("github: gh pr checks returned no JSON (exit %d): %s", res.ExitCode, strings.TrimSpace(string(res.Stderr)))
-	}
-
-	var checks []CheckResult
-	if err := json.Unmarshal(res.Stdout, &checks); err != nil {
-		return ChecksResult{}, fmt.Errorf("github: parse gh pr checks output: %w: stdout=%s", err, res.Stdout)
-	}
-	if len(checks) == 0 {
-		return ChecksResult{}, fmt.Errorf("github: gh pr checks returned an empty check set")
-	}
-	for i := range checks {
-		checks[i].RunID = workflowRunID(checks[i].Link)
-	}
-	if res.ExitCode == 0 {
-		for _, check := range checks {
-			bucket := strings.ToLower(strings.TrimSpace(check.Bucket))
-			if bucket != "pass" && bucket != "skipping" && bucket != "neutral" {
-				return ChecksResult{}, fmt.Errorf("github: gh pr checks exit 0 with non-success bucket %q for %q", check.Bucket, check.Name)
-			}
-		}
-	}
-	return ChecksResult{Checks: checks, ExitCode: res.ExitCode}, nil
-}
-
-func (c *Client) CheckLogs(ctx context.Context, runID string) (string, error) {
-	if err := validateWorkflowRunID(runID); err != nil {
-		return "", err
-	}
-	if err := c.AuthStatus(ctx); err != nil {
-		return "", err
-	}
-
-	res, err := c.run(ctx, "run", "view", runID, "--log")
-	if err != nil {
-		return "", fmt.Errorf("github: run gh run view: %w", err)
-	}
-	if res.ExitCode != 0 {
-		return "", fmt.Errorf("github: gh run view failed: %s", strings.TrimSpace(string(res.Stderr)))
-	}
-	output := res.Stdout
-	if len(output) > maxCheckLogBytes {
-		output = append(append([]byte(nil), output[:maxCheckLogBytes]...), []byte("\n[truncated]\n")...)
-	}
-	return string(output), nil
-}
-
-func (c *Client) RerunCheck(ctx context.Context, runID string) error {
-	if err := validateWorkflowRunID(runID); err != nil {
-		return err
-	}
-	if err := c.AuthStatus(ctx); err != nil {
-		return err
-	}
-
-	res, err := c.run(ctx, "run", "rerun", runID, "--failed")
-	if err != nil {
-		return fmt.Errorf("github: run gh run rerun: %w", err)
-	}
-	if res.ExitCode != 0 {
-		return fmt.Errorf("github: gh run rerun failed: %s", strings.TrimSpace(string(res.Stderr)))
-	}
-	return nil
-}
-
 func (c *Client) run(ctx context.Context, args ...string) (*exec.Result, error) {
 	binary := c.Binary
 	if binary == "" {
@@ -241,18 +174,15 @@ func validateWorkflowRunID(runID string) error {
 	return nil
 }
 
-func workflowRunID(link string) string {
-	parsed, err := url.Parse(link)
-	if err != nil {
-		return ""
+func commandFailure(operation string, res *exec.Result) error {
+	detail := strings.TrimSpace(string(res.Stderr))
+	if isRateLimitDetail(detail) {
+		return &RateLimitError{Operation: operation, Detail: detail}
 	}
-	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
-	for i := 0; i+1 < len(parts); i++ {
-		if parts[i] == "runs" {
-			if _, err := strconv.ParseUint(parts[i+1], 10, 64); err == nil {
-				return parts[i+1]
-			}
-		}
-	}
-	return ""
+	return fmt.Errorf("github: %s failed: %s", operation, detail)
+}
+
+func isRateLimitDetail(detail string) bool {
+	lower := strings.ToLower(detail)
+	return strings.Contains(lower, "rate limit") || strings.Contains(lower, "api rate limit exceeded")
 }
