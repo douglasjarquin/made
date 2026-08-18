@@ -177,7 +177,7 @@ func extractStructuredResponse(data []byte) ([]byte, error) {
 		}
 		switch event.Type {
 		case "error", "turn.failed":
-			return nil, fmt.Errorf("Codex returned a failed event")
+			return nil, fmt.Errorf("codex returned a failed event")
 		case "item.completed":
 			if event.Item.Type == "agent_message" && strings.TrimSpace(event.Item.Text) != "" {
 				response = []byte(event.Item.Text)
