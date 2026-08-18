@@ -119,6 +119,12 @@ and the run resumes.
    reports the PR as open and awaiting merge, without waiting for a human to
    merge it.
 
+The trusted ` + "`.made.yml`" + ` copy may set ` + "`ci.check_scope`" + ` to ` + "`required`" + ` or ` + "`all`" + `; the default is ` + "`required`" + `.
+` + "`ci.rerun_budget`" + ` counts rerun rounds, not individual checks.
+Made polls pending checks without spending a round, reruns each unique failed GitHub Actions workflow run only, and reports bounded evidence by failed check and run.
+External checks are reported by name and link and are never rerun.
+The opt-in disposable-repository smoke contract is ` + "`MADE_GITHUB_SMOKE_REPO`" + ` plus ` + "`MADE_GITHUB_SMOKE_PR_URL`" + `, and ` + "`make release-validation`" + ` runs it when both are set.
+
 ## Outcomes
 
 ` + "`made run status --json <exact-run-id>`" + `'s ` + "`state`" + ` field is one of ` + "`queued`" + `,
