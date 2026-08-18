@@ -38,3 +38,29 @@ func TestReviewSchemaRequiresEveryFindingProperty(t *testing.T) {
 		}
 	}
 }
+
+func TestStrictFindingsRejectsMissingRequiredNullableProperties(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		data string
+	}{
+		{name: "missing patch", data: `{"findings":[{"kind":"ask-user","description":"needs a decision","paths":null}]}`},
+		{name: "missing paths", data: `{"findings":[{"kind":"ask-user","description":"needs a decision","patch":null}]}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := strictFindings([]byte(test.data)); err == nil {
+				t.Fatal("expected missing required property to fail closed")
+			}
+		})
+	}
+}
+
+func TestStrictFindingsAcceptsExplicitNullPropertiesForNonAutoFixes(t *testing.T) {
+	findings, err := strictFindings([]byte(`{"findings":[{"kind":"ask-user","description":"needs a decision","patch":null,"paths":null}]}`))
+	if err != nil {
+		t.Fatalf("strictFindings: %v", err)
+	}
+	if len(findings.Findings) != 1 || findings.Findings[0].Patch != "" || findings.Findings[0].Paths != nil {
+		t.Fatalf("unexpected finding: %+v", findings.Findings)
+	}
+}

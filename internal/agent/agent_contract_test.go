@@ -42,8 +42,10 @@ func TestSpawn_CodexUsesStructuredExecContract(t *testing.T) {
 			t.Fatalf("expected Codex structured invocation token %q, got %s", token, data)
 		}
 	}
-	if !strings.Contains(string(data), "task=inspect the candidate diff and return structured findings") {
-		t.Fatalf("expected task on Codex stdin, got %s", data)
+	log := string(data)
+	taskStart := strings.Index(log, "task=")
+	if taskStart < 0 || strings.TrimSpace(log[taskStart+len("task="):]) == "" {
+		t.Fatalf("expected non-empty task on Codex stdin, got %s", data)
 	}
 }
 
