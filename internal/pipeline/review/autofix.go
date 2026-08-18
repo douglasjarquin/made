@@ -138,7 +138,7 @@ func runGitWithIndex(ctx context.Context, worktreePath, indexPath string, stdin 
 func patchPaths(patch string) ([]string, error) {
 	seen := make(map[string]struct{})
 	var oldPath string
-	for _, line := range strings.Split(patch, "\n") {
+	for line := range strings.SplitSeq(patch, "\n") {
 		if strings.HasPrefix(line, "--- ") {
 			var err error
 			oldPath, err = patchHeaderPath(strings.TrimPrefix(line, "--- "))

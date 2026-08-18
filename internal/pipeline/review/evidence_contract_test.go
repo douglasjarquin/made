@@ -3,7 +3,6 @@ package review_test
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/douglasjarquin/made/internal/agent"
@@ -30,7 +29,7 @@ func TestRun_WritesVersionedReviewEvidenceWithCandidateOutputSHA(t *testing.T) {
 	t.Cleanup(func() { _ = wt.Remove() })
 	scenarioPath := writeScenario(t, agent.Findings{})
 	store := &recordingEvidenceStore{}
-	candidateOutputSHA := strings.Repeat("c", 40)
+	candidateOutputSHA := headSHA(t, wt.Path)
 
 	result, err := review.Run(context.Background(), wt.Path, agent.KindCodex, review.Options{
 		BinaryPath:         bin,

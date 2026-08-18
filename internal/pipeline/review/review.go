@@ -112,9 +112,12 @@ func Run(ctx context.Context, worktreePath string, agentKind agent.Kind, opts Op
 			PendingFindings: pending,
 		}
 	}
-	outputSHA := opts.CandidateOutputSHA
-	if len(postFixSHAs) > 0 {
-		outputSHA = postFixSHAs[len(postFixSHAs)-1]
+	outputSHA, err := gitOutput(ctx, worktreePath, "rev-parse", "--verify", "HEAD^{commit}")
+	if err != nil {
+		return Result{}, fmt.Errorf("review: resolve candidate output SHA: %w", err)
+	}
+	if len(postFixSHAs) > 0 && outputSHA != postFixSHAs[len(postFixSHAs)-1] {
+		return Result{}, fmt.Errorf("review: candidate output SHA %q does not match the last auto-fix commit %q", outputSHA, postFixSHAs[len(postFixSHAs)-1])
 	}
 	if err := writeReviewEvidence(ctx, opts, task, spawned.Response, outputSHA); err != nil {
 		return Result{}, err

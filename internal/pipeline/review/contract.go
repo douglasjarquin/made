@@ -27,10 +27,13 @@ func resolveReviewTask(ctx context.Context, worktreePath string, opts Options) (
 			return agent.ReviewTask{}, fmt.Errorf("resolve trusted base %q: %w", baseBranch, err)
 		}
 	}
+	if opts.CandidateOutputSHA != "" && opts.CandidateOutputSHA != candidateSHA {
+		return agent.ReviewTask{}, fmt.Errorf("candidate output SHA %q does not match the current review candidate %q", opts.CandidateOutputSHA, candidateSHA)
+	}
 	return agent.NewReviewTask(agent.ReviewInput{
 		TrustedBaseBranch:  baseBranch,
 		TrustedBaseSHA:     baseSHA,
 		CandidateInputSHA:  candidateSHA,
-		CandidateOutputSHA: opts.CandidateOutputSHA,
+		CandidateOutputSHA: candidateSHA,
 	})
 }

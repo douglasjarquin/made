@@ -238,11 +238,9 @@ func TestNewWorkFunc_FullPassEndsRunningWithAwaitingMergeMessage(t *testing.T) {
 	rm := daemon.NewRunManager()
 	reviewDecisions := daemon.NewReviewDecisions()
 	runID := rm.NewRunID()
-	expectedOutputSHA := strings.Repeat("d", 40)
 
 	wf := NewWorkFunc(rm, reviewDecisions, nil, runID, f.defaultBranch, branch, Options{
-		ReviewOptions:      cleanReviewOptions(t),
-		CandidateOutputSHA: expectedOutputSHA,
+		ReviewOptions: cleanReviewOptions(t),
 	})
 	submitWorkFunc(t, rm, runID, "repo-full-pass", branch, wf, rc)
 
@@ -261,8 +259,17 @@ func TestNewWorkFunc_FullPassEndsRunningWithAwaitingMergeMessage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read review contract evidence: %v", err)
 	}
-	if !strings.Contains(string(metadata), `"candidate_output_sha":"`+expectedOutputSHA+`"`) {
-		t.Fatalf("review contract evidence omitted submitted candidate output SHA %q: %s", expectedOutputSHA, metadata)
+	var contract struct {
+		CandidateOutputSHA string `json:"candidate_output_sha"`
+	}
+	if err := json.Unmarshal(metadata, &contract); err != nil {
+		t.Fatalf("decode review contract evidence: %v", err)
+	}
+	if len(contract.CandidateOutputSHA) != 40 {
+		t.Fatalf("review contract evidence omitted a full candidate output SHA: %s", metadata)
+	}
+	if err := exec.Command("git", "-C", wt.Path, "cat-file", "-e", contract.CandidateOutputSHA+"^{commit}").Run(); err != nil {
+		t.Fatalf("review contract candidate output SHA %q is not a commit in the prepared worktree: %v", contract.CandidateOutputSHA, err)
 	}
 	assertAllStagesPassed(t, snap.Stages)
 

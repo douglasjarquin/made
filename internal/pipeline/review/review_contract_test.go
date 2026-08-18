@@ -55,3 +55,19 @@ func TestRun_AutoFixDoesNotStageUnrelatedChanges(t *testing.T) {
 		t.Fatalf("unrelated fixture disappeared: %v", err)
 	}
 }
+
+func TestRun_RejectsUnresolvedCandidateOutputSHA(t *testing.T) {
+	bin := agenttest.Build(t)
+	f := setupFixture(t)
+	wt := f.addWorktree(t)
+	t.Cleanup(func() { _ = wt.Remove() })
+
+	_, err := review.Run(context.Background(), wt.Path, agent.KindCodex, review.Options{
+		BinaryPath:         bin,
+		BaseBranch:         "HEAD",
+		CandidateOutputSHA: strings.Repeat("d", 40),
+	})
+	if err == nil || !strings.Contains(err.Error(), "does not match the current review candidate") {
+		t.Fatalf("review.Run error = %v, want unresolved candidate output rejection", err)
+	}
+}
