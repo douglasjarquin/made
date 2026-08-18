@@ -61,7 +61,7 @@ func main() {
 		}
 	case len(args) == 4 && args[0] == "run" && args[1] == "view" && isRunID(args[2]) && args[3] == "--log":
 		failIfScripted()
-		fmt.Fprint(os.Stdout, envOr("FAKE_GH_RUN_LOG", "log line 1\nlog line 2\n"))
+		fmt.Fprint(os.Stdout, runLog())
 	case len(args) == 4 && args[0] == "run" && args[1] == "rerun" && isRunID(args[2]) && args[3] == "--failed":
 		failIfScripted()
 	default:
@@ -79,6 +79,19 @@ func failIfScripted() {
 		fmt.Fprintln(os.Stderr, envOr("FAKE_GH_STDERR", "fakegh: scripted failure"))
 		os.Exit(code)
 	}
+}
+
+func runLog() string {
+	rawSize := os.Getenv("FAKE_GH_RUN_LOG_SIZE")
+	if rawSize == "" {
+		return envOr("FAKE_GH_RUN_LOG", "log line 1\nlog line 2\n")
+	}
+	size, err := strconv.Atoi(rawSize)
+	if err != nil || size < 0 {
+		fmt.Fprintln(os.Stderr, "fakegh: FAKE_GH_RUN_LOG_SIZE must be a non-negative integer")
+		os.Exit(2)
+	}
+	return strings.Repeat("x", size)
 }
 
 func envExitCode(key string) int {

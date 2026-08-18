@@ -15,7 +15,7 @@ import (
 func TestRun_BoundsAggregatedFailureEvidence(t *testing.T) {
 	c := newClient(t, []string{
 		`FAKE_GH_CHECKS_JSON=[{"name":"build","state":"FAILURE","bucket":"fail","link":"https://github.com/example/repo/actions/runs/901"}]`,
-		"FAKE_GH_RUN_LOG=" + strings.Repeat("x", 128*1024),
+		"FAKE_GH_RUN_LOG_SIZE=131072",
 	}, "")
 
 	result, err := ci.Run(context.Background(), c, "https://github.com/example/repo/pull/23", github.CheckScopeRequired, 0, testPollInterval)
