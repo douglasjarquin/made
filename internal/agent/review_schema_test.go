@@ -58,3 +58,27 @@ func TestStrictFindingsAcceptsExplicitNullPropertiesForNonAutoFixes(t *testing.T
 		t.Fatalf("unexpected finding: %+v", findings.Findings)
 	}
 }
+
+func TestFindingMarshalIncludesRequiredNullableProperties(t *testing.T) {
+	data, err := json.Marshal(Findings{Findings: []Finding{{Kind: FindingAskUser, Description: "needs a decision"}}})
+	if err != nil {
+		t.Fatalf("marshal findings: %v", err)
+	}
+	var finding map[string]json.RawMessage
+	var payload struct {
+		Findings []map[string]json.RawMessage `json:"findings"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("unmarshal findings: %v", err)
+	}
+	if len(payload.Findings) != 1 {
+		t.Fatalf("unexpected findings payload: %s", data)
+	}
+	finding = payload.Findings[0]
+	for _, property := range []string{"patch", "paths"} {
+		value, ok := finding[property]
+		if !ok || string(value) != "null" {
+			t.Fatalf("serialized finding %s = %s, want explicit null", property, value)
+		}
+	}
+}
