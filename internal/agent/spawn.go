@@ -160,7 +160,7 @@ func extractStructuredResponse(data []byte) ([]byte, error) {
 	}
 
 	var response []byte
-	for _, line := range bytes.Split(trimmed, []byte{'\n'}) {
+	for line := range bytes.SplitSeq(trimmed, []byte{'\n'}) {
 		line = bytes.TrimSpace(line)
 		if len(line) == 0 {
 			continue

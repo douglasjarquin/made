@@ -2,6 +2,7 @@ package agent
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 )
 
@@ -26,14 +27,7 @@ func TestReviewSchemaRequiresEveryFindingProperty(t *testing.T) {
 		if _, ok := schema.Properties.Findings.Items.Properties[property]; !ok {
 			t.Fatalf("review schema missing finding property %q", property)
 		}
-		found := false
-		for _, required := range schema.Properties.Findings.Items.Required {
-			if required == property {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if !slices.Contains(schema.Properties.Findings.Items.Required, property) {
 			t.Fatalf("review schema does not require finding property %q", property)
 		}
 	}

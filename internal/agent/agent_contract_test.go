@@ -43,8 +43,8 @@ func TestSpawn_CodexUsesStructuredExecContract(t *testing.T) {
 		}
 	}
 	log := string(data)
-	taskStart := strings.Index(log, "task=")
-	if taskStart < 0 || strings.TrimSpace(log[taskStart+len("task="):]) == "" {
+	_, task, ok := strings.Cut(log, "task=")
+	if !ok || strings.TrimSpace(task) == "" {
 		t.Fatalf("expected non-empty task on Codex stdin, got %s", data)
 	}
 }
