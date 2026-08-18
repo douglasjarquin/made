@@ -2,6 +2,9 @@ package ci_test
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -25,5 +28,47 @@ func TestRun_BoundsAggregatedFailureEvidence(t *testing.T) {
 	}
 	if result.OK || len(result.Message) > 256*1024 || !strings.Contains(result.Message, "[truncated]") {
 		t.Fatalf("failure evidence was not bounded: len=%d message suffix=%q", len(result.Message), messageTail)
+	}
+}
+
+func TestRun_BoundsFailureLogFetchesAcrossRuns(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "invocations.log")
+	checks := make([]string, 0, 5)
+	for runID := 901; runID <= 905; runID++ {
+		checks = append(checks, fmt.Sprintf(`{"name":"build-%d","state":"FAILURE","bucket":"fail","link":"https://github.com/example/repo/actions/runs/%d"}`, runID, runID))
+	}
+	c := newClient(t, []string{
+		"FAKE_GH_CHECKS_JSON=[" + strings.Join(checks, ",") + "]",
+		"FAKE_GH_RUN_LOG=workflow failed\n",
+	}, logPath)
+
+	result, err := ci.Run(context.Background(), c, "https://github.com/example/repo/pull/24", github.CheckScopeRequired, 0, testPollInterval)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read invocation log: %v", err)
+	}
+	if got := strings.Count(string(data), "run view "); got != 4 {
+		t.Fatalf("expected at most four bounded log fetches, got %d, log:\n%s", got, data)
+	}
+	if !strings.Contains(result.Message, "905") || !strings.Contains(result.Message, "[log excerpt omitted after evidence limit]") {
+		t.Fatalf("bounded evidence omitted the skipped run identity or marker: %q", result.Message)
+	}
+}
+
+func TestRun_RedactsSecretsFromFailureEvidence(t *testing.T) {
+	c := newClient(t, []string{
+		`FAKE_GH_CHECKS_JSON=[{"name":"build","state":"FAILURE","bucket":"fail","link":"https://github.com/example/repo/actions/runs/906"}]`,
+		"FAKE_GH_RUN_LOG=token=workflow-secret\n",
+	}, "")
+
+	result, err := ci.Run(context.Background(), c, "https://github.com/example/repo/pull/25", github.CheckScopeRequired, 0, testPollInterval)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if strings.Contains(result.Message, "workflow-secret") || !strings.Contains(result.Message, "token=[REDACTED]") {
+		t.Fatalf("failure evidence did not redact the secret: %q", result.Message)
 	}
 }

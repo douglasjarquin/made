@@ -2,13 +2,19 @@ package ci
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
+	"github.com/douglasjarquin/made/internal/evidence"
 	"github.com/douglasjarquin/made/internal/github"
 )
 
 const maxFailureEvidenceBytes = 256 * 1024
+
+const maxFailureLogRuns = 4
+
+const omittedFailureLog = "[log excerpt omitted after evidence limit]"
 
 type FailureEvidence struct {
 	CheckNames    []string
@@ -108,7 +114,7 @@ func collectFailureEvidence(checks []github.CheckResult, logs map[string]string)
 				Bucket:        check.Bucket,
 				DetailsLink:   check.DetailsLink,
 				WorkflowRunID: check.WorkflowRunID,
-				Excerpt:       logs[check.WorkflowRunID],
+				Excerpt:       evidence.RedactString(logs[check.WorkflowRunID]),
 			})
 			continue
 		}
@@ -123,10 +129,8 @@ func collectFailureEvidence(checks []github.CheckResult, logs map[string]string)
 }
 
 func appendUnique(values []string, value string) []string {
-	for _, existing := range values {
-		if existing == value {
-			return values
-		}
+	if slices.Contains(values, value) {
+		return values
 	}
 	return append(values, value)
 }

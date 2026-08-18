@@ -26,7 +26,7 @@ func (c *Client) PRChecks(ctx context.Context, prURL string, scope CheckScope) (
 	}
 	if scope == CheckScopeRequired {
 		for i := range checks.Checks {
-			enrichCheck(&checks.Checks[i], true, true)
+			enrichCheck(&checks.Checks[i], true, true, prURL)
 		}
 		return checks, nil
 	}
@@ -37,7 +37,7 @@ func (c *Client) PRChecks(ctx context.Context, prURL string, scope CheckScope) (
 	}
 	annotateRequired(checks.Checks, required.Checks)
 	for i := range checks.Checks {
-		enrichCheck(&checks.Checks[i], checks.Checks[i].Required, true)
+		enrichCheck(&checks.Checks[i], checks.Checks[i].Required, true, prURL)
 	}
 	return checks, nil
 }

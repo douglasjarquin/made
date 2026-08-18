@@ -111,7 +111,11 @@ func Run(ctx context.Context, ghClient *github.Client, prURL string, scope githu
 
 func fetchFailureLogs(ctx context.Context, ghClient *github.Client, failures []github.CheckResult) (map[string]string, error) {
 	logs := make(map[string]string)
-	for _, runID := range rerunnableRunIDs(failures) {
+	for index, runID := range rerunnableRunIDs(failures) {
+		if index >= maxFailureLogRuns {
+			logs[runID] = omittedFailureLog
+			continue
+		}
 		excerpt, err := ghClient.CheckLogs(ctx, runID)
 		if err != nil {
 			return nil, err

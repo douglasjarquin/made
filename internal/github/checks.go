@@ -34,10 +34,10 @@ type ChecksResult struct {
 	ExitCode int
 }
 
-func enrichCheck(check *CheckResult, required, inScope bool) {
+func enrichCheck(check *CheckResult, required, inScope bool, prURL string) {
 	check.Required = required
 	check.InScope = inScope
-	check.ActionsBacked, check.WorkflowRunID = workflowRunOwnership(check.DetailsLink)
+	check.ActionsBacked, check.WorkflowRunID = workflowRunOwnership(check.DetailsLink, prURL)
 	check.Rerunnable = check.ActionsBacked && check.WorkflowRunID != ""
 }
 
@@ -63,28 +63,43 @@ func sameCheck(left, right CheckResult) bool {
 	return left.DetailsLink == right.DetailsLink
 }
 
-func workflowRunOwnership(link string) (bool, string) {
+func workflowRunOwnership(link, prURL string) (bool, string) {
+	prHost, prRepo, ok := repositoryPath(prURL)
+	if !ok || prHost != "github.com" {
+		return false, ""
+	}
+	linkHost, linkRepo, ok := repositoryPath(link)
+	if !ok || linkHost != prHost || linkRepo != prRepo {
+		return false, ""
+	}
+
 	parsed, err := url.Parse(link)
 	if err != nil {
 		return false, ""
 	}
-	host := strings.ToLower(parsed.Hostname())
-	if host != "github.com" && host != "www.github.com" {
+	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	if len(parts) < 5 || parts[2] != "actions" || parts[3] != "runs" {
 		return false, ""
 	}
-	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
-	for i := 0; i+1 < len(parts); i++ {
-		if parts[i] != "actions" || parts[i+1] != "runs" {
-			continue
-		}
-		if i+2 >= len(parts) {
-			return true, ""
-		}
-		runID := parts[i+2]
-		if _, err := strconv.ParseUint(runID, 10, 64); err != nil {
-			return true, ""
-		}
-		return true, runID
+	runID := parts[4]
+	if _, err := strconv.ParseUint(runID, 10, 64); err != nil {
+		return true, ""
 	}
-	return false, ""
+	return true, runID
+}
+
+func repositoryPath(raw string) (string, string, bool) {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "", "", false
+	}
+	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	if parsed.Hostname() == "" || len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host == "www.github.com" {
+		host = "github.com"
+	}
+	return host, strings.ToLower(strings.Join(parts[:2], "/")), true
 }
