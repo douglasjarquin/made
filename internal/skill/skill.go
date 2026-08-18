@@ -39,8 +39,8 @@ const body = `
 ` + "`made`" + ` is a local validation-gate daemon: pushing a branch to its bare gate
 repo runs a 9-stage pipeline (Intent, Rebase, Review, Test, Document, Lint,
 Push, PR, CI) against the change before it ever reaches the real remote. It is
-GitHub-only (via ` + "`gh`" + `) and drives Claude or Codex as the pipeline's review
-and document agent. You drive it through the ` + "`made`" + ` CLI, which talks to a
+GitHub-only (via ` + "`gh`" + `) and drives Codex as the pipeline's review and
+document agent. You drive it through the ` + "`made`" + ` CLI, which talks to a
 per-user background daemon over a unix socket and reports state as JSON.
 
 ## Two ways to invoke

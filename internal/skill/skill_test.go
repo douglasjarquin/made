@@ -61,3 +61,13 @@ func TestBodyDoesNotClaimPushBlocks(t *testing.T) {
 		t.Error(`skill.Markdown() contains "blocks until": the pipeline is asynchronous, a push must not be described as blocking until a terminal state`)
 	}
 }
+
+func TestBodyAdvertisesOnlySupportedCodexAgent(t *testing.T) {
+	body := skill.Markdown()
+	if strings.Contains(strings.ToLower(body), "claude") {
+		t.Fatalf("generated skill advertises unsupported Claude support")
+	}
+	if !strings.Contains(body, "Codex") {
+		t.Fatalf("generated skill omitted supported Codex review agent")
+	}
+}

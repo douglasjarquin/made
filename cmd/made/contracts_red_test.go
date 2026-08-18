@@ -22,6 +22,7 @@ func TestCapabilitiesJSONExposesStructuredRunContract(t *testing.T) {
 		SchemaVersion   int      `json:"schema_version"`
 		ProtocolVersion int      `json:"protocol_version"`
 		Commands        []string `json:"commands"`
+		Agents          []string `json:"agents"`
 	}
 	if err := json.Unmarshal(readOutputFile(t, stdoutFile), &payload); err != nil {
 		t.Fatalf("capabilities output is not JSON: %v", err)
@@ -39,6 +40,9 @@ func TestCapabilitiesJSONExposesStructuredRunContract(t *testing.T) {
 		if !found {
 			t.Fatalf("capabilities missing command %q: %+v", want, payload.Commands)
 		}
+	}
+	if len(payload.Agents) != 1 || payload.Agents[0] != "codex" {
+		t.Fatalf("capabilities agents = %v, want only codex", payload.Agents)
 	}
 	_ = stdout
 	_ = stderr

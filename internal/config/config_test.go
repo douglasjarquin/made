@@ -32,10 +32,10 @@ test:
 commands:
   test: trusted-test-cmd
   lint: trusted-lint-cmd
-agent: trusted-agent
+agent: codex
 agents:
-  - trusted-agent-1
-  - trusted-agent-2
+  - codex
+  - codex
 allow_repo_commands: false
 `
 
@@ -56,9 +56,9 @@ test:
 commands:
   test: trusted-test-cmd
   lint: trusted-lint-cmd
-agent: trusted-agent
+agent: codex
 agents:
-  - trusted-agent-1
+  - codex
 allow_repo_commands: true
 `
 
@@ -79,9 +79,9 @@ test:
 commands:
   test: pushed-test-cmd
   lint: pushed-lint-cmd
-agent: pushed-agent
+agent: codex
 agents:
-  - pushed-agent-1
+  - codex
 allow_repo_commands: true
 `
 
@@ -136,10 +136,10 @@ func TestLoadEffectiveConfig_RuleB_CommandsTrustedByDefault(t *testing.T) {
 	if cfg.Commands.Lint != "trusted-lint-cmd" {
 		t.Errorf("Commands.Lint = %q, want trusted copy's value %q", cfg.Commands.Lint, "trusted-lint-cmd")
 	}
-	if cfg.Agent != "trusted-agent" {
-		t.Errorf("Agent = %q, want trusted copy's value %q", cfg.Agent, "trusted-agent")
+	if cfg.Agent != "codex" {
+		t.Errorf("Agent = %q, want trusted copy's value %q", cfg.Agent, "codex")
 	}
-	if len(cfg.Agents) != 2 || cfg.Agents[0] != "trusted-agent-1" {
+	if len(cfg.Agents) != 2 || cfg.Agents[0] != "codex" {
 		t.Errorf("Agents = %v, want trusted copy's value", cfg.Agents)
 	}
 }
@@ -163,10 +163,10 @@ func TestLoadEffectiveConfig_RuleB_PushedHonoredWhenAllowRepoCommands(t *testing
 	if cfg.Commands.Lint != "pushed-lint-cmd" {
 		t.Errorf("Commands.Lint = %q, want pushed copy's value %q", cfg.Commands.Lint, "pushed-lint-cmd")
 	}
-	if cfg.Agent != "pushed-agent" {
-		t.Errorf("Agent = %q, want pushed copy's value %q", cfg.Agent, "pushed-agent")
+	if cfg.Agent != "codex" {
+		t.Errorf("Agent = %q, want pushed copy's value %q", cfg.Agent, "codex")
 	}
-	if len(cfg.Agents) != 1 || cfg.Agents[0] != "pushed-agent-1" {
+	if len(cfg.Agents) != 1 || cfg.Agents[0] != "codex" {
 		t.Errorf("Agents = %v, want pushed copy's value", cfg.Agents)
 	}
 
