@@ -1,4 +1,4 @@
-// Command fakeagent is a deterministic test double for the Claude/Codex CLIs:
+// Command fakeagent is a deterministic test double for the Codex CLI:
 // it never calls a real model, it just replays a scripted findings payload so
 // internal/agent and internal/pipeline/review can be tested without network
 // access or API keys. Scenario selection and invocation logging are both
@@ -9,6 +9,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -58,29 +59,26 @@ func main() {
 		os.Exit(1)
 	}
 
-	args := os.Args[1:]
-	lastMessagePath := args[5]
-	if err := os.WriteFile(lastMessagePath, data, 0o600); err != nil {
-		fmt.Fprintf(os.Stderr, "fakeagent: write structured output %s: %v\n", lastMessagePath, err)
+	if _, err := os.Stdout.Write(data); err != nil {
+		fmt.Fprintf(os.Stderr, "fakeagent: write structured output: %v\n", err)
 		os.Exit(1)
 	}
-	_, _ = fmt.Fprintln(os.Stdout, `{"type":"turn.completed"}`)
 }
 
 const agentKindCodex = "codex"
 
 func validateInvocation(args []string) error {
-	if len(args) != 12 {
-		return fmt.Errorf("want 12 arguments, got %d", len(args))
+	if len(args) != 7 {
+		return fmt.Errorf("want 7 arguments, got %d", len(args))
 	}
-	if args[0] != "exec" || args[1] != "--json" || args[2] != "--output-schema" || args[4] != "--output-last-message" || args[6] != "--sandbox" || args[7] != "read-only" || args[8] != "--ephemeral" || args[9] != "-C" {
+	if args[0] != "exec" || args[1] != "--cd" || args[3] != "--json" || args[4] != "--output-schema" || args[6] != "-" {
 		return fmt.Errorf("expected codex exec structured flags, got %v", args)
 	}
-	if filepath.IsAbs(args[3]) == false || filepath.IsAbs(args[5]) == false {
-		return fmt.Errorf("schema and output paths must be absolute")
+	if filepath.IsAbs(args[2]) == false || filepath.IsAbs(args[5]) == false {
+		return fmt.Errorf("review and schema paths must be absolute")
 	}
-	if args[10] == "" || args[11] == "" {
-		return fmt.Errorf("worktree and task are required")
+	if args[2] == "" {
+		return fmt.Errorf("review worktree is required")
 	}
 	return nil
 }
@@ -93,4 +91,6 @@ func logInvocation(logPath string) {
 	defer f.Close()
 	cwd, _ := os.Getwd()
 	fmt.Fprintf(f, "invoked: args=%v cwd=%s\n", os.Args, cwd)
+	task, _ := io.ReadAll(io.LimitReader(os.Stdin, 1<<20))
+	fmt.Fprintf(f, "task=%s\n", task)
 }

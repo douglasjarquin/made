@@ -121,13 +121,3 @@ func TestSpawn_LogsInvocation(t *testing.T) {
 		t.Fatalf("expected invocation log entry, got %q", data)
 	}
 }
-
-func TestSpawn_RejectsUnsupportedClaudeContract(t *testing.T) {
-	_, err := agent.Spawn(context.Background(), agent.KindClaude, agent.SpawnParams{
-		WorktreePath: agentWorktree(t),
-		BinaryPath:   agenttest.Build(t),
-	})
-	if err == nil || !strings.Contains(err.Error(), "structured task contract is unsupported") {
-		t.Fatalf("expected explicit unsupported Claude error, got %v", err)
-	}
-}

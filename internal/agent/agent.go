@@ -3,14 +3,15 @@ package agent
 type Kind string
 
 const (
-	KindClaude Kind = "claude"
-	KindCodex  Kind = "codex"
+	KindCodex Kind = "codex"
 )
+
+func SupportedKinds() []Kind {
+	return []Kind{KindCodex}
+}
 
 func (k Kind) binaryName() string {
 	switch k {
-	case KindClaude:
-		return "claude"
 	case KindCodex:
 		return "codex"
 	default:

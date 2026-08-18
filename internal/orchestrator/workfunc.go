@@ -251,7 +251,11 @@ func (c *chain) reviewStage() error {
 		return fmt.Errorf("orchestrator: resolve agent kind: %w", err)
 	}
 
-	result, err := review.Run(c.ctx, c.rc.Worktree.Path, agentKind, c.opts.ReviewOptions)
+	reviewOptions := c.opts.ReviewOptions
+	reviewOptions.BaseBranch = c.defaultBranch
+	reviewOptions.Evidence = c.rc.Evidence
+	reviewOptions.EvidenceRunID = c.runID
+	result, err := review.Run(c.ctx, c.rc.Worktree.Path, agentKind, reviewOptions)
 	if err != nil {
 		return err
 	}

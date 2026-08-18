@@ -18,7 +18,7 @@ const (
 	reviewPreparationLimit   = 1 << 20
 )
 
-func prepareReviewWorktree(ctx context.Context, source string) (string, []string, []string, func(), error) {
+func prepareReviewWorktree(ctx context.Context, source, trustedBaseSHA string) (string, []string, []string, func(), error) {
 	source, err := filepath.Abs(source)
 	if err != nil {
 		return "", nil, nil, nil, fmt.Errorf("resolve source worktree: %w", err)
@@ -33,6 +33,18 @@ func prepareReviewWorktree(ctx context.Context, source string) (string, []string
 	head := strings.TrimSpace(string(headResult.Stdout))
 	if head == "" {
 		return "", nil, nil, nil, fmt.Errorf("read source HEAD returned an empty SHA")
+	}
+	if trustedBaseSHA != "" {
+		if err := validateReviewSHA("trusted base SHA", trustedBaseSHA); err != nil {
+			return "", nil, nil, nil, err
+		}
+		baseResult, err := runReviewGit(ctx, source, "cat-file", "-e", trustedBaseSHA+"^{commit}")
+		if err != nil {
+			return "", nil, nil, nil, fmt.Errorf("inspect source trusted base: %w", err)
+		}
+		if baseResult.ExitCode != 0 {
+			return "", nil, nil, nil, fmt.Errorf("trusted base %s is unavailable in source repository", trustedBaseSHA)
+		}
 	}
 	commonResult, err := runReviewGit(ctx, source, "rev-parse", "--git-common-dir")
 	if err != nil {
@@ -61,6 +73,17 @@ func prepareReviewWorktree(ctx context.Context, source string) (string, []string
 	if cloneResult.ExitCode != 0 {
 		cleanupTemp()
 		return "", nil, nil, nil, commandFailure("clone review worktree", cloneResult)
+	}
+	if trustedBaseSHA != "" {
+		baseResult, err := runReviewGit(ctx, reviewPath, "cat-file", "-e", trustedBaseSHA+"^{commit}")
+		if err != nil {
+			cleanupTemp()
+			return "", nil, nil, nil, fmt.Errorf("inspect review trusted base: %w", err)
+		}
+		if baseResult.ExitCode != 0 {
+			cleanupTemp()
+			return "", nil, nil, nil, fmt.Errorf("trusted base %s is unavailable in detached review repository", trustedBaseSHA)
+		}
 	}
 	checkoutResult, err := runReviewGit(ctx, reviewPath, "checkout", "--detach", "--quiet", head)
 	if err != nil {
