@@ -13,6 +13,7 @@ const (
 	EventStageFinished EventKind = "stage_finished"
 	EventRunCompleted  EventKind = "run_completed"
 	EventRunFailed     EventKind = "run_failed"
+	EventRunCanceled   EventKind = "run_canceled"
 )
 
 type Event struct {

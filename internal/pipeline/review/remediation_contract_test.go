@@ -11,7 +11,7 @@ import (
 	"github.com/douglasjarquin/made/internal/pipeline/review"
 )
 
-func TestRun_AutoFixRequiresCleanStateBeforeApplyingReturnedPatch(t *testing.T) {
+func TestRun_AutoFixPreservesUnrelatedChanges(t *testing.T) {
 	bin := agenttest.Build(t)
 	f := setupFixture(t)
 	wt := f.addWorktree(t)
@@ -26,11 +26,21 @@ func TestRun_AutoFixRequiresCleanStateBeforeApplyingReturnedPatch(t *testing.T) 
 		{Kind: agent.FindingAutoFixable, Description: "clean-state fix", Patch: patch, Paths: []string{"reviewed.txt"}},
 	}})
 
-	if _, err := review.Run(t.Context(), wt.Path, agent.KindCodex, review.Options{
+	result, err := review.Run(t.Context(), wt.Path, agent.KindCodex, review.Options{
 		BinaryPath: bin,
 		ExtraEnv:   []string{"FAKE_AGENT_SCENARIO=" + scenarioPath},
-	}); err == nil {
-		t.Fatal("review auto-fix mutated a dirty worktree instead of refusing before apply")
+	})
+	if err != nil {
+		t.Fatalf("review auto-fix: %v", err)
+	}
+	if len(result.AutoFixed) != 1 {
+		t.Fatalf("expected one auto-fix commit, got %+v", result)
+	}
+	if status := run(t, wt.Path, "status", "--porcelain"); !strings.Contains(status, "unrelated.txt") {
+		t.Fatalf("review auto-fix lost unrelated work: %q", status)
+	}
+	if _, err := os.Stat(dirtyPath); err != nil {
+		t.Fatalf("unrelated work disappeared: %v", err)
 	}
 }
 

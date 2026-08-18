@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -216,13 +217,22 @@ func TestStatusJSON_ReflectsRealStageUpdate(t *testing.T) {
 		t.Fatalf("output is not valid JSON: %v\noutput: %s", err, out)
 	}
 
-	if len(report.Stages) != len(wantStages) {
-		t.Fatalf("Stages = %+v, want %+v", report.Stages, wantStages)
+	if len(report.Stages) != len(pipelineStages) {
+		t.Fatalf("Stages = %+v, want %d ordered stages", report.Stages, len(pipelineStages))
 	}
 	for i, want := range wantStages {
-		if report.Stages[i] != StageResult(want) {
+		if !reflect.DeepEqual(report.Stages[i], StageResult(want)) {
 			t.Errorf("Stages[%d] = %+v, want %+v", i, report.Stages[i], want)
 		}
+	}
+	for i := len(wantStages); i < len(pipelineStages); i++ {
+		want := StageResult{Name: pipelineStages[i], Result: StageResultPending}
+		if !reflect.DeepEqual(report.Stages[i], want) {
+			t.Errorf("Stages[%d] = %+v, want %+v", i, report.Stages[i], want)
+		}
+	}
+	if report.CurrentStage != "review" {
+		t.Fatalf("CurrentStage = %q, want review", report.CurrentStage)
 	}
 
 	if len(report.PendingFindings) != len(wantFindings) {

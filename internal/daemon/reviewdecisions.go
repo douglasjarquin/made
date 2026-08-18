@@ -2,6 +2,8 @@ package daemon
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 )
 
@@ -10,18 +12,23 @@ const (
 	ReviewRejected = "rejected"
 )
 
+var ErrDecisionAlreadyRecorded = errors.New("daemon: review decision already recorded")
+
 type reviewKey struct {
 	RunID string
 	Stage string
 }
 
 // ReviewDecisions lives alongside RunManager because a decision only ever
-// applies to one (run, stage) pair, making it per-run state that the versioned
-// review.decide handler and orchestrator's WorkFunc share.
+// applies to one (run, stage) pair, making it per-run state that both the
+// review.decide/review.decision RPC handlers and the orchestrator's WorkFunc
+// need to reach from their separate packages.
 type ReviewDecisions struct {
 	mu      sync.Mutex
 	entries map[reviewKey]string
 	waiters map[reviewKey][]chan string
+	persist func(runID, stage, decision string) error
+	manager *RunManager
 }
 
 func NewReviewDecisions() *ReviewDecisions {
@@ -31,20 +38,81 @@ func NewReviewDecisions() *ReviewDecisions {
 	}
 }
 
+func NewReviewDecisionsForManager(rm *RunManager) *ReviewDecisions {
+	d := NewReviewDecisions()
+	d.persist = rm.UpdateDecision
+	d.manager = rm
+	return d
+}
+
 // Set records a decision for (runID, stage) and wakes any goroutine blocked
 // in Wait on that exact key.
-func (d *ReviewDecisions) Set(runID, stage, decision string) {
+func (d *ReviewDecisions) Set(runID, stage, decision string) error {
 	key := reviewKey{RunID: runID, Stage: stage}
+	if _, exists := d.Get(runID, stage); exists {
+		return fmt.Errorf("%w for %s/%s", ErrDecisionAlreadyRecorded, runID, stage)
+	}
+	if d.manager != nil {
+		snapshot, ok := d.manager.Snapshot(runID)
+		if !ok {
+			return fmt.Errorf("daemon: cannot decide unknown run %q", runID)
+		}
+		if snapshot.Status != RunRunning && snapshot.Status != RunAwaitingReview {
+			return fmt.Errorf("daemon: run %q is %s, not awaiting a review decision", runID, snapshot.Status)
+		}
+		pending := false
+		for _, finding := range snapshot.PendingFindings {
+			if finding.Stage == stage {
+				pending = true
+				break
+			}
+		}
+		if !pending {
+			return fmt.Errorf("daemon: run %q has no pending %s finding", runID, stage)
+		}
+	}
 
 	d.mu.Lock()
+	if _, exists := d.entries[key]; exists {
+		d.mu.Unlock()
+		return fmt.Errorf("%w for %s/%s", ErrDecisionAlreadyRecorded, runID, stage)
+	}
 	d.entries[key] = decision
 	waiters := d.waiters[key]
+	if d.persist != nil {
+		if err := d.persist(runID, stage, decision); err != nil {
+			delete(d.entries, key)
+			d.mu.Unlock()
+			return fmt.Errorf("daemon: persist review decision: %w", err)
+		}
+	}
 	delete(d.waiters, key)
 	d.mu.Unlock()
 
 	for _, ch := range waiters {
 		ch <- decision
 	}
+	return nil
+}
+
+func (d *ReviewDecisions) Get(runID, stage string) (string, bool) {
+	d.mu.Lock()
+	decision, ok := d.entries[reviewKey{RunID: runID, Stage: stage}]
+	d.mu.Unlock()
+	if ok || d.persist == nil {
+		return decision, ok
+	}
+	if d.manager != nil {
+		if snapshot, found := d.manager.Snapshot(runID); found {
+			decision, ok = snapshot.Decisions[stage]
+			if ok {
+				d.mu.Lock()
+				d.entries[reviewKey{RunID: runID, Stage: stage}] = decision
+				d.mu.Unlock()
+			}
+		}
+	}
+	return decision, ok
 }
 
 // Wait blocks until a decision is recorded for (runID, stage) via Set, or
@@ -52,6 +120,9 @@ func (d *ReviewDecisions) Set(runID, stage, decision string) {
 // decision is already recorded.
 func (d *ReviewDecisions) Wait(ctx context.Context, runID, stage string) (string, error) {
 	key := reviewKey{RunID: runID, Stage: stage}
+	if decision, ok := d.Get(runID, stage); ok {
+		return decision, nil
+	}
 
 	d.mu.Lock()
 	if decision, ok := d.entries[key]; ok {

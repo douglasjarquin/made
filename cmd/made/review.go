@@ -45,10 +45,9 @@ func reviewDecideRunHandler(rm *daemon.RunManager, store *daemon.ReviewDecisions
 		if _, ok := rm.Snapshot(p.RunID); !ok {
 			return nil, fmt.Errorf("review.decide: exact run_id %q was not found", p.RunID)
 		}
-		if err := rm.SetDecision(p.RunID, p.Stage, p.Decision); err != nil {
+		if err := store.Set(p.RunID, p.Stage, p.Decision); err != nil {
 			return nil, err
 		}
-		store.Set(p.RunID, p.Stage, p.Decision)
 		return reviewDecisionReport{
 			SchemaVersion: 1, ProtocolVersion: api.Version,
 			RunID: p.RunID, Stage: p.Stage, Decision: p.Decision,

@@ -128,11 +128,11 @@ func startDaemon(ctx context.Context, home, lockPath string, idle time.Duration,
 		done <- err
 		return rm, done
 	}
-	reviewStore := daemon.NewReviewDecisions()
+	reviewStore := daemon.NewReviewDecisionsForManager(rm)
 	admission := &sync.Mutex{}
 	runCtx, cancelRun := context.WithCancel(ctx)
 	srv := api.NewServer(socketPath)
-	registerDaemonHandlers(srv, rm, reviewStore, spool, cancelRun, admission)
+	registerDaemonHandlers(srv, rm, reviewStore, spool, cancelRun, home, admission)
 
 	done := make(chan error, 1)
 
@@ -260,14 +260,14 @@ func isTerminalRunStatus(s daemon.RunStatus) bool {
 
 const debugHandlersEnv = "MADE_DEBUG_HANDLERS"
 
-func registerDaemonHandlers(srv *api.Server, rm *daemon.RunManager, store *daemon.ReviewDecisions, spool *daemon.GateSpool, cancel context.CancelFunc, admission ...*sync.Mutex) {
+func registerDaemonHandlers(srv *api.Server, rm *daemon.RunManager, store *daemon.ReviewDecisions, spool *daemon.GateSpool, cancel context.CancelFunc, home string, admission ...*sync.Mutex) {
 	srv.Handle("run.status", runStatusHandler(rm))
 	srv.Handle("run.submit", runSubmitHandler(rm, store, spool, admission...))
 	srv.Handle("run.list", runListHandler(rm))
 	srv.Handle("run.cancel", runCancelHandler(rm))
 	srv.Handle("review.decide", reviewDecideRunHandler(rm, store))
 	srv.Handle("daemon.shutdown", daemonShutdownHandler(rm, spool, cancel, admission...))
-	srv.Handle("gate.admitPush", gateAdmitPushHandler())
+	srv.Handle("gate.admitPush", gateAdmitPushHandler(home))
 	srv.Handle("gate.notifyPush", gateNotifyPushHandler(rm, store, spool, admission...))
 	if os.Getenv(debugHandlersEnv) == "1" {
 		srv.Handle("debug.submitCancellableRun", debugSubmitCancellableRunHandler(rm))
@@ -290,7 +290,7 @@ type gateAdmitPushResult struct {
 // daemon recognizes" - a real, valid bare repo on disk. It deliberately does
 // not touch RunManager; creating a run is the orchestrator's job, not
 // admission's.
-func gateAdmitPushHandler() api.HandlerFunc {
+func gateAdmitPushHandler(home string) api.HandlerFunc {
 	return func(_ context.Context, params json.RawMessage) (any, error) {
 		var p gateAdmitPushParams
 		if err := decodeStrictParams(params, &p); err != nil {
@@ -299,11 +299,40 @@ func gateAdmitPushHandler() api.HandlerFunc {
 		if p.GatePath == "" {
 			return nil, fmt.Errorf("gate.admitPush: gate_path is required")
 		}
+		if err := validateManagedGatePath(home, p.GatePath); err != nil {
+			return nil, fmt.Errorf("gate.admitPush: %w", err)
+		}
 		if err := validateBareGateRepo(p.GatePath); err != nil {
 			return nil, fmt.Errorf("gate.admitPush: %w", err)
 		}
 		return gateAdmitPushResult{OK: true}, nil
 	}
+}
+
+func validateManagedGatePath(home, gatePath string) error {
+	homeResolved, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		return fmt.Errorf("resolve Made home: %w", err)
+	}
+	gateResolved, err := filepath.EvalSymlinks(gatePath)
+	if err != nil {
+		return fmt.Errorf("resolve gate path: %w", err)
+	}
+	rel, err := filepath.Rel(homeResolved, gateResolved)
+	if err != nil {
+		return fmt.Errorf("relate gate to Made home: %w", err)
+	}
+	parts := strings.Split(rel, string(filepath.Separator))
+	if len(parts) != 3 || parts[0] != "gates" || parts[2] != "gate.git" {
+		return fmt.Errorf("gate path must be a managed MADE_HOME/gates/<hash>/gate.git path")
+	}
+	if len(parts[1]) != 64 || !hexString(parts[1]) {
+		return fmt.Errorf("gate path hash is not lowercase hexadecimal")
+	}
+	if filepath.Clean(gateResolved) != filepath.Clean(filepath.Join(homeResolved, rel)) {
+		return fmt.Errorf("gate path must not contain symlinks")
+	}
+	return nil
 }
 
 func validateBareGateRepo(path string) error {
@@ -337,13 +366,14 @@ func validateBareGateRepo(path string) error {
 const gateNotifyPushDefaultBranchTimeout = 10 * time.Second
 
 type gateNotifyPushParams struct {
-	GatePath  string `json:"gate_path"`
-	OldSHA    string `json:"old_sha"`
-	NewSHA    string `json:"new_sha"`
-	Ref       string `json:"ref"`
-	RunID     string `json:"run_id,omitempty"`
-	OutputSHA string `json:"output_sha,omitempty"`
-	Replay    bool   `json:"replay,omitempty"`
+	GatePath     string `json:"gate_path"`
+	OldSHA       string `json:"old_sha"`
+	NewSHA       string `json:"new_sha"`
+	Ref          string `json:"ref"`
+	RunID        string `json:"run_id,omitempty"`
+	OutputSHA    string `json:"output_sha,omitempty"`
+	SubmissionID string `json:"submission_id,omitempty"`
+	Replay       bool   `json:"replay,omitempty"`
 }
 
 type gateNotifyPushResult struct {
@@ -453,7 +483,14 @@ func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.Review
 				orchestrator.NewWorkFunc(rm, reviewDecisions, emit, runID, defaultBranch, branch, orchestrator.Options{}))
 		}
 
-		snapshot, err := rm.SubmitWithMetadata(runID, repo, branch, p.NewSHA, p.OutputSHA, work)
+		submissionID := p.SubmissionID
+		if submissionID == "" {
+			submissionID = p.Ref + "@" + p.NewSHA
+		}
+		snapshot, err := rm.SubmitSubmission(daemon.RunSubmission{
+			ID: runID, Repo: repo, Branch: branch, Ref: p.Ref, OldSHA: p.OldSHA,
+			InputSHA: p.NewSHA, OutputSHA: p.OutputSHA, SubmissionID: submissionID, GatePath: p.GatePath,
+		}, work)
 		if err != nil {
 			return nil, fmt.Errorf("gate.notifyPush: submit run: %w", err)
 		}

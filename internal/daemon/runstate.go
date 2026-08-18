@@ -1,29 +1,16 @@
 package daemon
 
-import "fmt"
-
-func cloneSnapshot(snapshot RunSnapshot) RunSnapshot {
-	snapshot.Errors = append([]string(nil), snapshot.Errors...)
-	snapshot.Findings = append([]RunFinding(nil), snapshot.Findings...)
-	for i := range snapshot.Findings {
-		snapshot.Findings[i].Paths = append([]string(nil), snapshot.Findings[i].Paths...)
-	}
-	snapshot.Stages = append([]StageResult(nil), snapshot.Stages...)
-	snapshot.PendingFindings = append([]AskUserFinding(nil), snapshot.PendingFindings...)
-	snapshot.SubmissionEvents = append([]SubmissionEvent(nil), snapshot.SubmissionEvents...)
-	if snapshot.Decisions != nil {
-		original := snapshot.Decisions
-		snapshot.Decisions = make(map[string]string, len(original))
-		for key, value := range original {
-			snapshot.Decisions[key] = value
-		}
-	}
-	return snapshot
-}
+import (
+	"fmt"
+	"slices"
+)
 
 type StageResult struct {
-	Name   string `json:"name"`
-	Result string `json:"result"`
+	Name         string   `json:"name"`
+	Result       string   `json:"result"`
+	Message      string   `json:"message,omitempty"`
+	Error        string   `json:"error,omitempty"`
+	EvidenceRefs []string `json:"evidence_refs,omitempty"`
 }
 
 type AskUserFinding struct {
@@ -36,11 +23,13 @@ func (rm *RunManager) UpdateStages(id string, stages []StageResult) error {
 	if !ok {
 		return fmt.Errorf("daemon: no run %q", id)
 	}
-	r.update(func(s *RunSnapshot) {
-		s.Stages = append([]StageResult(nil), stages...)
-	})
-	if err := rm.persist(r); err != nil {
-		return fmt.Errorf("persist stages for run %q: %w", id, err)
+	r.persistMu.Lock()
+	defer r.persistMu.Unlock()
+	candidate := r.snapshot()
+	candidate.Stages = cloneStageResults(stages)
+	candidate.CurrentStage = currentStage(candidate.Stages)
+	if err := rm.persistAndReplace(r, candidate); err != nil {
+		return err
 	}
 	return nil
 }
@@ -50,19 +39,84 @@ func (rm *RunManager) UpdatePendingFindings(id string, findings []AskUserFinding
 	if !ok {
 		return fmt.Errorf("daemon: no run %q", id)
 	}
-	r.update(func(s *RunSnapshot) {
-		s.PendingFindings = append([]AskUserFinding(nil), findings...)
-		if len(findings) > 0 && s.Status == RunRunning {
-			s.Status = RunAwaitingReview
-		}
-		if len(findings) == 0 && s.Status == RunAwaitingReview {
-			s.Status = RunRunning
-		}
-	})
-	if err := rm.persist(r); err != nil {
-		return fmt.Errorf("persist pending findings for run %q: %w", id, err)
+	r.persistMu.Lock()
+	defer r.persistMu.Unlock()
+	candidate := r.snapshot()
+	candidate.PendingFindings = append([]AskUserFinding(nil), findings...)
+	if len(findings) > 0 && candidate.Status == RunRunning {
+		candidate.Status = RunAwaitingReview
+	}
+	if len(findings) == 0 && candidate.Status == RunAwaitingReview {
+		candidate.Status = RunRunning
+	}
+	if err := rm.persistAndReplace(r, candidate); err != nil {
+		return err
 	}
 	return nil
+}
+
+func (rm *RunManager) SetCurrentStage(id, stage string) error {
+	r, ok := rm.lookupRun(id)
+	if !ok {
+		return fmt.Errorf("daemon: no run %q", id)
+	}
+	r.persistMu.Lock()
+	defer r.persistMu.Unlock()
+	candidate := r.snapshot()
+	candidate.CurrentStage = stage
+	if err := rm.persistAndReplace(r, candidate); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (rm *RunManager) AddEvidenceRef(id, ref string) error {
+	r, ok := rm.lookupRun(id)
+	if !ok {
+		return fmt.Errorf("daemon: no run %q", id)
+	}
+	r.persistMu.Lock()
+	defer r.persistMu.Unlock()
+	candidate := r.snapshot()
+	if !slices.Contains(candidate.EvidenceRefs, ref) {
+		candidate.EvidenceRefs = append(candidate.EvidenceRefs, ref)
+	}
+	if err := rm.persistAndReplace(r, candidate); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (rm *RunManager) UpdateSubmissionOutput(id, outputSHA string) error {
+	r, ok := rm.lookupRun(id)
+	if !ok {
+		return fmt.Errorf("daemon: no run %q", id)
+	}
+	r.persistMu.Lock()
+	defer r.persistMu.Unlock()
+	candidate := r.snapshot()
+	candidate.OutputSHA = outputSHA
+	if err := rm.persistAndReplace(r, candidate); err != nil {
+		return err
+	}
+	return nil
+}
+
+func cloneStageResults(stages []StageResult) []StageResult {
+	out := append([]StageResult(nil), stages...)
+	for i := range out {
+		out[i].EvidenceRefs = append([]string(nil), stages[i].EvidenceRefs...)
+	}
+	return out
+}
+
+func currentStage(stages []StageResult) string {
+	for _, stage := range stages {
+		if stage.Result != "pass" {
+			return stage.Name
+		}
+	}
+	return ""
 }
 
 func (rm *RunManager) lookupRun(id string) (*run, bool) {

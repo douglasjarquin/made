@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -36,37 +37,17 @@ type CreatePROptions struct {
 	Head  string
 }
 
-type Check struct {
-	Name          string `json:"name"`
-	Status        string `json:"state"`
-	Conclusion    string `json:"conclusion"`
-	WorkflowRunID string `json:"workflowRunId"`
-	DetailsURL    string `json:"detailsUrl"`
+type CheckResult struct {
+	Name   string `json:"name"`
+	State  string `json:"state"`
+	Bucket string `json:"bucket"`
+	Link   string `json:"link"`
+	RunID  string `json:"-"`
 }
 
-func (c *Check) UnmarshalJSON(data []byte) error {
-	var wire struct {
-		Name          string          `json:"name"`
-		Status        string          `json:"state"`
-		Conclusion    string          `json:"conclusion"`
-		WorkflowRunID json.RawMessage `json:"workflowRunId"`
-		DetailsURL    string          `json:"detailsUrl"`
-	}
-	if err := json.Unmarshal(data, &wire); err != nil {
-		return err
-	}
-	var runID string
-	if len(wire.WorkflowRunID) > 0 && string(wire.WorkflowRunID) != "null" {
-		if err := json.Unmarshal(wire.WorkflowRunID, &runID); err != nil {
-			var numeric json.Number
-			if err := json.Unmarshal(wire.WorkflowRunID, &numeric); err != nil {
-				return fmt.Errorf("github: parse workflow run ID: %w", err)
-			}
-			runID = numeric.String()
-		}
-	}
-	*c = Check{Name: wire.Name, Status: wire.Status, Conclusion: wire.Conclusion, WorkflowRunID: runID, DetailsURL: wire.DetailsURL}
-	return nil
+type ChecksResult struct {
+	Checks   []CheckResult
+	ExitCode int
 }
 
 func (c *Client) AuthStatus(ctx context.Context) error {
@@ -137,7 +118,6 @@ func (c *Client) MergeableState(ctx context.Context, prURL string) (string, erro
 	if err := c.AuthStatus(ctx); err != nil {
 		return "", err
 	}
-
 	res, err := c.run(ctx, "pr", "view", prURL, "--json", "mergeStateStatus")
 	if err != nil {
 		return "", fmt.Errorf("github: run gh pr view: %w", err)
@@ -145,14 +125,50 @@ func (c *Client) MergeableState(ctx context.Context, prURL string) (string, erro
 	if res.ExitCode != 0 {
 		return "", fmt.Errorf("github: gh pr view failed: %s", strings.TrimSpace(string(res.Stderr)))
 	}
-
 	var payload struct {
 		MergeStateStatus string `json:"mergeStateStatus"`
 	}
 	if err := json.Unmarshal(res.Stdout, &payload); err != nil {
-		return "", fmt.Errorf("github: parse gh pr view output: %w: stdout=%s", err, res.Stdout)
+		return "", fmt.Errorf("github: parse gh pr view output: %w", err)
 	}
 	return payload.MergeStateStatus, nil
+}
+
+func (c *Client) PRChecks(ctx context.Context, prURL string) (ChecksResult, error) {
+	if strings.TrimSpace(prURL) == "" {
+		return ChecksResult{}, fmt.Errorf("github: pull request URL is required for checks")
+	}
+	if err := c.AuthStatus(ctx); err != nil {
+		return ChecksResult{}, err
+	}
+
+	res, err := c.run(ctx, "pr", "checks", prURL, "--json", "name,state,bucket,link")
+	if err != nil {
+		return ChecksResult{}, fmt.Errorf("github: run gh pr checks: %w", err)
+	}
+	if len(strings.TrimSpace(string(res.Stdout))) == 0 {
+		return ChecksResult{}, fmt.Errorf("github: gh pr checks returned no JSON (exit %d): %s", res.ExitCode, strings.TrimSpace(string(res.Stderr)))
+	}
+
+	var checks []CheckResult
+	if err := json.Unmarshal(res.Stdout, &checks); err != nil {
+		return ChecksResult{}, fmt.Errorf("github: parse gh pr checks output: %w: stdout=%s", err, res.Stdout)
+	}
+	if len(checks) == 0 {
+		return ChecksResult{}, fmt.Errorf("github: gh pr checks returned an empty check set")
+	}
+	for i := range checks {
+		checks[i].RunID = workflowRunID(checks[i].Link)
+	}
+	if res.ExitCode == 0 {
+		for _, check := range checks {
+			bucket := strings.ToLower(strings.TrimSpace(check.Bucket))
+			if bucket != "pass" && bucket != "skipping" && bucket != "neutral" {
+				return ChecksResult{}, fmt.Errorf("github: gh pr checks exit 0 with non-success bucket %q for %q", check.Bucket, check.Name)
+			}
+		}
+	}
+	return ChecksResult{Checks: checks, ExitCode: res.ExitCode}, nil
 }
 
 func (c *Client) CheckLogs(ctx context.Context, runID string) (string, error) {
@@ -195,38 +211,6 @@ func (c *Client) RerunCheck(ctx context.Context, runID string) error {
 	return nil
 }
 
-func (c *Client) Checks(ctx context.Context, prURL string) ([]Check, error) {
-	if strings.TrimSpace(prURL) == "" {
-		return nil, fmt.Errorf("github: pull request URL is required for checks")
-	}
-	if err := c.AuthStatus(ctx); err != nil {
-		return nil, err
-	}
-	res, err := c.run(ctx, "pr", "checks", prURL, "--json", "name,state,conclusion,workflowRunId,detailsUrl")
-	if err != nil {
-		return nil, fmt.Errorf("github: run gh pr checks: %w", err)
-	}
-	if res.ExitCode != 0 {
-		return nil, fmt.Errorf("github: gh pr checks failed: %s", strings.TrimSpace(string(res.Stderr)))
-	}
-	var checks []Check
-	if err := json.Unmarshal(res.Stdout, &checks); err != nil {
-		return nil, fmt.Errorf("github: parse gh pr checks output: %w", err)
-	}
-	return checks, nil
-}
-
-func validateWorkflowRunID(value string) error {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return fmt.Errorf("github: workflow run ID is required")
-	}
-	if _, err := strconv.ParseInt(trimmed, 10, 64); err != nil {
-		return fmt.Errorf("github: workflow run ID must be numeric, got %q", value)
-	}
-	return nil
-}
-
 func (c *Client) run(ctx context.Context, args ...string) (*exec.Result, error) {
 	binary := c.Binary
 	if binary == "" {
@@ -248,4 +232,27 @@ func (c *Client) run(ctx context.Context, args ...string) (*exec.Result, error) 
 func lastLine(out []byte) string {
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	return strings.TrimSpace(lines[len(lines)-1])
+}
+
+func validateWorkflowRunID(runID string) error {
+	if _, err := strconv.ParseUint(runID, 10, 64); err != nil {
+		return fmt.Errorf("github: invalid workflow run ID %q: %w", runID, err)
+	}
+	return nil
+}
+
+func workflowRunID(link string) string {
+	parsed, err := url.Parse(link)
+	if err != nil {
+		return ""
+	}
+	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	for i := 0; i+1 < len(parts); i++ {
+		if parts[i] == "runs" {
+			if _, err := strconv.ParseUint(parts[i+1], 10, 64); err == nil {
+				return parts[i+1]
+			}
+		}
+	}
+	return ""
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -50,7 +51,7 @@ func TestChain_RefusesDeliveryWhenRequiredStageDisabled(t *testing.T) {
 		t.Fatalf("requireDeliveryStages error = %q, want disabled review stage", err)
 	}
 	snapshot, ok := rm.Snapshot(runID)
-	if !ok || len(snapshot.Stages) != 1 || snapshot.Stages[0] != (daemon.StageResult{Name: stageNameReview, Result: "skipped"}) {
+	if !ok || len(snapshot.Stages) != 1 || !reflect.DeepEqual(snapshot.Stages[0], daemon.StageResult{Name: stageNameReview, Result: "skipped"}) {
 		t.Fatalf("disabled stage snapshot = %+v, want review/skipped", snapshot.Stages)
 	}
 }
@@ -206,7 +207,7 @@ func cleanReviewOptions(t *testing.T) review.Options {
 	scenarioPath := writeScenario(t, agent.Findings{})
 	return review.Options{
 		BinaryPath: bin,
-		ExtraEnv:   []string{"FAKE_AGENT_SCENARIO=" + scenarioPath},
+		ExtraEnv:   []string{"FAKE_AGENT_KIND=codex", "FAKE_AGENT_SCENARIO=" + scenarioPath},
 	}
 }
 
@@ -228,7 +229,7 @@ func TestNewWorkFunc_FullPassEndsRunningWithAwaitingMergeMessage(t *testing.T) {
 
 	ghBin := githubtest.Build(t)
 	cfg := config.Config{
-		Agent:    string(agent.KindClaude),
+		Agent:    string(agent.KindCodex),
 		Commands: config.Commands{Test: "true", Lint: "true"},
 		CI:       config.CI{RerunBudget: 1},
 	}
@@ -270,7 +271,7 @@ func TestNewWorkFunc_FullPassPRTitleMatchesPushedCommitSubject(t *testing.T) {
 	ghBin := githubtest.Build(t)
 	ghLog := filepath.Join(t.TempDir(), "gh-invocations.log")
 	cfg := config.Config{
-		Agent:    string(agent.KindClaude),
+		Agent:    string(agent.KindCodex),
 		Commands: config.Commands{Test: "true", Lint: "true"},
 		CI:       config.CI{RerunBudget: 1},
 	}
@@ -325,7 +326,7 @@ func TestNewWorkFunc_TestFailureHaltsBeforeLaterStages(t *testing.T) {
 	ghLog := filepath.Join(t.TempDir(), "gh-invocations.log")
 
 	cfg := config.Config{
-		Agent: string(agent.KindClaude),
+		Agent: string(agent.KindCodex),
 		Commands: config.Commands{
 			Test: "exit 1",
 			Lint: "touch " + lintMarker,
@@ -387,7 +388,7 @@ func TestNewWorkFunc_DocumentFindingParksThenRejectedFailsRun(t *testing.T) {
 
 	ghBin := githubtest.Build(t)
 	cfg := config.Config{
-		Agent:    string(agent.KindClaude),
+		Agent:    string(agent.KindCodex),
 		Commands: config.Commands{Test: "true", Lint: "true"},
 		CI:       config.CI{RerunBudget: 1},
 		Document: config.Document{Rules: []config.DocumentRule{
@@ -413,7 +414,9 @@ func TestNewWorkFunc_DocumentFindingParksThenRejectedFailsRun(t *testing.T) {
 		t.Fatalf("expected one pending finding on stage %q, got %+v", stageNameDocument, parked.PendingFindings)
 	}
 
-	reviewDecisions.Set(runID, stageNameDocument, daemon.ReviewRejected)
+	if err := reviewDecisions.Set(runID, stageNameDocument, daemon.ReviewRejected); err != nil {
+		t.Fatalf("set rejection: %v", err)
+	}
 
 	snap := waitForRunEnded(t, rm, runID, 30*time.Second)
 	if snap.Status != daemon.RunFailed {
@@ -433,7 +436,7 @@ func TestNewWorkFunc_DocumentFindingParksThenApprovedResumesToCompletion(t *test
 
 	ghBin := githubtest.Build(t)
 	cfg := config.Config{
-		Agent:    string(agent.KindClaude),
+		Agent:    string(agent.KindCodex),
 		Commands: config.Commands{Test: "true", Lint: "true"},
 		CI:       config.CI{RerunBudget: 1},
 		Document: config.Document{Rules: []config.DocumentRule{
@@ -456,7 +459,9 @@ func TestNewWorkFunc_DocumentFindingParksThenApprovedResumesToCompletion(t *test
 		t.Fatalf("expected parked run to stay RunAwaitingReview, got %v", parked.Status)
 	}
 
-	reviewDecisions.Set(runID, stageNameDocument, daemon.ReviewApproved)
+	if err := reviewDecisions.Set(runID, stageNameDocument, daemon.ReviewApproved); err != nil {
+		t.Fatalf("set approval: %v", err)
+	}
 
 	snap := waitForRunEnded(t, rm, runID, 30*time.Second)
 	if snap.Status != daemon.RunAwaitingMerge {
@@ -494,7 +499,7 @@ func TestNewWorkFunc_PushSucceedsThenPRFailsMessageNamesPushedBranch(t *testing.
 
 	ghBin := githubtest.Build(t)
 	cfg := config.Config{
-		Agent:    string(agent.KindClaude),
+		Agent:    string(agent.KindCodex),
 		Commands: config.Commands{Test: "true", Lint: "true"},
 		CI:       config.CI{RerunBudget: 1},
 	}

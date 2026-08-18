@@ -35,26 +35,21 @@ func TestSpawn_CodexUsesSupportedExecStructuredContract(t *testing.T) {
 	contents := strings.Join([]string{
 		"#!/bin/sh",
 		"set -eu",
-		"printf '%s\\n' \"$@\" > \"$STRICT_CODEX_LOG\"",
+		"printf '%s\\n' \"$@\" > \"$FAKE_AGENT_LOG_FILE\"",
 		"[ \"$1\" = \"exec\" ]",
-		"[ \"$2\" = \"--cd\" ]",
-		"[ \"$3\" != \"$STRICT_CODEX_WORKTREE\" ]",
-		"[ -d \"$3\" ]",
-		"[ \"$(git -C \"$3\" rev-parse HEAD)\" = \"$STRICT_CODEX_HEAD\" ]",
-		"if (umask 077; : > \"$3/.agent-write-probe\") 2>/dev/null; then exit 1; fi",
-		"shift 3",
-		"has_json=0",
-		"has_schema=0",
-		"while [ \"$#\" -gt 0 ]; do",
-		"  case \"$1\" in",
-		"    --json) has_json=1 ;;",
-		"    --output-schema) has_schema=1; shift; test -f \"$1\" ;;",
-		"  esac",
-		"  shift",
-		"done",
-		"[ \"$has_json\" -eq 1 ]",
-		"[ \"$has_schema\" -eq 1 ]",
+		"[ \"$2\" = \"--json\" ]",
+		"[ \"$3\" = \"--output-schema\" ]",
+		"[ -f \"$4\" ]",
+		"[ \"$5\" = \"--output-last-message\" ]",
+		"[ \"$7\" = \"--sandbox\" ]",
+		"[ \"$8\" = \"read-only\" ]",
+		"[ \"$9\" = \"--ephemeral\" ]",
+		"[ \"${10}\" = \"-C\" ]",
+		"[ -d \"${11}\" ]",
+		"[ \"$(git -C \"${11}\" rev-parse HEAD)\" = " + shellQuote(head) + " ]",
+		"if (umask 077; : > \"${11}/.agent-write-probe\") 2>/dev/null; then exit 1; fi",
 		"test -z \"${MADE_REVIEW_SECRET:-}\"",
+		"printf '%s\\n' '{\"findings\":[]}' > \"$6\"",
 		"printf '%s\\n' '{\"findings\":[]}'",
 		"",
 	}, "\n")
@@ -66,9 +61,7 @@ func TestSpawn_CodexUsesSupportedExecStructuredContract(t *testing.T) {
 		WorktreePath: worktree,
 		BinaryPath:   script,
 		ExtraEnv: []string{
-			"STRICT_CODEX_LOG=" + logPath,
-			"STRICT_CODEX_WORKTREE=" + worktree,
-			"STRICT_CODEX_HEAD=" + head,
+			"FAKE_AGENT_LOG_FILE=" + logPath,
 		},
 	})
 	if err != nil {
@@ -88,7 +81,7 @@ func TestSpawn_CodexUsesSupportedExecStructuredContract(t *testing.T) {
 	if len(args) > 0 && args[0] == "review" {
 		t.Fatalf("Codex invocation used obsolete review command: %s", data)
 	}
-	if _, err := os.Stat(args[2]); !os.IsNotExist(err) {
+	if _, err := os.Stat(args[10]); !os.IsNotExist(err) {
 		t.Fatalf("review clone was not cleaned up: %v", err)
 	}
 	if _, err := os.Stat(hookMarker); !os.IsNotExist(err) {
@@ -112,10 +105,10 @@ func TestSpawn_RejectsReviewSymlinkThatEscapesClone(t *testing.T) {
 		t.Fatalf("write scenario: %v", err)
 	}
 
-	_, err := agent.Spawn(context.Background(), agent.KindClaude, agent.SpawnParams{
+	_, err := agent.Spawn(context.Background(), agent.KindCodex, agent.SpawnParams{
 		WorktreePath: worktree,
 		BinaryPath:   agenttest.Build(t),
-		ExtraEnv:     []string{"FAKE_AGENT_SCENARIO=" + scenarioPath},
+		ExtraEnv:     []string{"FAKE_AGENT_KIND=codex", "FAKE_AGENT_SCENARIO=" + scenarioPath},
 	})
 	if err == nil || !strings.Contains(err.Error(), "escapes review worktree") {
 		t.Fatalf("expected escaping review symlink rejection, got %v", err)
@@ -130,15 +123,15 @@ func TestSpawn_ContainsReviewerFromSourceWorktree(t *testing.T) {
 	}
 	gitAgent(t, worktree, "add", "source.txt")
 	gitAgent(t, worktree, "commit", "-q", "-m", "add source fixture")
-	marker := filepath.Join(t.TempDir(), "source-mutated")
 	script := filepath.Join(t.TempDir(), "containment-codex")
 	contents := strings.Join([]string{
 		"#!/bin/sh",
 		"set -eu",
-		"if cat \"$STRICT_CODEX_SOURCE/source.txt\" >/dev/null 2>&1; then exit 41; fi",
-		"if chmod -R u+w \"$STRICT_CODEX_SOURCE\" 2>/dev/null; then",
-		"  if : > \"$STRICT_CODEX_SOURCE/source-mutated\" 2>/dev/null; then printf mutated > \"$STRICT_CODEX_MARKER\"; exit 42; fi",
+		"if cat " + shellQuote(filepath.Join(worktree, "source.txt")) + " >/dev/null 2>&1; then exit 41; fi",
+		"if chmod -R u+w " + shellQuote(worktree) + " 2>/dev/null; then",
+		"  if : > " + shellQuote(filepath.Join(worktree, "source-mutated")) + " 2>/dev/null; then exit 42; fi",
 		"fi",
+		"printf '%s\\n' '{\"findings\":[]}' > \"$6\"",
 		"printf '%s\\n' '{\"findings\":[]}'",
 		"",
 	}, "\n")
@@ -149,19 +142,13 @@ func TestSpawn_ContainsReviewerFromSourceWorktree(t *testing.T) {
 	findings, err := agent.Spawn(context.Background(), agent.KindCodex, agent.SpawnParams{
 		WorktreePath: worktree,
 		BinaryPath:   script,
-		ExtraEnv: []string{
-			"STRICT_CODEX_SOURCE=" + worktree,
-			"STRICT_CODEX_MARKER=" + marker,
-		},
+		ExtraEnv:     nil,
 	})
 	if err != nil {
 		t.Fatalf("Spawn should contain reviewer without changing source: %v", err)
 	}
 	if len(findings.Findings) != 0 {
 		t.Fatalf("expected empty findings, got %+v", findings)
-	}
-	if _, err := os.Stat(marker); !os.IsNotExist(err) {
-		t.Fatalf("reviewer escaped into source worktree: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(worktree, "source-mutated")); !os.IsNotExist(err) {
 		t.Fatalf("reviewer modified source worktree: %v", err)

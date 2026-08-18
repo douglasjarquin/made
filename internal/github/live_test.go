@@ -66,9 +66,9 @@ func TestLive_AuthStatusAndPRCreation(t *testing.T) {
 	}
 	t.Logf("created PR: %s", url)
 
-	state, err := c.MergeableState(context.Background(), url)
+	checks, err := c.PRChecks(context.Background(), url)
 	if err != nil {
-		t.Fatalf("MergeableState: %v", err)
+		t.Fatalf("PRChecks: %v", err)
 	}
-	t.Logf("mergeStateStatus: %s", state)
+	t.Logf("checks: %+v", checks)
 }

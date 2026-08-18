@@ -51,83 +51,84 @@ func Run(ctx context.Context, ghClient *github.Client, prURL string, rerunBudget
 
 	reruns := 0
 	for {
-		checks, err := ghClient.Checks(ctx, prURL)
+		checks, err := ghClient.PRChecks(ctx, prURL)
 		if err != nil {
 			return Result{}, err
 		}
-		if len(checks) == 0 {
-			return Result{}, fmt.Errorf("ci: GitHub returned no checks for %s", prURL)
-		}
-		allPassed := true
-		var failing *github.Check
-		pending := false
-		for i := range checks {
-			check := checks[i]
-			if checkPassed(check) {
+		if hasPendingChecks(checks.Checks) {
+			select {
+			case <-ctx.Done():
+				return Result{OK: false, Message: ctx.Err().Error(), RerunsUsed: reruns}, nil
+			case <-time.After(pollInterval):
 				continue
 			}
-			allPassed = false
-			if checkPending(check) {
-				pending = true
-				continue
-			}
-			if failing == nil {
-				failing = &check
-			}
 		}
-		if allPassed {
+		if checks.ExitCode == 0 {
 			return Result{
 				OK:         true,
 				Message:    fmt.Sprintf("checks passed for %s after %d rerun(s)", prURL, reruns),
 				RerunsUsed: reruns,
 			}, nil
 		}
-		if pending && failing == nil {
-			select {
-			case <-ctx.Done():
-				return Result{}, ctx.Err()
-			case <-time.After(pollInterval):
-			}
-			continue
-		}
-		if failing == nil {
-			return Result{}, fmt.Errorf("ci: check state was neither passing, pending, nor failing")
-		}
 
 		if reruns >= rerunBudget {
-			excerpt, logErr := ghClient.CheckLogs(ctx, failing.WorkflowRunID)
+			runID := firstWorkflowRunID(checks.Checks)
+			if runID == "" {
+				return Result{
+					OK:         false,
+					Message:    fmt.Sprintf("checks failed for %s after exhausting rerun budget (%d), but no workflow run ID was present in gh pr checks output", prURL, rerunBudget),
+					RerunsUsed: reruns,
+				}, nil
+			}
+			excerpt, logErr := ghClient.CheckLogs(ctx, runID)
 			if logErr != nil {
 				return Result{}, logErr
 			}
 			return Result{
 				OK:         false,
-				Message:    fmt.Sprintf("check %s still failing for %s after exhausting rerun budget (%d)", failing.Name, prURL, rerunBudget),
+				Message:    fmt.Sprintf("checks still failing for %s after exhausting rerun budget (%d)", prURL, rerunBudget),
 				RerunsUsed: reruns,
 				LogExcerpt: excerpt,
 			}, nil
 		}
 
-		if err := ghClient.RerunCheck(ctx, failing.WorkflowRunID); err != nil {
+		runID := firstWorkflowRunID(checks.Checks)
+		if runID == "" {
+			return Result{
+				OK:         false,
+				Message:    fmt.Sprintf("checks failed for %s but gh pr checks returned no workflow run ID for rerun", prURL),
+				RerunsUsed: reruns,
+			}, nil
+		}
+		if err := ghClient.RerunCheck(ctx, runID); err != nil {
 			return Result{}, err
 		}
 		reruns++
 
 		select {
 		case <-ctx.Done():
-			return Result{}, ctx.Err()
+			return Result{OK: false, Message: ctx.Err().Error(), RerunsUsed: reruns}, nil
 		case <-time.After(pollInterval):
 		}
 	}
 }
 
-func checkPassed(check github.Check) bool {
-	status := strings.ToUpper(strings.TrimSpace(check.Status))
-	conclusion := strings.ToUpper(strings.TrimSpace(check.Conclusion))
-	return (status == "SUCCESS" || status == "COMPLETED") && (conclusion == "SUCCESS" || conclusion == "SUCCESSFUL" || conclusion == "NEUTRAL")
+func firstWorkflowRunID(checks []github.CheckResult) string {
+	for _, check := range checks {
+		if check.RunID != "" {
+			return check.RunID
+		}
+	}
+	return ""
 }
 
-func checkPending(check github.Check) bool {
-	status := strings.ToUpper(strings.TrimSpace(check.Status))
-	conclusion := strings.TrimSpace(check.Conclusion)
-	return conclusion == "" || status == "QUEUED" || status == "IN_PROGRESS" || status == "PENDING"
+func hasPendingChecks(checks []github.CheckResult) bool {
+	for _, check := range checks {
+		state := strings.ToUpper(strings.TrimSpace(check.State))
+		bucket := strings.ToLower(strings.TrimSpace(check.Bucket))
+		if bucket == "pending" || state == "PENDING" || state == "QUEUED" || state == "IN_PROGRESS" || state == "WAITING" || state == "EXPECTED" {
+			return true
+		}
+	}
+	return false
 }

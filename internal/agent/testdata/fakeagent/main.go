@@ -10,9 +10,25 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 func main() {
+	if kind := os.Getenv("FAKE_AGENT_KIND"); kind != "" && kind != string(agentKindCodex) {
+		fmt.Fprintln(os.Stderr, "fakeagent: only the codex structured exec contract is supported")
+		os.Exit(2)
+	}
+	if err := validateInvocation(os.Args[1:]); err != nil {
+		fmt.Fprintf(os.Stderr, "fakeagent: invalid invocation: %v\n", err)
+		os.Exit(2)
+	}
+	for _, key := range []string{"MADE_TEST_SECRET", "DATABASE_URL", "COOKIE", "JWT_KEY", "KUBECONFIG"} {
+		if os.Getenv(key) != "" {
+			fmt.Fprintf(os.Stderr, "fakeagent: sensitive environment %s was exposed\n", key)
+			os.Exit(3)
+		}
+	}
+
 	if logPath := os.Getenv("FAKE_AGENT_LOG_FILE"); logPath != "" {
 		logInvocation(logPath)
 	}
@@ -42,10 +58,31 @@ func main() {
 		os.Exit(1)
 	}
 
-	if _, err := os.Stdout.Write(data); err != nil {
-		fmt.Fprintf(os.Stderr, "fakeagent: write stdout: %v\n", err)
+	args := os.Args[1:]
+	lastMessagePath := args[5]
+	if err := os.WriteFile(lastMessagePath, data, 0o600); err != nil {
+		fmt.Fprintf(os.Stderr, "fakeagent: write structured output %s: %v\n", lastMessagePath, err)
 		os.Exit(1)
 	}
+	_, _ = fmt.Fprintln(os.Stdout, `{"type":"turn.completed"}`)
+}
+
+const agentKindCodex = "codex"
+
+func validateInvocation(args []string) error {
+	if len(args) != 12 {
+		return fmt.Errorf("want 12 arguments, got %d", len(args))
+	}
+	if args[0] != "exec" || args[1] != "--json" || args[2] != "--output-schema" || args[4] != "--output-last-message" || args[6] != "--sandbox" || args[7] != "read-only" || args[8] != "--ephemeral" || args[9] != "-C" {
+		return fmt.Errorf("expected codex exec structured flags, got %v", args)
+	}
+	if filepath.IsAbs(args[3]) == false || filepath.IsAbs(args[5]) == false {
+		return fmt.Errorf("schema and output paths must be absolute")
+	}
+	if args[10] == "" || args[11] == "" {
+		return fmt.Errorf("worktree and task are required")
+	}
+	return nil
 }
 
 func logInvocation(logPath string) {

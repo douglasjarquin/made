@@ -13,15 +13,15 @@ func TestRunManager_SequentialQueuing(t *testing.T) {
 	rm := NewRunManager()
 	const repo = "gate-repo-A"
 
-	var active int32
-	var overlapped int32
+	var active atomic.Int32
+	var overlapped atomic.Int32
 
 	work := func(ctx context.Context, emit func(Event)) error {
-		if atomic.AddInt32(&active, 1) > 1 {
-			atomic.StoreInt32(&overlapped, 1)
+		if active.Add(1) > 1 {
+			overlapped.Store(1)
 		}
 		time.Sleep(50 * time.Millisecond)
-		atomic.AddInt32(&active, -1)
+		active.Add(-1)
 		return nil
 	}
 
@@ -56,7 +56,7 @@ func TestRunManager_SequentialQueuing(t *testing.T) {
 		}
 	}
 
-	if atomic.LoadInt32(&overlapped) != 0 {
+	if overlapped.Load() != 0 {
 		t.Fatal("run1 and run2 executed concurrently, expected per-repo serialization")
 	}
 
@@ -89,7 +89,7 @@ func TestRunManager_DifferentRepposRunConcurrently(t *testing.T) {
 		t.Fatalf("submit run2: %v", err)
 	}
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		select {
 		case <-started:
 		case <-time.After(2 * time.Second):

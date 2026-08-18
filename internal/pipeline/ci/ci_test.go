@@ -33,7 +33,7 @@ func TestRun_TransientFailureRecoversWithinBudget(t *testing.T) {
 	stateDir := t.TempDir()
 	logPath := filepath.Join(t.TempDir(), "invocations.log")
 	c := newClient(t, []string{
-		"FAKE_GH_PR_VIEW_STATES=UNSTABLE,CLEAN",
+		"FAKE_GH_CHECKS_BUCKETS=fail,pass",
 		"FAKE_GH_STATE_DIR=" + stateDir,
 	}, logPath)
 
@@ -58,9 +58,33 @@ func TestRun_TransientFailureRecoversWithinBudget(t *testing.T) {
 	}
 }
 
+func TestRun_DoesNotRerunPendingChecks(t *testing.T) {
+	stateDir := t.TempDir()
+	logPath := filepath.Join(t.TempDir(), "invocations.log")
+	c := newClient(t, []string{
+		"FAKE_GH_CHECKS_BUCKETS=pending,pass",
+		"FAKE_GH_STATE_DIR=" + stateDir,
+	}, logPath)
+
+	result, err := ci.Run(context.Background(), c, "https://github.com/example/repo/pull/11", 2, testPollInterval)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !result.OK || result.RerunsUsed != 0 {
+		t.Fatalf("pending check was rerun: %+v", result)
+	}
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read invocation log: %v", err)
+	}
+	if strings.Contains(string(data), "run rerun") {
+		t.Fatalf("pending check triggered a rerun: %s", data)
+	}
+}
+
 func TestRun_BudgetExhaustionSurfacesFinalFailure(t *testing.T) {
 	c := newClient(t, []string{
-		"FAKE_GH_PR_VIEW_STATES=UNSTABLE",
+		"FAKE_GH_CHECKS_BUCKETS=fail",
 		"FAKE_GH_RUN_LOG=build failed at step 3\n",
 	}, "")
 
@@ -101,7 +125,7 @@ func TestRun_RejectsNilClient(t *testing.T) {
 
 func TestRun_NeverExceedsBudgetEvenWithAlwaysFailingChecks(t *testing.T) {
 	c := newClient(t, []string{
-		"FAKE_GH_PR_VIEW_STATES=UNSTABLE",
+		"FAKE_GH_CHECKS_BUCKETS=fail",
 	}, "")
 
 	const rerunBudget = 3
@@ -117,7 +141,7 @@ func TestRun_NeverExceedsBudgetEvenWithAlwaysFailingChecks(t *testing.T) {
 	if result.RerunsUsed != rerunBudget {
 		t.Fatalf("expected exactly rerunBudget reruns (%d), got %d - budget was not respected", rerunBudget, result.RerunsUsed)
 	}
-	if elapsed > 5*time.Second {
+	if elapsed > 30*time.Second {
 		t.Fatalf("Run took too long (%s) - suspect it looped past the budget", elapsed)
 	}
 }

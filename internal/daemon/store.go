@@ -113,7 +113,7 @@ func OpenRunStore(path string) (*RunStore, map[string]RunSnapshot, error) {
 		if record.Version != runStoreRecordVersion || record.Kind != "snapshot" {
 			return nil, nil, fmt.Errorf("daemon: unsupported run store record version %d or kind %q", record.Version, record.Kind)
 		}
-		snapshots[record.Snapshot.ID] = restoreSnapshot(record.Snapshot)
+		snapshots[record.Snapshot.ID] = restoreStoredSnapshot(record.Snapshot)
 	}
 	return store, snapshots, nil
 }
@@ -201,7 +201,7 @@ func persistSnapshot(snapshot RunSnapshot) persistedSnapshot {
 	}
 }
 
-func restoreSnapshot(snapshot persistedSnapshot) RunSnapshot {
+func restoreStoredSnapshot(snapshot persistedSnapshot) RunSnapshot {
 	var runErr error
 	if len(snapshot.Errors) > 0 {
 		runErr = errors.New(evidence.RedactString(snapshot.Errors[len(snapshot.Errors)-1]))

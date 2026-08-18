@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -19,12 +18,16 @@ type SpawnParams struct {
 	WorktreePath string
 	BinaryPath   string
 	ExtraEnv     []string
+	Task         string
 	Timeout      time.Duration
 }
 
 const defaultSpawnTimeout = 30 * time.Minute
 
 func Spawn(ctx context.Context, kind Kind, params SpawnParams) (Findings, error) {
+	if kind != KindCodex {
+		return Findings{}, fmt.Errorf("agent: %s structured task contract is unsupported", kind)
+	}
 	binary := params.BinaryPath
 	if binary == "" {
 		binary = kind.binaryName()
@@ -36,7 +39,7 @@ func Spawn(ctx context.Context, kind Kind, params SpawnParams) (Findings, error)
 	}
 	defer cleanupReview()
 
-	args, cleanup, err := invocation(kind, reviewPath)
+	args, cleanup, outputPath, err := invocation(kind, reviewPath, params.Task)
 	if err != nil {
 		return Findings{}, err
 	}
@@ -64,7 +67,14 @@ func Spawn(ctx context.Context, kind Kind, params SpawnParams) (Findings, error)
 		return Findings{}, fmt.Errorf("agent: %s (%s) exited %d: %s", kind, binary, result.ExitCode, evidence.RedactString(string(result.Stderr)))
 	}
 
-	findings, err := decodeFindings(result.Stdout)
+	data := result.Stdout
+	if outputPath != "" {
+		data, err = os.ReadFile(outputPath)
+		if err != nil {
+			return Findings{}, fmt.Errorf("agent: read structured output from %s: %w", kind, err)
+		}
+	}
+	findings, err := strictFindings(data)
 	if err != nil {
 		return Findings{}, fmt.Errorf("agent: parse findings from %s: %w: stdout=%s", kind, err, evidence.RedactString(string(result.Stdout)))
 	}
@@ -72,98 +82,49 @@ func Spawn(ctx context.Context, kind Kind, params SpawnParams) (Findings, error)
 }
 
 func reviewEnvironmentForDir(extra []string, dir string) []string {
-	filtered := make([]string, 0, len(os.Environ())+len(extra))
-	for _, entry := range os.Environ() {
+	entries := append(append([]string(nil), os.Environ()...), extra...)
+	filtered := make([]string, 0, len(entries)+5)
+	for _, entry := range entries {
 		name, _, ok := strings.Cut(entry, "=")
-		if ok && !sensitiveEnvironmentName(name) && !reviewPathEnvironmentName(name) && (dir == "" || name != "PWD") {
-			filtered = append(filtered, entry)
+		if !ok || !reviewEnvironmentKey(name) || (dir != "" && name == "PWD") {
+			continue
 		}
-	}
-	for _, entry := range extra {
-		name, _, ok := strings.Cut(entry, "=")
-		if ok && !sensitiveEnvironmentName(name) && !reviewPathEnvironmentName(name) && (dir == "" || name != "PWD") {
-			filtered = append(filtered, entry)
-		}
+		filtered = append(filtered, entry)
 	}
 	if dir != "" {
 		filtered = append(filtered, "PWD="+dir)
 	}
-	filtered = append(filtered, "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
+	filtered = append(filtered, "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_TERMINAL_PROMPT=0")
 	return filtered
 }
 
-func reviewPathEnvironmentName(name string) bool {
-	return name == "OLDPWD" || strings.HasPrefix(name, "GIT_")
-}
-
-func sensitiveEnvironmentName(name string) bool {
-	upper := strings.ToUpper(name)
-	if upper == "SSH_AUTH_SOCK" || upper == "COOKIE" {
+func reviewEnvironmentKey(name string) bool {
+	switch name {
+	case "PATH", "HOME", "TMPDIR", "LANG", "TERM", "USER", "LOGNAME", "SHELL", "PWD", "OLDPWD", "NO_COLOR", "CI",
+		"FAKE_AGENT_KIND", "FAKE_AGENT_SCENARIO", "FAKE_AGENT_LOG_FILE", "FAKE_AGENT_EXIT_CODE", "FAKE_AGENT_WRITE_PATH", "FAKE_AGENT_WRITE_DATA":
 		return true
 	}
-	for _, marker := range []string{"TOKEN", "SECRET", "PASSWORD", "PASSWD", "API_KEY", "PRIVATE_KEY", "CREDENTIAL"} {
-		if strings.Contains(upper, marker) {
-			return true
-		}
-	}
-	return false
+	return strings.HasPrefix(name, "LC_")
 }
 
-func invocation(kind Kind, worktree string) ([]string, func(), error) {
+func invocation(kind Kind, worktree, task string) ([]string, func(), string, error) {
 	if kind != KindCodex {
-		return []string{"review", "--worktree", worktree}, func() {}, nil
+		return nil, nil, "", fmt.Errorf("agent: %s structured task contract is unsupported", kind)
 	}
 	dir, err := os.MkdirTemp("", "made-codex-schema-")
 	if err != nil {
-		return nil, nil, fmt.Errorf("agent: create Codex schema directory: %w", err)
+		return nil, nil, "", fmt.Errorf("agent: create Codex schema directory: %w", err)
 	}
-	path := filepath.Join(dir, "output.json")
-	if err := os.WriteFile(path, []byte(reviewSchema), 0o600); err != nil {
+	schemaPath := filepath.Join(dir, "findings.schema.json")
+	if err := os.WriteFile(schemaPath, []byte(reviewSchema), 0o600); err != nil {
 		_ = os.RemoveAll(dir)
-		return nil, nil, fmt.Errorf("agent: write Codex output schema: %w", err)
+		return nil, nil, "", fmt.Errorf("agent: write Codex output schema: %w", err)
 	}
-	return []string{"exec", "--cd", worktree, "--json", "--output-schema", path, "-"}, func() { _ = os.RemoveAll(dir) }, nil
-}
-
-func decodeFindings(data []byte) (Findings, error) {
-	var direct Findings
-	if err := json.Unmarshal(data, &direct); err == nil {
-		var envelope map[string]json.RawMessage
-		if json.Unmarshal(data, &envelope) == nil {
-			if raw, ok := envelope["findings"]; ok {
-				if string(raw) == "null" {
-					return Findings{Findings: []Finding{}}, nil
-				}
-				if values, err := strictFindings(data); err == nil {
-					return values, nil
-				}
-			}
-		}
+	outputPath := filepath.Join(dir, "findings.json")
+	if strings.TrimSpace(task) == "" {
+		task = "Review the current worktree and return only the structured findings object required by the output schema."
 	}
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	scanner.Buffer(make([]byte, 4096), 4*1024*1024)
-	var last string
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if strings.HasPrefix(line, "{") {
-			var event struct {
-				Item struct {
-					Type string `json:"type"`
-					Text string `json:"text"`
-				} `json:"item"`
-			}
-			if json.Unmarshal([]byte(line), &event) == nil && event.Item.Type == "agent_message" {
-				last = event.Item.Text
-			}
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return Findings{}, err
-	}
-	if last == "" {
-		return Findings{}, fmt.Errorf("structured findings payload was not found")
-	}
-	return strictFindings([]byte(last))
+	return []string{"exec", "--json", "--output-schema", schemaPath, "--output-last-message", outputPath, "--sandbox", "read-only", "--ephemeral", "-C", worktree, task}, func() { _ = os.RemoveAll(dir) }, outputPath, nil
 }
 
 func strictFindings(data []byte) (Findings, error) {

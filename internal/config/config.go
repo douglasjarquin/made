@@ -207,19 +207,19 @@ func loadConfigFile(path string) (cfg Config, exists bool, err error) {
 		return Config{}, false, nil
 	}
 
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&cfg); err != nil {
+		return Config{}, true, err
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return Config{}, true, fmt.Errorf("configuration must contain one YAML document")
+		}
+		return Config{}, true, err
+	}
 	if filepath.Base(path) == ".made.yml" || strings.HasSuffix(filepath.Base(path), ".made.yml") {
-		decoder := yaml.NewDecoder(bytes.NewReader(data))
-		decoder.KnownFields(true)
-		if err := decoder.Decode(&cfg); err != nil {
-			return Config{}, true, err
-		}
-		var extra any
-		if err := decoder.Decode(&extra); err != io.EOF {
-			if err == nil {
-				return Config{}, true, fmt.Errorf("versioned .made.yml must contain one document")
-			}
-			return Config{}, true, err
-		}
 		if cfg.Version != 1 {
 			return Config{}, true, fmt.Errorf("versioned .made.yml requires version: 1, got %d", cfg.Version)
 		}
@@ -240,10 +240,6 @@ func loadConfigFile(path string) (cfg Config, exists bool, err error) {
 		}
 		return cfg, true, nil
 	}
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return Config{}, true, err
-	}
-
 	return cfg, true, nil
 }
 

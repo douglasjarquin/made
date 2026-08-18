@@ -11,7 +11,7 @@ import (
 	"github.com/douglasjarquin/made/internal/evidence"
 )
 
-const statusSchemaVersion = 1
+const statusSchemaVersion = 2
 
 const (
 	StageResultPass    = "pass"
@@ -37,10 +37,15 @@ type StatusReport struct {
 	RunID             string                   `json:"run_id"`
 	Repo              string                   `json:"repo"`
 	Branch            string                   `json:"branch"`
+	Ref               string                   `json:"ref,omitempty"`
+	OldSHA            string                   `json:"old_sha,omitempty"`
 	State             string                   `json:"state"`
+	SubmissionID      string                   `json:"submission_id,omitempty"`
+	GatePath          string                   `json:"gate_path,omitempty"`
 	InputSHA          string                   `json:"input_sha"`
 	OutputSHA         string                   `json:"output_sha"`
 	ExecutionFinished bool                     `json:"execution_finished"`
+	CurrentStage      string                   `json:"current_stage,omitempty"`
 	Findings          []daemon.RunFinding      `json:"findings"`
 	Decisions         map[string]string        `json:"decisions"`
 	PRURL             string                   `json:"pr_url"`
@@ -52,8 +57,10 @@ type StatusReport struct {
 	StartedAt         *time.Time               `json:"started_at,omitempty"`
 	EndedAt           *time.Time               `json:"ended_at,omitempty"`
 	Error             string                   `json:"error,omitempty"`
+	Message           string                   `json:"message,omitempty"`
 	Stages            []StageResult            `json:"stages"`
 	PendingFindings   []AskUserFinding         `json:"pending_findings"`
+	EvidenceRefs      []string                 `json:"evidence_refs"`
 }
 
 type StageResult = daemon.StageResult
@@ -85,12 +92,17 @@ func statusHandler(rm *daemon.RunManager) api.HandlerFunc {
 }
 
 func newStatusReport(snap daemon.RunSnapshot) StatusReport {
-	stages := snap.Stages
-	if len(stages) == 0 {
-		stages = make([]StageResult, len(pipelineStages))
-		for i, name := range pipelineStages {
-			stages[i] = StageResult{Name: name, Result: StageResultPending}
+	byName := make(map[string]StageResult, len(snap.Stages))
+	for _, stage := range snap.Stages {
+		byName[stage.Name] = stage
+	}
+	stages := make([]StageResult, len(pipelineStages))
+	for i, name := range pipelineStages {
+		stage, ok := byName[name]
+		if !ok {
+			stage = StageResult{Name: name, Result: StageResultPending}
 		}
+		stages[i] = stage
 	}
 
 	pendingFindings := snap.PendingFindings
@@ -109,6 +121,30 @@ func newStatusReport(snap daemon.RunSnapshot) StatusReport {
 	if snap.Err != nil {
 		errMsg = evidence.RedactString(snap.Err.Error())
 	}
+	if snap.Error != "" {
+		errMsg = evidence.RedactString(snap.Error)
+	}
+	currentStage := snap.CurrentStage
+	if currentStage == "" {
+		for _, stage := range snap.Stages {
+			if stage.Result != StageResultPass {
+				currentStage = stage.Name
+				break
+			}
+		}
+	}
+	if currentStage == "" {
+		for _, stage := range stages {
+			if stage.Result != StageResultPass {
+				currentStage = stage.Name
+				break
+			}
+		}
+	}
+	evidenceRefs := append([]string(nil), snap.EvidenceRefs...)
+	if evidenceRefs == nil {
+		evidenceRefs = []string{}
+	}
 
 	return StatusReport{
 		SchemaVersion:     statusSchemaVersion,
@@ -116,10 +152,15 @@ func newStatusReport(snap daemon.RunSnapshot) StatusReport {
 		RunID:             snap.ID,
 		Repo:              snap.Repo,
 		Branch:            snap.Branch,
+		Ref:               snap.Ref,
+		OldSHA:            snap.OldSHA,
 		State:             string(snap.Status),
+		SubmissionID:      snap.SubmissionID,
+		GatePath:          snap.GatePath,
 		InputSHA:          snap.InputSHA,
 		OutputSHA:         snap.OutputSHA,
 		ExecutionFinished: snap.ExecutionFinished,
+		CurrentStage:      currentStage,
 		Findings:          redactedFindings(snap.Findings),
 		Decisions:         nonNilDecisions(snap.Decisions),
 		PRURL:             evidence.RedactString(snap.PRURL),
@@ -131,8 +172,10 @@ func newStatusReport(snap daemon.RunSnapshot) StatusReport {
 		StartedAt:         timePtr(snap.StartedAt),
 		EndedAt:           timePtr(snap.EndedAt),
 		Error:             errMsg,
+		Message:           evidence.RedactString(snap.Message),
 		Stages:            stages,
 		PendingFindings:   pendingFindings,
+		EvidenceRefs:      evidenceRefs,
 	}
 }
 

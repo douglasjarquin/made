@@ -20,6 +20,9 @@ func run(args []string, stdout, stderr *os.File) int {
 		return runCapabilitiesCommand(args[1:], stdout, stderr)
 	case "run":
 		return runRunCommand(args[1:], stdout, stderr)
+	case "status":
+		_, _ = fmt.Fprintln(stderr, "made: status is obsolete; use made run status --json <exact-run-id>")
+		return 2
 	case "daemon":
 		return runDaemonCommand(args[1:], stdout, stderr)
 	case "review":
