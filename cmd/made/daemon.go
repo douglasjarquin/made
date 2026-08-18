@@ -480,7 +480,7 @@ func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.Review
 
 		work := func(workCtx context.Context, emit func(daemon.Event)) error {
 			return orchestrator.Run(workCtx, gatePath, defaultBranch, worktreesDir, runID, newSHA,
-				orchestrator.NewWorkFunc(rm, reviewDecisions, emit, runID, defaultBranch, branch, orchestrator.Options{}))
+				orchestrator.NewWorkFunc(rm, reviewDecisions, emit, runID, defaultBranch, branch, orchestrator.Options{CandidateOutputSHA: p.OutputSHA}))
 		}
 
 		submissionID := p.SubmissionID

@@ -45,7 +45,8 @@ const (
 // from the resolved RunContext.Config instead, since Config itself is only
 // resolved at Setup time, after a WorkFunc closure is already built.
 type Options struct {
-	ReviewOptions review.Options
+	ReviewOptions      review.Options
+	CandidateOutputSHA string
 }
 
 // NewWorkFunc builds the real 9-stage chain (Intent -> Rebase -> Review ->
@@ -251,7 +252,12 @@ func (c *chain) reviewStage() error {
 		return fmt.Errorf("orchestrator: resolve agent kind: %w", err)
 	}
 
-	result, err := review.Run(c.ctx, c.rc.Worktree.Path, agentKind, c.opts.ReviewOptions)
+	reviewOptions := c.opts.ReviewOptions
+	reviewOptions.BaseBranch = c.defaultBranch
+	reviewOptions.CandidateOutputSHA = c.opts.CandidateOutputSHA
+	reviewOptions.Evidence = c.rc.Evidence
+	reviewOptions.EvidenceRunID = c.runID
+	result, err := review.Run(c.ctx, c.rc.Worktree.Path, agentKind, reviewOptions)
 	if err != nil {
 		return err
 	}

@@ -22,7 +22,7 @@ test:
 commands:
   test: trusted-test-cmd
   lint: trusted-lint-cmd
-agent: trusted-agent
+agent: codex
 allow_repo_commands: false
 `
 
@@ -152,15 +152,12 @@ func TestConfig_LintCommandReturnsNilWhenEmpty(t *testing.T) {
 	}
 }
 
-func TestConfig_AgentKindMapsClaude(t *testing.T) {
+func TestConfig_AgentKindRejectsClaude(t *testing.T) {
 	cfg := Config{Agent: "claude"}
 
-	kind, err := cfg.AgentKind()
-	if err != nil {
-		t.Fatalf("AgentKind() returned unexpected error: %v", err)
-	}
-	if kind != agent.KindClaude {
-		t.Errorf("AgentKind() = %v, want %v", kind, agent.KindClaude)
+	_, err := cfg.AgentKind()
+	if err == nil || !strings.Contains(err.Error(), "supported agents") || !strings.Contains(err.Error(), "codex") {
+		t.Fatalf("AgentKind() error = %v, want actionable unsupported-agent error", err)
 	}
 }
 
@@ -194,5 +191,17 @@ func TestConfig_AgentKindFailsClosedOnUnrecognizedValue(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "gpt4") {
 		t.Errorf("AgentKind() error = %q, want it to name the invalid value %q", err.Error(), "gpt4")
+	}
+}
+
+func TestLoadEffectiveConfig_RejectsUnsupportedAgentBeforePipelineStages(t *testing.T) {
+	for _, unsupported := range []string{"claude", "gpt4"} {
+		t.Run(unsupported, func(t *testing.T) {
+			path := writeConfigFile(t, t.TempDir(), ".made.yml", "version: 1\nreview:\n  required: true\nagent: "+unsupported+"\n")
+			_, err := LoadEffectiveConfig(path, "")
+			if err == nil || !strings.Contains(err.Error(), "supported agents") || !strings.Contains(err.Error(), "codex") {
+				t.Fatalf("LoadEffectiveConfig error = %v, want actionable unsupported-agent validation", err)
+			}
+		})
 	}
 }

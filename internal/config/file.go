@@ -64,6 +64,9 @@ func LoadEffectiveConfig(trustedPath, pushedPath string) (Config, error) {
 		effective.Agent = trusted.Agent
 		effective.Agents = trusted.Agents
 	}
+	if err := effective.Validate(); err != nil {
+		return Config{}, fmt.Errorf("config: validate effective configuration: %w", err)
+	}
 
 	return effective, nil
 }

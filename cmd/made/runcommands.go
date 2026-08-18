@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/douglasjarquin/made/internal/agent"
 	"github.com/douglasjarquin/made/internal/api"
 )
 
@@ -12,6 +13,7 @@ type capabilitiesReport struct {
 	SchemaVersion   int      `json:"schema_version"`
 	ProtocolVersion int      `json:"protocol_version"`
 	Commands        []string `json:"commands"`
+	Agents          []string `json:"agents"`
 }
 
 func runCapabilitiesCommand(args []string, stdout, stderr *os.File) int {
@@ -28,7 +30,17 @@ func runCapabilitiesCommand(args []string, stdout, stderr *os.File) int {
 	return writeJSON(stdout, capabilitiesReport{
 		SchemaVersion: 1, ProtocolVersion: api.Version,
 		Commands: []string{"run.submit", "run.status", "run.list", "run.cancel", "review.decide", "doctor"},
+		Agents:   supportedAgentNames(),
 	}, stderr, "made capabilities")
+}
+
+func supportedAgentNames() []string {
+	kinds := agent.SupportedKinds()
+	names := make([]string, len(kinds))
+	for index, kind := range kinds {
+		names[index] = string(kind)
+	}
+	return names
 }
 
 type runSubmitParams struct {

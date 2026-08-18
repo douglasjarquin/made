@@ -122,11 +122,26 @@ func shellCommand(cmd string) []string {
 
 func (c Config) AgentKind() (agent.Kind, error) {
 	switch c.Agent {
-	case string(agent.KindClaude):
-		return agent.KindClaude, nil
 	case string(agent.KindCodex):
 		return agent.KindCodex, nil
 	default:
-		return "", fmt.Errorf("config: invalid agent %q: must be %q or %q", c.Agent, agent.KindClaude, agent.KindCodex)
+		return "", fmt.Errorf("config: unsupported agent %q; supported agents: %q", c.Agent, agent.KindCodex)
 	}
+}
+
+func (c Config) Validate() error {
+	if c.Review.Required && c.Agent == "" {
+		return fmt.Errorf("config: review requires agent %q", agent.KindCodex)
+	}
+	if c.Agent != "" {
+		if _, err := c.AgentKind(); err != nil {
+			return err
+		}
+	}
+	for index, configured := range c.Agents {
+		if configured != string(agent.KindCodex) {
+			return fmt.Errorf("config: unsupported agent %q at agents[%d]; supported agents: %q", configured, index, agent.KindCodex)
+		}
+	}
+	return nil
 }

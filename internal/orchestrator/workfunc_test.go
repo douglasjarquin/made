@@ -254,6 +254,23 @@ func TestNewWorkFunc_FullPassEndsRunningWithAwaitingMergeMessage(t *testing.T) {
 	if len(snap.OutputSHA) != 40 {
 		t.Fatalf("expected durable output SHA after push preparation, got %q", snap.OutputSHA)
 	}
+	metadataPath := filepath.Join(wt.Path, ".made", "evidence", runID, "review-contract.json")
+	metadata, err := os.ReadFile(metadataPath)
+	if err != nil {
+		t.Fatalf("read review contract evidence: %v", err)
+	}
+	var contract struct {
+		CandidateOutputSHA string `json:"candidate_output_sha"`
+	}
+	if err := json.Unmarshal(metadata, &contract); err != nil {
+		t.Fatalf("decode review contract evidence: %v", err)
+	}
+	if len(contract.CandidateOutputSHA) != 40 {
+		t.Fatalf("review contract evidence omitted a full candidate output SHA: %s", metadata)
+	}
+	if err := exec.Command("git", "-C", wt.Path, "cat-file", "-e", contract.CandidateOutputSHA+"^{commit}").Run(); err != nil {
+		t.Fatalf("review contract candidate output SHA %q is not a commit in the prepared worktree: %v", contract.CandidateOutputSHA, err)
+	}
 	assertAllStagesPassed(t, snap.Stages)
 
 	if !f.branchOnRealRemote(t, branch) {

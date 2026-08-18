@@ -37,19 +37,18 @@ func TestSpawn_CodexUsesSupportedExecStructuredContract(t *testing.T) {
 		"set -eu",
 		"printf '%s\\n' \"$@\" > \"$FAKE_AGENT_LOG_FILE\"",
 		"[ \"$1\" = \"exec\" ]",
-		"[ \"$2\" = \"--json\" ]",
-		"[ \"$3\" = \"--output-schema\" ]",
-		"[ -f \"$4\" ]",
-		"[ \"$5\" = \"--output-last-message\" ]",
+		"[ \"$2\" = \"--cd\" ]",
+		"[ -d \"$3\" ]",
+		"[ \"$4\" = \"--json\" ]",
+		"[ \"$5\" = \"--output-schema\" ]",
+		"[ -f \"$6\" ]",
 		"[ \"$7\" = \"--sandbox\" ]",
 		"[ \"$8\" = \"read-only\" ]",
 		"[ \"$9\" = \"--ephemeral\" ]",
-		"[ \"${10}\" = \"-C\" ]",
-		"[ -d \"${11}\" ]",
-		"[ \"$(git -C \"${11}\" rev-parse HEAD)\" = " + shellQuote(head) + " ]",
-		"if (umask 077; : > \"${11}/.agent-write-probe\") 2>/dev/null; then exit 1; fi",
+		"[ \"${10}\" = \"-\" ]",
+		"[ \"$(git -C \"$3\" rev-parse HEAD)\" = " + shellQuote(head) + " ]",
+		"if (umask 077; : > \"$3/.agent-write-probe\") 2>/dev/null; then exit 1; fi",
 		"test -z \"${MADE_REVIEW_SECRET:-}\"",
-		"printf '%s\\n' '{\"findings\":[]}' > \"$6\"",
 		"printf '%s\\n' '{\"findings\":[]}'",
 		"",
 	}, "\n")
@@ -81,11 +80,64 @@ func TestSpawn_CodexUsesSupportedExecStructuredContract(t *testing.T) {
 	if len(args) > 0 && args[0] == "review" {
 		t.Fatalf("Codex invocation used obsolete review command: %s", data)
 	}
-	if _, err := os.Stat(args[10]); !os.IsNotExist(err) {
+	if _, err := os.Stat(args[2]); !os.IsNotExist(err) {
 		t.Fatalf("review clone was not cleaned up: %v", err)
 	}
 	if _, err := os.Stat(hookMarker); !os.IsNotExist(err) {
 		t.Fatalf("Git template or injected config hook ran during review setup: %v", err)
+	}
+}
+
+func TestSpawn_TrustedBaseIsResolvableInDetachedReviewCopy(t *testing.T) {
+	worktree := agentWorktree(t)
+	base := strings.TrimSpace(gitAgent(t, worktree, "rev-parse", "HEAD"))
+	script := filepath.Join(t.TempDir(), "base-aware-codex")
+	contents := strings.Join([]string{
+		"#!/bin/sh",
+		"set -eu",
+		"[ \"$1\" = \"exec\" ]",
+		"[ \"$2\" = \"--cd\" ]",
+		"[ -d \"$3\" ]",
+		"[ \"$4\" = \"--json\" ]",
+		"[ \"$5\" = \"--output-schema\" ]",
+		"[ -f \"$6\" ]",
+		"[ \"$7\" = \"--sandbox\" ]",
+		"[ \"$8\" = \"read-only\" ]",
+		"[ \"$9\" = \"--ephemeral\" ]",
+		"[ \"${10}\" = \"-\" ]",
+		"git -C \"$3\" cat-file -e \"$FAKE_AGENT_BASE_SHA^{commit}\"",
+		"printf '%s\\n' '{\"findings\":[]}'",
+		"",
+	}, "\n")
+	if err := os.WriteFile(script, []byte(contents), 0o700); err != nil {
+		t.Fatalf("write base-aware Codex fake: %v", err)
+	}
+
+	findings, err := agent.Spawn(context.Background(), agent.KindCodex, agent.SpawnParams{
+		WorktreePath:   worktree,
+		BinaryPath:     script,
+		TrustedBaseSHA: base,
+		ExtraEnv:       []string{"FAKE_AGENT_BASE_SHA=" + base},
+	})
+	if err != nil {
+		t.Fatalf("Spawn: %v", err)
+	}
+	if len(findings.Findings) != 0 {
+		t.Fatalf("expected no findings, got %+v", findings)
+	}
+}
+
+func TestSpawn_RejectsUnavailableTrustedBaseBeforeAgentExecution(t *testing.T) {
+	worktree := agentWorktree(t)
+	missing := strings.Repeat("f", 40)
+	_, err := agent.Spawn(context.Background(), agent.KindCodex, agent.SpawnParams{
+		WorktreePath:   worktree,
+		BinaryPath:     agenttest.Build(t),
+		TrustedBaseSHA: missing,
+		ExtraEnv:       []string{"FAKE_AGENT_SCENARIO=" + filepath.Join(t.TempDir(), "never-read.json")},
+	})
+	if err == nil || !strings.Contains(err.Error(), "trusted base") {
+		t.Fatalf("Spawn error = %v, want trusted-base rejection before agent execution", err)
 	}
 }
 
@@ -131,7 +183,6 @@ func TestSpawn_ContainsReviewerFromSourceWorktree(t *testing.T) {
 		"if chmod -R u+w " + shellQuote(worktree) + " 2>/dev/null; then",
 		"  if : > " + shellQuote(filepath.Join(worktree, "source-mutated")) + " 2>/dev/null; then exit 42; fi",
 		"fi",
-		"printf '%s\\n' '{\"findings\":[]}' > \"$6\"",
 		"printf '%s\\n' '{\"findings\":[]}'",
 		"",
 	}, "\n")

@@ -79,7 +79,7 @@ func repositoryFilterOverrides(ctx context.Context, worktreePath string) ([]stri
 		return nil, fmt.Errorf("inspect repository Git filters: output exceeded %d bytes", reviewGitLimit)
 	}
 	drivers := make(map[string]struct{})
-	for _, key := range strings.Fields(string(result.Stdout)) {
+	for key := range strings.FieldsSeq(string(result.Stdout)) {
 		prefix := strings.TrimPrefix(key, "filter.")
 		dot := strings.LastIndexByte(prefix, '.')
 		if dot <= 0 {

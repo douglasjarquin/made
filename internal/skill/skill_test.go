@@ -57,7 +57,19 @@ func TestCommittedSkillFileMatchesGenerator(t *testing.T) {
 // via `made run status --json <exact-run-id>`), so the body must never regress to claiming a
 // push blocks until the pipeline finishes.
 func TestBodyDoesNotClaimPushBlocks(t *testing.T) {
-	if strings.Contains(skill.Markdown(), "blocks until") {
-		t.Error(`skill.Markdown() contains "blocks until": the pipeline is asynchronous, a push must not be described as blocking until a terminal state`)
+	for line := range strings.SplitSeq(strings.ToLower(skill.Markdown()), "\n") {
+		if strings.Contains(line, "push") && strings.Contains(line, "blocks until") {
+			t.Errorf("skill.Markdown() describes push as blocking until a terminal state: %q", line)
+		}
+	}
+}
+
+func TestBodyAdvertisesOnlySupportedCodexAgent(t *testing.T) {
+	body := skill.Markdown()
+	if strings.Contains(strings.ToLower(body), "claude") {
+		t.Fatalf("generated skill advertises unsupported Claude support")
+	}
+	if !strings.Contains(body, "Codex") {
+		t.Fatalf("generated skill omitted supported Codex review agent")
 	}
 }
