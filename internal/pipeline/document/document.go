@@ -82,6 +82,72 @@ func RunContext(ctx context.Context, worktreePath, baseBranch string, rules []Ru
 	}, nil
 }
 
+// RunContextWithBaseSHA is like RunContext but uses an exact commit SHA for the
+// diff range instead of a mutable branch name. This is required by managed-validation
+// mode, which must use the exact base_sha from the preflight-verified CLI arguments.
+func RunContextWithBaseSHA(ctx context.Context, worktreePath, baseSHA string, rules []Rule) (Result, error) {
+	changed, err := changedFilesWithRange(ctx, worktreePath, baseSHA+"..HEAD")
+	if err != nil {
+		return Result{}, fmt.Errorf("document: %w", err)
+	}
+
+	var findings []agent.Finding
+	for _, rule := range rules {
+		sourceMatches, err := matchAny(rule.SourcePattern, changed)
+		if err != nil {
+			return Result{}, fmt.Errorf("document: %w", err)
+		}
+		if len(sourceMatches) == 0 {
+			continue
+		}
+
+		docMatches, err := matchAny(rule.DocPattern, changed)
+		if err != nil {
+			return Result{}, fmt.Errorf("document: %w", err)
+		}
+		if len(docMatches) > 0 {
+			continue
+		}
+
+		findings = append(findings, agent.Finding{
+			Kind: agent.FindingAskUser,
+			Description: fmt.Sprintf(
+				"documentation policy violation: %s (matches %q) requires a change matching %q, but none was found in this diff",
+				strings.Join(sourceMatches, ", "), rule.SourcePattern, rule.DocPattern,
+			),
+		})
+	}
+
+	if len(findings) > 0 {
+		return Result{
+			OK:       true,
+			Message:  fmt.Sprintf("document: %d documentation policy finding(s) await human approval", len(findings)),
+			Findings: findings,
+		}, nil
+	}
+
+	return Result{
+		OK:      true,
+		Message: "document: no documentation policy violations found",
+	}, nil
+}
+
+func changedFilesWithRange(ctx context.Context, worktreePath, gitRange string) ([]string, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", worktreePath, "diff", "--name-only", gitRange)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("git diff --name-only %s: %w: %s", gitRange, err, strings.TrimSpace(string(out)))
+	}
+
+	var files []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line != "" {
+			files = append(files, line)
+		}
+	}
+	return files, nil
+}
+
 func changedFiles(ctx context.Context, worktreePath, baseBranch string) ([]string, error) {
 	cmd := exec.CommandContext(ctx, "git", "-C", worktreePath, "diff", "--name-only", baseBranch+"...HEAD")
 	out, err := cmd.CombinedOutput()
