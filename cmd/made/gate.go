@@ -20,13 +20,13 @@ const gateCommandTimeout = 30 * time.Second
 const gitZeroSHAValue = "0000000000000000000000000000000000000000"
 
 func gitEnv() []string {
-	return []string{
+	return append(os.Environ(),
 		"GIT_CONFIG_COUNT=2",
 		"GIT_CONFIG_KEY_0=commit.gpgsign",
 		"GIT_CONFIG_VALUE_0=false",
 		"GIT_CONFIG_KEY_1=safe.bareRepository",
 		"GIT_CONFIG_VALUE_1=all",
-	}
+	)
 }
 
 func runGateCommand(args []string, stdout, stderr *os.File) int {
