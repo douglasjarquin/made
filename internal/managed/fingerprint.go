@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 )
@@ -55,15 +54,6 @@ func Fingerprint(in FingerprintInput) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-var lineRefPattern = regexp.MustCompile(`(?i)\b(?:lines?\s+\d+(?:\s*[-–]\s*\d+)?|columns?\s+\d+|at\s+line\s+\d+|\(\d+(?:,\s*\d+)?\))|\:\d+(?:\:\d+)?\b`)
-
-// stripLineRefs removes line/column references from a description so that
-// fingerprints remain stable as findings drift across nearby lines.
-func stripLineRefs(s string) string {
-	s = lineRefPattern.ReplaceAllString(s, " ")
-	return strings.Join(strings.Fields(s), " ")
-}
-
 // normalizePaths returns a normalized, sorted, deduplicated string of paths.
 // Absolute workspace prefixes are stripped. Path separators are normalized to /.
 func normalizePaths(paths []string, workspacePrefix string) string {
@@ -83,17 +73,6 @@ func normalizePaths(paths []string, workspacePrefix string) string {
 	}
 	sort.Strings(normalized)
 	return strings.Join(normalized, "|")
-}
-
-// normalizeDescription strips the workspace prefix and collapses whitespace.
-func normalizeDescription(description, workspacePrefix string) string {
-	d := description
-	if workspacePrefix != "" {
-		d = strings.ReplaceAll(d, workspacePrefix, "")
-	}
-	// Collapse consecutive whitespace.
-	fields := strings.Fields(d)
-	return strings.Join(fields, " ")
 }
 
 func stripWorkspacePrefix(path, workspacePrefix string) string {

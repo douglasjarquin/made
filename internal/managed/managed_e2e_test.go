@@ -444,7 +444,7 @@ func TestManaged_SameFileDifferentFinding(t *testing.T) {
 	//
 	// If two different findings on the same file need different structural markers
 	// (e.g., different symbols or line ranges), they must provide them.
-	
+
 	// For now, we test that two findings with identical code/class/paths but
 	// different (paraphrased) descriptions get caught by duplicate detection if
 	// they would collide.
