@@ -406,9 +406,9 @@ func TestPreflight_RelativeWorkspaceRejected(t *testing.T) {
 	if code == 0 {
 		t.Error("expected non-zero exit for relative workspace")
 	}
-	if !strings.Contains(string(stderr), "not an absolute path") &&
+	if !strings.Contains(string(stderr), "absolute path") &&
 		!strings.Contains(string(stderr), "preflight") {
-		t.Errorf("expected preflight error in stderr, got: %s", stderr)
+		t.Errorf("expected absolute-path error in stderr, got: %s", stderr)
 	}
 	_ = workspace // only needed to build valid config
 }
@@ -646,8 +646,11 @@ func TestEvidenceDir_WrittenOutsideWorkspace(t *testing.T) {
 		"G-ev", "M-ev", workspace, baseSHA, inputSHA, configPath, policyHash, evidenceDir,
 	)...)
 
-	// Evidence directory must have the run-id subdirectory.
-	runDir := filepath.Join(evidenceDir, "G-ev")
+	// Evidence directory must have the run-id subdirectory. The run_id is
+	// hashed (SHA-256) into a path-safe directory name to prevent traversal.
+	sum := sha256.Sum256([]byte("G-ev"))
+	safeRunID := hex.EncodeToString(sum[:])
+	runDir := filepath.Join(evidenceDir, safeRunID)
 	info, err := os.Stat(runDir)
 	if err != nil {
 		t.Fatalf("evidence run dir %q not created: %v", runDir, err)

@@ -1,87 +1,94 @@
 package managed
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 )
 
-// ManagedEvidenceStore writes evidence files to <evidence-dir>/<run-id>/<stage>/.
-// It implements evidence.Store and evidence.ContextStore indirectly via WriteStageFiles.
+// ManagedEvidenceStore writes evidence under <evidenceDir>/<safeRunID>/<invocationID>/.
+// The safeRunID is derived from the run_id via SHA-256 to prevent path traversal.
+// Each invocation gets its own subdirectory, preserving evidence from prior runs.
 type ManagedEvidenceStore struct {
-	EvidenceDir string
-	RunID       string
+	EvidenceDir  string
+	RunID        string
+	InvocationID string
+	safeRunID    string
 }
 
-// StageDir returns the directory for stage evidence.
+// NewManagedEvidenceStore constructs a store bound to a specific invocation.
+func NewManagedEvidenceStore(evidenceDir, runID, invocationID string) *ManagedEvidenceStore {
+	sum := sha256.Sum256([]byte(runID))
+	return &ManagedEvidenceStore{
+		EvidenceDir:  evidenceDir,
+		RunID:        runID,
+		InvocationID: invocationID,
+		safeRunID:    hex.EncodeToString(sum[:]),
+	}
+}
+
+// InvocationDir returns the directory for this specific invocation's evidence.
+func (s *ManagedEvidenceStore) InvocationDir() string {
+	return filepath.Join(s.EvidenceDir, s.safeRunID, s.InvocationID)
+}
+
+// StageDir returns the stage-specific evidence directory.
 func (s *ManagedEvidenceStore) StageDir(stage string) string {
-	return filepath.Join(s.EvidenceDir, s.RunID, stage)
+	return filepath.Join(s.InvocationDir(), stage)
 }
 
-// WriteStageFiles writes files for a stage atomically where practical.
-// Returns a list of relative paths written (relative to evidence-dir/run-id/).
+// WriteStageFiles writes evidence files for a stage.
+// Returns a list of paths relative to the evidence directory.
 func (s *ManagedEvidenceStore) WriteStageFiles(stage string, files map[string][]byte) ([]string, error) {
 	stageDir := s.StageDir(stage)
-	if err := os.MkdirAll(stageDir, 0o755); err != nil {
+	if err := os.MkdirAll(stageDir, 0o750); err != nil {
 		return nil, fmt.Errorf("evidence: create stage dir %q: %w", stageDir, err)
 	}
 	var refs []string
 	for name, data := range files {
 		destPath := filepath.Join(stageDir, name)
-		tmpPath := destPath + ".tmp"
-		if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
+		// Use a unique tmp name to avoid races with concurrent invocations.
+		tmpPath := destPath + "." + s.InvocationID + ".tmp"
+		if err := os.WriteFile(tmpPath, data, 0o600); err != nil {
 			return nil, fmt.Errorf("evidence: write %q: %w", destPath, err)
 		}
 		if err := os.Rename(tmpPath, destPath); err != nil {
 			_ = os.Remove(tmpPath)
 			return nil, fmt.Errorf("evidence: rename %q: %w", destPath, err)
 		}
-		refs = append(refs, filepath.ToSlash(filepath.Join(s.RunID, stage, name)))
+		refs = append(refs, filepath.ToSlash(filepath.Join(s.InvocationID, stage, name)))
 	}
 	return refs, nil
 }
 
-// WriteManifest writes the top-level manifest.json.
+// WriteManifest writes manifest.json for this invocation.
 func (s *ManagedEvidenceStore) WriteManifest(manifest any) error {
-	runDir := filepath.Join(s.EvidenceDir, s.RunID)
-	if err := os.MkdirAll(runDir, 0o755); err != nil {
-		return fmt.Errorf("evidence: create run dir: %w", err)
-	}
-	data, err := json.MarshalIndent(manifest, "", "  ")
-	if err != nil {
-		return fmt.Errorf("evidence: marshal manifest: %w", err)
-	}
-	path := filepath.Join(runDir, "manifest.json")
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return fmt.Errorf("evidence: write manifest: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("evidence: rename manifest: %w", err)
-	}
-	return nil
+	return s.writeJSON(filepath.Join(s.InvocationDir(), "manifest.json"), manifest)
 }
 
-// WriteTerminal writes terminal.json.
+// WriteTerminal writes terminal.json for this invocation.
 func (s *ManagedEvidenceStore) WriteTerminal(terminal any) error {
-	runDir := filepath.Join(s.EvidenceDir, s.RunID)
-	if err := os.MkdirAll(runDir, 0o755); err != nil {
-		return fmt.Errorf("evidence: create run dir: %w", err)
+	return s.writeJSON(filepath.Join(s.InvocationDir(), "terminal.json"), terminal)
+}
+
+func (s *ManagedEvidenceStore) writeJSON(path string, v any) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return fmt.Errorf("evidence: create dir for %q: %w", path, err)
 	}
-	data, err := json.MarshalIndent(terminal, "", "  ")
+	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
-		return fmt.Errorf("evidence: marshal terminal: %w", err)
+		return fmt.Errorf("evidence: marshal %q: %w", path, err)
 	}
-	path := filepath.Join(runDir, "terminal.json")
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return fmt.Errorf("evidence: write terminal: %w", err)
+	tmp := path + "." + s.InvocationID + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return fmt.Errorf("evidence: write %q: %w", path, err)
 	}
 	if err := os.Rename(tmp, path); err != nil {
 		_ = os.Remove(tmp)
-		return fmt.Errorf("evidence: rename terminal: %w", err)
+		return fmt.Errorf("evidence: rename %q: %w", path, err)
 	}
 	return nil
 }
@@ -90,6 +97,7 @@ func (s *ManagedEvidenceStore) WriteTerminal(terminal any) error {
 type TerminalManifest struct {
 	RunID            string                   `json:"run_id"`
 	MissionID        string                   `json:"mission_id"`
+	InvocationID     string                   `json:"invocation_id"`
 	BaseSHA          string                   `json:"base_sha"`
 	InputSHA         string                   `json:"input_sha"`
 	PolicyHash       string                   `json:"policy_hash"`
@@ -99,4 +107,5 @@ type TerminalManifest struct {
 	Outcome          Outcome                  `json:"outcome"`
 	EventCount       int                      `json:"event_count"`
 	EvidenceRefs     []string                 `json:"evidence_refs"`
+	MadeVersion      string                   `json:"made_version"`
 }

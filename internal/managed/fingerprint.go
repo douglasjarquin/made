@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -33,19 +34,44 @@ type FingerprintInput struct {
 //
 //	sha256:<64-lowercase-hex>
 func Fingerprint(in FingerprintInput) string {
-	parts := []string{
-		fingerprintVersion,
-		in.Stage,
-		in.Code,
-		in.Class,
-		in.Kind,
-		normalizePaths(in.Paths, in.WorkspacePrefix),
-		in.Symbol,
-		normalizeDescription(in.Description, in.WorkspacePrefix),
+	hasStructural := in.Code != "" || in.Class != "" || len(in.Paths) > 0 || in.Symbol != ""
+
+	var parts []string
+	if hasStructural {
+		parts = []string{
+			fingerprintVersion,
+			in.Stage,
+			in.Kind,
+			in.Code,
+			in.Class,
+			normalizePaths(in.Paths, in.WorkspacePrefix),
+			in.Symbol,
+		}
+	} else {
+		parts = []string{
+			fingerprintVersion,
+			in.Stage,
+			in.Kind,
+			"",
+			"",
+			"",
+			"",
+			stripLineRefs(normalizeDescription(in.Description, in.WorkspacePrefix)),
+		}
 	}
+
 	joined := strings.Join(parts, "\x00")
 	sum := sha256.Sum256([]byte(joined))
 	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+var lineRefPattern = regexp.MustCompile(`(?i)\b(?:lines?\s+\d+(?:\s*[-–]\s*\d+)?|columns?\s+\d+|at\s+line\s+\d+|\(\d+(?:,\s*\d+)?\))|\:\d+(?:\:\d+)?\b`)
+
+// stripLineRefs removes line/column references from a description so that
+// fingerprints remain stable as findings drift across nearby lines.
+func stripLineRefs(s string) string {
+	s = lineRefPattern.ReplaceAllString(s, " ")
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // normalizePaths returns a normalized, sorted, deduplicated string of paths.

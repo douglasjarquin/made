@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/douglasjarquin/made/internal/agent"
 	"github.com/douglasjarquin/made/internal/config"
@@ -132,6 +131,10 @@ func (r *Runner) reviewStage(ctx context.Context) (Outcome, string, []FindingRep
 		ReportOnly:    true,           // managed mode: never apply auto-fixes
 		EvidenceRunID: r.opts.RunID,
 	}
+	if r.opts.ReviewAgentBinaryPath != "" {
+		reviewOpts.BinaryPath = r.opts.ReviewAgentBinaryPath
+		reviewOpts.ExtraEnv = r.opts.ReviewAgentExtraEnv
+	}
 
 	result, err := review.Run(stageCtx, r.opts.Workspace, agentKind, reviewOpts)
 	if err != nil {
@@ -178,28 +181,30 @@ func (r *Runner) reviewStage(ctx context.Context) (Outcome, string, []FindingRep
 			Patch:       f.Patch,
 		}
 		findings = append(findings, payload)
-		_ = r.ew.Emit("finding.reported", payload)
+		if emitErr := r.ew.Emit("finding.reported", payload); emitErr != nil {
+			return OutcomeInfrastructureError, fmt.Sprintf("emit finding.reported: %s", emitErr), nil, nil
+		}
 
 		switch f.Kind {
 		case agent.FindingBlocking:
-			outcome = OutcomeFailedTerminal
+			outcome = mergeOutcome(outcome, OutcomeFailedTerminal)
 			msg = fmt.Sprintf("blocking finding: %s", f.Description)
 		case agent.FindingAutoFixable:
-			if outcome == OutcomePassed {
-				outcome = OutcomeFailedRetryable
+			outcome = mergeOutcome(outcome, OutcomeFailedRetryable)
+			if msg == "" {
 				msg = "auto-fixable finding(s) require repair"
 			}
 		case agent.FindingAskUser:
 			dec, hasDec := r.decisions.Lookup(fp)
 			if !hasDec {
-				if outcome == OutcomePassed || outcome == OutcomeFailedRetryable {
-					outcome = OutcomeNeedsDecision
+				outcome = mergeOutcome(outcome, OutcomeNeedsDecision)
+				if msg == "" {
 					msg = "ask-user finding(s) require a Decision"
 				}
 			} else {
 				r.decisionsUsed[fp] = struct{}{}
 				if dec.Outcome == DecisionRejected {
-					outcome = OutcomeFailedTerminal
+					outcome = mergeOutcome(outcome, OutcomeFailedTerminal)
 					msg = fmt.Sprintf("ask-user finding rejected by decision %s: %s", dec.DecisionID, f.Description)
 				}
 				// approved: continue (outcome stays passed or existing failure)
@@ -207,9 +212,11 @@ func (r *Runner) reviewStage(ctx context.Context) (Outcome, string, []FindingRep
 		}
 	}
 
-	if !result.OK && outcome == OutcomePassed {
-		outcome = OutcomeFailedTerminal
-		msg = result.Message
+	if !result.OK {
+		outcome = mergeOutcome(outcome, OutcomeFailedTerminal)
+		if msg == "" {
+			msg = result.Message
+		}
 	}
 	if msg == "" {
 		msg = result.Message
@@ -249,8 +256,8 @@ func (r *Runner) documentStage(ctx context.Context) (Outcome, string, []FindingR
 	stageCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	// Use exact SHA range.
-	result, err := document.RunContextWithBaseSHA(stageCtx, r.opts.Workspace, r.opts.BaseSHA, rules)
+	// Use exact SHA range through safegit.
+	result, err := document.RunContextWithRange(stageCtx, r.opts.Workspace, r.opts.BaseSHA, r.opts.InputSHA, rules)
 	if err != nil {
 		return OutcomeInfrastructureError, fmt.Sprintf("document: %s", err), nil, nil
 	}
@@ -263,6 +270,9 @@ func (r *Runner) documentStage(ctx context.Context) (Outcome, string, []FindingR
 		fp := Fingerprint(FingerprintInput{
 			Stage:           stageDocument,
 			Kind:            string(f.Kind),
+			Code:            f.Code,
+			Class:           f.Class,
+			Symbol:          f.Symbol,
 			Paths:           f.Paths,
 			Description:     f.Description,
 			WorkspacePrefix: r.opts.Workspace,
@@ -271,22 +281,27 @@ func (r *Runner) documentStage(ctx context.Context) (Outcome, string, []FindingR
 			Fingerprint: fp,
 			Stage:       stageDocument,
 			Kind:        string(f.Kind),
+			Code:        f.Code,
+			Class:       f.Class,
 			Description: f.Description,
 			Paths:       f.Paths,
+			Symbol:      f.Symbol,
 		}
 		findings = append(findings, payload)
-		_ = r.ew.Emit("finding.reported", payload)
+		if emitErr := r.ew.Emit("finding.reported", payload); emitErr != nil {
+			return OutcomeInfrastructureError, fmt.Sprintf("emit finding.reported: %s", emitErr), nil, nil
+		}
 
 		dec, hasDec := r.decisions.Lookup(fp)
 		if !hasDec {
-			if outcome == OutcomePassed {
-				outcome = OutcomeNeedsDecision
+			outcome = mergeOutcome(outcome, OutcomeNeedsDecision)
+			if msg == "" || outcome == OutcomeNeedsDecision {
 				msg = "document finding(s) require a Decision"
 			}
 		} else {
 			r.decisionsUsed[fp] = struct{}{}
 			if dec.Outcome == DecisionRejected {
-				outcome = OutcomeFailedTerminal
+				outcome = mergeOutcome(outcome, OutcomeFailedTerminal)
 				msg = fmt.Sprintf("document finding rejected by decision %s: %s", dec.DecisionID, f.Description)
 			}
 		}
@@ -349,6 +364,39 @@ func (r *Runner) UnusedDecisions() []DecisionRecord {
 	return unused
 }
 
+// DecisionsApplied returns the fingerprints of decisions that matched a finding.
+func (r *Runner) DecisionsApplied() []string {
+	applied := make([]string, 0, len(r.decisionsUsed))
+	for fp := range r.decisionsUsed {
+		applied = append(applied, fp)
+	}
+	return applied
+}
+
+// outcomeRank ranks outcomes so the most severe outcome wins when merging.
+func outcomeRank(o Outcome) int {
+	switch o {
+	case OutcomePassed:
+		return 0
+	case OutcomeNeedsDecision:
+		return 1
+	case OutcomeFailedRetryable:
+		return 2
+	case OutcomeFailedTerminal, OutcomeInfrastructureError:
+		return 3
+	default:
+		return 1
+	}
+}
+
+// mergeOutcome returns the more severe of two outcomes.
+func mergeOutcome(current, next Outcome) Outcome {
+	if outcomeRank(next) > outcomeRank(current) {
+		return next
+	}
+	return current
+}
+
 func deriveDocumentRules(cfg config.Config) []document.Rule {
 	rules := make([]document.Rule, 0, len(cfg.Document.Rules))
 	for _, r := range cfg.Document.Rules {
@@ -394,34 +442,4 @@ func readDecisions(path string, opts *Options) (*Decisions, error) {
 		return &Decisions{byFingerprint: make(map[string]DecisionRecord)}, nil
 	}
 	return LoadDecisions(path, opts)
-}
-
-// buildTerminalManifest constructs the run terminal evidence summary.
-func buildTerminalManifest(opts *Options, runner *Runner, outcome Outcome, eventCount int) TerminalManifest {
-	var decisionsApplied []string
-	for fp := range runner.decisionsUsed {
-		decisionsApplied = append(decisionsApplied, fp)
-	}
-	return TerminalManifest{
-		RunID:            opts.RunID,
-		MissionID:        opts.MissionID,
-		BaseSHA:          opts.BaseSHA,
-		InputSHA:         opts.InputSHA,
-		PolicyHash:       opts.PolicyHash,
-		StageResults:     runner.StageResults(),
-		Findings:         runner.AllFindings(),
-		DecisionsApplied: decisionsApplied,
-		Outcome:          outcome,
-		EventCount:       eventCount,
-		EvidenceRefs:     runner.EvidenceRefs(),
-	}
-}
-
-// isContextError checks if an error is a context cancellation or deadline.
-func isContextError(err error) bool {
-	if err == nil {
-		return false
-	}
-	s := err.Error()
-	return strings.Contains(s, "context canceled") || strings.Contains(s, "context deadline exceeded")
 }

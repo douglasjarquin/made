@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 )
@@ -42,6 +43,7 @@ type DecisionsFile struct {
 	RunID         string           `json:"run_id"`
 	MissionID     string           `json:"mission_id"`
 	InputSHA      string           `json:"input_sha"`
+	BaseSHA       string           `json:"base_sha"`
 	PolicyHash    string           `json:"policy_hash"`
 	Decisions     []DecisionRecord `json:"decisions"`
 }
@@ -59,9 +61,30 @@ func LoadDecisions(path string, opts *Options) (*Decisions, error) {
 		return &Decisions{byFingerprint: make(map[string]DecisionRecord)}, nil
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := func() ([]byte, error) {
+		fi, err := os.Lstat(path)
+		if err != nil {
+			return nil, fmt.Errorf("decisions: stat %q: %w", path, err)
+		}
+		if !fi.Mode().IsRegular() {
+			return nil, fmt.Errorf("decisions: %q is not a regular file", path)
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			return nil, fmt.Errorf("decisions: open %q: %w", path, err)
+		}
+		defer f.Close()
+		b, err := io.ReadAll(io.LimitReader(f, 1<<20+1))
+		if err != nil {
+			return nil, fmt.Errorf("decisions: read %q: %w", path, err)
+		}
+		if len(b) > 1<<20 {
+			return nil, fmt.Errorf("decisions: file too large (>1 MiB): %q", path)
+		}
+		return b, nil
+	}()
 	if err != nil {
-		return nil, fmt.Errorf("decisions: read %q: %w", path, err)
+		return nil, err
 	}
 
 	var df DecisionsFile
@@ -82,6 +105,9 @@ func LoadDecisions(path string, opts *Options) (*Decisions, error) {
 	}
 	if df.InputSHA != opts.InputSHA {
 		return nil, fmt.Errorf("decisions: input_sha mismatch: file has %q, expected %q", df.InputSHA, opts.InputSHA)
+	}
+	if df.BaseSHA != opts.BaseSHA {
+		return nil, fmt.Errorf("decisions: base_sha mismatch: file has %q, expected %q", df.BaseSHA, opts.BaseSHA)
 	}
 	if df.PolicyHash != opts.PolicyHash {
 		return nil, fmt.Errorf("decisions: policy_hash mismatch: file has %q, expected %q", df.PolicyHash, opts.PolicyHash)

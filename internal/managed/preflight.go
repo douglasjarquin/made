@@ -24,15 +24,45 @@ type PreflightResult struct {
 	ConfigBytes []byte
 }
 
+// ValidateOptions performs pure format/argument validation.
+// Returns a non-nil error for usage errors that should produce exit 2 (no events).
+func ValidateOptions(opts *Options) error {
+	if opts.RunID == "" {
+		return fmt.Errorf("--run-id is required")
+	}
+	if opts.MissionID == "" {
+		return fmt.Errorf("--mission-id is required")
+	}
+	if !filepath.IsAbs(opts.Workspace) {
+		return fmt.Errorf("--workspace %q must be an absolute path", opts.Workspace)
+	}
+	if !filepath.IsAbs(opts.TrustedConfig) {
+		return fmt.Errorf("--trusted-config %q must be an absolute path", opts.TrustedConfig)
+	}
+	if !filepath.IsAbs(opts.EvidenceDir) {
+		return fmt.Errorf("--evidence-dir %q must be an absolute path", opts.EvidenceDir)
+	}
+	if !fullSHARegexp.MatchString(opts.InputSHA) {
+		return fmt.Errorf("--input-sha %q must be a full 40-hex commit SHA", opts.InputSHA)
+	}
+	if !fullSHARegexp.MatchString(opts.BaseSHA) {
+		return fmt.Errorf("--base-sha %q must be a full 40-hex commit SHA", opts.BaseSHA)
+	}
+	if !policyHashRegexp.MatchString(opts.PolicyHash) {
+		return fmt.Errorf("--policy-hash %q must match sha256:<64-lowercase-hex>", opts.PolicyHash)
+	}
+	if opts.DecisionsPath != "" && !filepath.IsAbs(opts.DecisionsPath) {
+		return fmt.Errorf("--decisions %q must be an absolute path", opts.DecisionsPath)
+	}
+	return nil
+}
+
 // RunPreflight verifies all preconditions before any validation stage begins.
 // On success it returns a PreflightResult containing the verified config bytes.
+// Format/argument validation is handled separately by ValidateOptions; this
+// function performs OS and Git checks only.
 func RunPreflight(ctx context.Context, opts *Options) (PreflightResult, error) {
-	// 1. workspace is absolute
-	if !filepath.IsAbs(opts.Workspace) {
-		return PreflightResult{}, fmt.Errorf("preflight: workspace %q is not an absolute path", opts.Workspace)
-	}
-
-	// 2. workspace exists and is a Git working tree
+	// workspace exists and is a Git working tree
 	wsInfo, err := os.Stat(opts.Workspace)
 	if err != nil {
 		return PreflightResult{}, fmt.Errorf("preflight: workspace %q: %w", opts.Workspace, err)
@@ -47,17 +77,7 @@ func RunPreflight(ctx context.Context, opts *Options) (PreflightResult, error) {
 		return PreflightResult{}, fmt.Errorf("preflight: workspace %q is not a Git working tree: %w", opts.Workspace, gitErr)
 	}
 
-	// 4. input_sha is a full 40-hex SHA
-	if !fullSHARegexp.MatchString(opts.InputSHA) {
-		return PreflightResult{}, fmt.Errorf("preflight: input_sha %q is not a full 40-hex commit SHA", opts.InputSHA)
-	}
-
-	// 5. base_sha is a full 40-hex SHA
-	if !fullSHARegexp.MatchString(opts.BaseSHA) {
-		return PreflightResult{}, fmt.Errorf("preflight: base_sha %q is not a full 40-hex commit SHA", opts.BaseSHA)
-	}
-
-	// 3. HEAD^{commit} exactly equals input_sha
+	// HEAD^{commit} exactly equals input_sha
 	headSHA, err := safegit.Output(ctx, safegit.Command{
 		WorktreePath: opts.Workspace,
 		Args:         []string{"rev-parse", "--verify", "HEAD^{commit}"},
@@ -69,7 +89,7 @@ func RunPreflight(ctx context.Context, opts *Options) (PreflightResult, error) {
 		return PreflightResult{}, fmt.Errorf("preflight: workspace HEAD is %q but input_sha is %q", headSHA, opts.InputSHA)
 	}
 
-	// 6. both commits exist locally
+	// both commits exist locally
 	if _, err := safegit.Output(ctx, safegit.Command{
 		WorktreePath: opts.Workspace,
 		Args:         []string{"cat-file", "-e", opts.InputSHA + "^{commit}"},
@@ -83,7 +103,7 @@ func RunPreflight(ctx context.Context, opts *Options) (PreflightResult, error) {
 		return PreflightResult{}, fmt.Errorf("preflight: base_sha %q does not exist locally: %w", opts.BaseSHA, err)
 	}
 
-	// 7. base_sha is an ancestor of input_sha
+	// base_sha is an ancestor of input_sha
 	mergeBase, err := safegit.Output(ctx, safegit.Command{
 		WorktreePath: opts.Workspace,
 		Args:         []string{"merge-base", opts.BaseSHA, opts.InputSHA},
@@ -95,7 +115,7 @@ func RunPreflight(ctx context.Context, opts *Options) (PreflightResult, error) {
 		return PreflightResult{}, fmt.Errorf("preflight: base_sha %q is not an ancestor of input_sha %q", opts.BaseSHA, opts.InputSHA)
 	}
 
-	// 8. worktree is clean (no tracked or non-ignored untracked changes)
+	// worktree is clean (no tracked or non-ignored untracked changes)
 	status, err := safegit.Output(ctx, safegit.Command{
 		WorktreePath: opts.Workspace,
 		Args:         []string{"status", "--porcelain", "--untracked-files=all"},
@@ -107,52 +127,51 @@ func RunPreflight(ctx context.Context, opts *Options) (PreflightResult, error) {
 		return PreflightResult{}, fmt.Errorf("preflight: workspace has uncommitted changes:\n%s", status)
 	}
 
-	// 9. trusted-config is absolute
-	if !filepath.IsAbs(opts.TrustedConfig) {
-		return PreflightResult{}, fmt.Errorf("preflight: trusted-config %q is not an absolute path", opts.TrustedConfig)
-	}
-
-	// 10 & 9 cont. — read exactly once, verify it's a regular file (not symlink)
+	// trusted-config: read exactly once, verify it is a regular file even after open
+	// (closes the symlink-swap race between Lstat and Open).
 	configInfo, err := os.Lstat(opts.TrustedConfig)
 	if err != nil {
-		return PreflightResult{}, fmt.Errorf("preflight: trusted-config: %w", err)
+		return PreflightResult{}, fmt.Errorf("preflight: trusted-config stat: %w", err)
 	}
 	if !configInfo.Mode().IsRegular() {
-		return PreflightResult{}, fmt.Errorf("preflight: trusted-config %q is not a regular file (mode: %s)", opts.TrustedConfig, configInfo.Mode())
+		return PreflightResult{}, fmt.Errorf("preflight: trusted-config %q is not a regular file", opts.TrustedConfig)
 	}
-	f, err := os.Open(opts.TrustedConfig)
-	if err != nil {
-		return PreflightResult{}, fmt.Errorf("preflight: open trusted-config: %w", err)
-	}
-	configBytes, err := func() ([]byte, error) {
-		defer func() { _ = f.Close() }()
-		return io.ReadAll(f)
-	}()
-	if err != nil {
+	var configBytes []byte
+	if err := func() error {
+		f, err := os.Open(opts.TrustedConfig)
+		if err != nil {
+			return fmt.Errorf("open: %w", err)
+		}
+		defer f.Close()
+		// Verify fd points to a regular file (prevents symlink-swap race between Lstat and Open).
+		fi, err := f.Stat()
+		if err != nil {
+			return fmt.Errorf("fstat: %w", err)
+		}
+		if !fi.Mode().IsRegular() {
+			return fmt.Errorf("not a regular file after open")
+		}
+		configBytes, err = io.ReadAll(f)
+		return err
+	}(); err != nil {
 		return PreflightResult{}, fmt.Errorf("preflight: read trusted-config: %w", err)
 	}
 
-	// 11. policy_hash format
-	if !policyHashRegexp.MatchString(opts.PolicyHash) {
-		return PreflightResult{}, fmt.Errorf("preflight: policy_hash %q does not match sha256:<64-lowercase-hex>", opts.PolicyHash)
-	}
-
-	// 12. verify SHA-256 of config bytes matches policy_hash
+	// verify SHA-256 of config bytes matches policy_hash
 	sum := sha256.Sum256(configBytes)
 	computedHash := "sha256:" + hex.EncodeToString(sum[:])
 	if computedHash != opts.PolicyHash {
 		return PreflightResult{}, fmt.Errorf("preflight: trusted-config hash mismatch: computed %s, expected %s", computedHash, opts.PolicyHash)
 	}
 
-	// 13. evidence-dir is absolute
-	if !filepath.IsAbs(opts.EvidenceDir) {
-		return PreflightResult{}, fmt.Errorf("preflight: evidence-dir %q is not an absolute path", opts.EvidenceDir)
+	// evidence-dir is outside the workspace, using canonical path resolution.
+	canonicalWS, err := filepath.EvalSymlinks(opts.Workspace)
+	if err != nil {
+		return PreflightResult{}, fmt.Errorf("preflight: resolve workspace canonical path: %w", err)
 	}
-
-	// 14. evidence-dir is outside the workspace
-	wsClean := filepath.Clean(opts.Workspace) + string(filepath.Separator)
 	evClean := filepath.Clean(opts.EvidenceDir)
-	if strings.HasPrefix(evClean+string(filepath.Separator), wsClean) || evClean == filepath.Clean(opts.Workspace) {
+	wsSep := canonicalWS + string(filepath.Separator)
+	if strings.HasPrefix(evClean+string(filepath.Separator), wsSep) || evClean == canonicalWS {
 		return PreflightResult{}, fmt.Errorf("preflight: evidence-dir %q must be outside the workspace %q", opts.EvidenceDir, opts.Workspace)
 	}
 

@@ -114,3 +114,34 @@ func TestFingerprint_FallbackNormalizationIsDeterministic(t *testing.T) {
 		t.Error("whitespace normalization should produce same fingerprint")
 	}
 }
+
+func TestFingerprint_StructuralPrimaryIgnoresDescription(t *testing.T) {
+	base := managed.FingerprintInput{
+		Stage: "review",
+		Kind:  "ask_user",
+		Code:  "auth.token-rotation",
+		Class: "security",
+		Paths: []string{"internal/auth/token.go"},
+	}
+	varied := base
+	varied.Description = "This cache-policy change could allow stale reads (completely different text)"
+	if managed.Fingerprint(base) != managed.Fingerprint(varied) {
+		t.Errorf("structural fingerprints should match regardless of description")
+	}
+}
+
+func TestFingerprint_DescriptionFallback_StripLineRefs(t *testing.T) {
+	a := managed.FingerprintInput{
+		Stage:       "review",
+		Kind:        "ask_user",
+		Description: "Check the cache policy at line 42",
+	}
+	b := managed.FingerprintInput{
+		Stage:       "review",
+		Kind:        "ask_user",
+		Description: "Check the cache policy at line 99",
+	}
+	if managed.Fingerprint(a) != managed.Fingerprint(b) {
+		t.Errorf("description fallback fingerprints should match after stripping line refs")
+	}
+}

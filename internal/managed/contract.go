@@ -53,6 +53,16 @@ type Options struct {
 	PolicyHash    string
 	EvidenceDir   string
 	DecisionsPath string // optional
+
+	// InvocationID uniquely identifies a single Run invocation. It is generated
+	// internally by Run and used to isolate evidence paths across reruns.
+	InvocationID string
+
+	// ReviewAgentBinaryPath overrides the agent binary path for testing.
+	// Leave empty in production.
+	ReviewAgentBinaryPath string
+	// ReviewAgentExtraEnv provides additional env vars for the agent process (testing).
+	ReviewAgentExtraEnv []string
 }
 
 // Event is one line in the JSON-Lines event stream.
@@ -63,6 +73,7 @@ type Event struct {
 	RunID           string    `json:"run_id"`
 	MissionID       string    `json:"mission_id"`
 	InputSHA        string    `json:"input_sha"`
+	BaseSHA         string    `json:"base_sha"`
 	PolicyHash      string    `json:"policy_hash"`
 	EventType       string    `json:"event"`
 	Timestamp       time.Time `json:"timestamp"`
@@ -108,14 +119,15 @@ type RunCompletedPayload struct {
 	Outcome      Outcome                  `json:"outcome"`
 	Stage        string                   `json:"stage"`
 	Message      string                   `json:"message"`
+	InvocationID string                   `json:"invocation_id,omitempty"`
 	Findings     []FindingReportedPayload `json:"findings"`
 	EvidenceRefs []string                 `json:"evidence_refs"`
 }
 
 // StageResult records the outcome of a single stage.
 type StageResult struct {
-	Stage    string
-	Outcome  Outcome
-	Message  string
-	Findings []FindingReportedPayload
+	Stage    string                   `json:"stage"`
+	Outcome  Outcome                  `json:"outcome"`
+	Message  string                   `json:"message,omitempty"`
+	Findings []FindingReportedPayload `json:"findings"`
 }

@@ -40,6 +40,7 @@ func (ew *EventWriter) Emit(eventType string, payload any) error {
 		RunID:           ew.opts.RunID,
 		MissionID:       ew.opts.MissionID,
 		InputSHA:        ew.opts.InputSHA,
+		BaseSHA:         ew.opts.BaseSHA,
 		PolicyHash:      ew.opts.PolicyHash,
 		EventType:       eventType,
 		Timestamp:       time.Now().UTC(),
