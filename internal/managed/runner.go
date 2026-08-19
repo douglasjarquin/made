@@ -65,6 +65,11 @@ func (r *Runner) runStage(ctx context.Context, stage string) (Outcome, string, s
 		return OutcomeInfrastructureError, fmt.Sprintf("emit stage.started: %s", err), stage
 	}
 
+	// Verify HEAD == input_sha and workspace clean before stage.
+	if verifyErr := VerifyExactInputSHA(ctx, r.opts.Workspace, r.opts.InputSHA); verifyErr != nil {
+		return OutcomeInfrastructureError, fmt.Sprintf("pre-stage validation failed: %s", verifyErr), stage
+	}
+
 	// Capture pre-stage worktree state.
 	beforeHead, beforeStatus, err := CaptureWorktreeState(ctx, r.opts.Workspace)
 	if err != nil {
@@ -82,6 +87,11 @@ func (r *Runner) runStage(ctx context.Context, stage string) (Outcome, string, s
 		})
 		r.stageResults = append(r.stageResults, StageResult{Stage: stage, Outcome: OutcomeInfrastructureError, Message: mutErr.Error()})
 		return OutcomeInfrastructureError, "stage " + stage + " mutated workspace: " + mutErr.Error(), stage
+	}
+
+	// Verify HEAD == input_sha and workspace clean after stage.
+	if verifyErr := VerifyExactInputSHA(ctx, r.opts.Workspace, r.opts.InputSHA); verifyErr != nil {
+		return OutcomeInfrastructureError, fmt.Sprintf("post-stage validation failed: %s", verifyErr), stage
 	}
 
 	r.allFindings = append(r.allFindings, findings...)

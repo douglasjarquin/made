@@ -211,3 +211,20 @@ func VerifyWorktreeUnchanged(ctx context.Context, workspace, beforeHead, beforeS
 	}
 	return nil
 }
+
+// VerifyExactInputSHA checks that HEAD == inputSHA and workspace is clean.
+// This guard prevents undetected mutations or concurrent workspace changes.
+func VerifyExactInputSHA(ctx context.Context, workspace, inputSHA string) error {
+	head, status, err := CaptureWorktreeState(ctx, workspace)
+	if err != nil {
+		return err
+	}
+	if head != inputSHA {
+		return fmt.Errorf("workspace HEAD %s does not match input_sha %s", head, inputSHA)
+	}
+	if status != "" {
+		return fmt.Errorf("workspace not clean (dirty files detected)")
+	}
+	return nil
+}
+
