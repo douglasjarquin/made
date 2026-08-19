@@ -207,8 +207,10 @@ Managed mode writes JSON Lines to stdout only. Diagnostics go to stderr.
   "sequence": 1,
   "run_id": "G-229",
   "mission_id": "M-402",
+  "invocation_id": "1234567890abcdef",
+  "base_sha": "1111111111111111111111111111111111111111",
   "input_sha": "2222222222222222222222222222222222222222",
-  "policy_hash": "sha256:aabbcc...",
+  "policy_hash": "sha256:64aec94d8e1fade3975101ba87f44076e4487016c87c6cf8d24857aad2e28d27",
   "event": "run.started",
   "timestamp": "2026-08-18T21:00:00.000000000Z",
   "payload": {}
@@ -218,8 +220,11 @@ Managed mode writes JSON Lines to stdout only. Diagnostics go to stderr.
 ### Protocol rules
 
 - `sequence` begins at 1 and increases by exactly 1
+- `invocation_id` is a unique lowercase hex string, constant within a single invocation but different on each rerun
+- `base_sha` is the immutable base commit SHA (40-hex), used for diff ranges
+- `input_sha` is the immutable input commit SHA (40-hex), equal to workspace HEAD
 - Timestamps are UTC RFC3339 nanosecond precision
-- `run_id`, `mission_id`, `input_sha`, `policy_hash` are constant across all events
+- `run_id`, `mission_id`, `base_sha`, `input_sha`, `policy_hash`, and `invocation_id` are constant across all events
 - Exactly one terminal event is emitted per invocation
 - No event is emitted after the terminal event
 
@@ -227,11 +232,11 @@ Managed mode writes JSON Lines to stdout only. Diagnostics go to stderr.
 
 | Event | When |
 |---|---|
-| `run.started` | After preflight succeeds |
-| `stage.started` | Before each stage begins |
+| `run.started` | At process start, before preflight validation begins |
+| `stage.started` | Before each stage begins (review, test, document, lint) |
 | `finding.reported` | For each finding discovered by a stage |
 | `evidence.created` | After evidence is written for a stage |
-| `stage.completed` | After each stage finishes |
+| `stage.completed` | After each stage finishes (even on failure) |
 | `run.completed` | Terminal; exactly once |
 
 Not implemented in V1: `run.checkpointed`, `run.resumed`, `decision.waiting`
@@ -306,20 +311,33 @@ The JSON terminal event is authoritative. Exit codes are a process-level summary
 
 ### Fingerprint construction
 
+**For managed validation**, fingerprints use structural identity only:
+
 Components (in order):
 
 1. `"fpv1"` — fingerprint protocol version prefix
 2. stage name
-3. finding code (or empty string)
-4. finding class (or empty string)
+3. finding code (required; stable rule/defect identifier)
+4. finding class (required; stable category)
 5. finding kind
-6. sorted, deduplicated, normalized repository-relative paths (separator normalized to `/`)
-7. enclosing symbol (or empty string)
-8. normalized description (whitespace-collapsed; absolute workspace prefix stripped)
+6. sorted, deduplicated, normalized repository-relative paths (required; separator normalized to `/`)
+7. finding symbol/locus (strongly recommended when applicable; e.g., function name)
 
 Each component is separated by `\x00`. The fingerprint is `sha256:<hex>` of the UTF-8 joined string.
 
-Line numbers are not used. The fingerprint is stable across minor description changes that do not alter meaning, but semantic perfection is not guaranteed.
+**Important**: The description is intentionally omitted from managed fingerprints to ensure stability
+across paraphrasing. This requires all managed findings to provide stable structural fields (code, class, paths).
+A finding missing any required structural field is rejected at preflight with `infrastructure_error`.
+
+### Finding identity requirements
+
+For managed validation, every finding must include:
+
+- **code**: Stable, rule- or defect-specific identifier (e.g., `review.security_issue`, `style.naming`)
+- **class**: Stable category (e.g., `security`, `style`, `architecture`)
+- **paths**: One or more repository-relative paths affected by the finding
+- **symbol**: Strongly recommended when applicable (e.g., function name, class name, line range)
+- **description**: Human-readable explanation (not used in fingerprint; serves as evidence)
 
 ---
 
@@ -332,12 +350,13 @@ Optional `--decisions` file:
   "schema_version": 1,
   "run_id": "G-229",
   "mission_id": "M-402",
+  "base_sha": "1111111111111111111111111111111111111111",
   "input_sha": "2222222222222222222222222222222222222222",
-  "policy_hash": "sha256:...",
+  "policy_hash": "sha256:64aec94d8e1fade3975101ba87f44076e4487016c87c6cf8d24857aad2e28d27",
   "decisions": [
     {
       "decision_id": "D-184",
-      "finding_fingerprint": "sha256:...",
+      "finding_fingerprint": "sha256:aaabbbcccddd...",
       "outcome": "approved",
       "scope": "sha_bound",
       "rationale": "Accepted for this validation input"
@@ -356,7 +375,7 @@ Optional `--decisions` file:
 The Decisions file is rejected when:
 
 - Schema version is unsupported
-- `run_id`, `mission_id`, `input_sha`, or `policy_hash` differ from CLI flags
+- `run_id`, `mission_id`, `base_sha`, `input_sha`, or `policy_hash` differ from CLI flags
 - Duplicate `decision_id` values conflict
 - Duplicate fingerprints contain conflicting outcomes
 - A Decision references a malformed fingerprint
@@ -376,21 +395,36 @@ The Decisions file is rejected when:
 
 ```
 <evidence-dir>/
-  <run-id>/
-    manifest.json
-    review/
-      response.txt
-      findings.json
-    test/
-      stdout.log
-      stderr.log
-    document/
-      findings.json
-    lint/
-      stdout.log
-      stderr.log
-    terminal.json
+  <hashed-run-id>/                 (SHA-256 of run_id, lowercase hex, 64 chars)
+    <invocation-id>/               (unique per invocation; lowercase hex, 16 chars)
+      review/
+        findings.json              (structured findings from review Agent)
+      test/
+        stdout.log                 (test stage output)
+        stderr.log                 (test stage errors)
+      document/
+        findings.json              (documentation findings)
+      lint/
+        stdout.log                 (lint stage output)
+        stderr.log                 (lint stage errors)
+      terminal.json                (run summary and terminal outcome)
 ```
+
+### Referencing evidence
+
+Evidence paths in events are relative to `<evidence-dir>` and include both the hashed run ID and invocation ID:
+
+```
+<hashed-run-id>/<invocation-id>/stage/file
+```
+
+Example: `64aec94d8e1fade.../1234567890abcdef/review/findings.json`
+
+To resolve an evidence reference, use: `<evidence-dir>/<path-from-event>`
+
+The hashed run ID (`sha256:<run_id>.hex()`) allows multiple invocations (reruns) to share the same hashed
+directory while isolating evidence by invocation instance. This enables efficient batch review of reruns
+without requiring separate run ID directories.
 
 ### terminal.json
 
