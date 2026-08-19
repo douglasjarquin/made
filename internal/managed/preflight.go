@@ -227,4 +227,3 @@ func VerifyExactInputSHA(ctx context.Context, workspace, inputSHA string) error 
 	}
 	return nil
 }
-
