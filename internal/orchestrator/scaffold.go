@@ -20,6 +20,16 @@ const pushedConfigFileName = ".made.yml"
 
 const githubCallTimeout = 30 * time.Second
 
+func gitEnv() []string {
+	return []string{
+		"GIT_CONFIG_COUNT=2",
+		"GIT_CONFIG_KEY_0=commit.gpgsign",
+		"GIT_CONFIG_VALUE_0=false",
+		"GIT_CONFIG_KEY_1=safe.bareRepository",
+		"GIT_CONFIG_VALUE_1=all",
+	}
+}
+
 type RunContext struct {
 	Config     config.Config
 	Worktree   *gitgate.Worktree
@@ -140,7 +150,7 @@ func resolveConfig(ctx context.Context, gatePath, defaultBranch, worktreePath st
 }
 
 func refreshDefaultBranch(ctx context.Context, gatePath, defaultBranch string) error {
-	remote, err := execpkg.Run(ctx, execpkg.Command{Name: "git", Args: []string{"remote", "get-url", "origin"}, Dir: gatePath})
+	remote, err := execpkg.Run(ctx, execpkg.Command{Name: "git", Args: []string{"remote", "get-url", "origin"}, Dir: gatePath, Env: gitEnv()})
 	if err != nil {
 		return fmt.Errorf("orchestrator: inspect origin remote: %w", err)
 	}
@@ -148,7 +158,7 @@ func refreshDefaultBranch(ctx context.Context, gatePath, defaultBranch string) e
 		return fmt.Errorf("orchestrator: origin remote is unavailable: %s", string(remote.Stderr))
 	}
 	refspec := fmt.Sprintf("%s:refs/heads/%s", defaultBranch, defaultBranch)
-	fetch, err := execpkg.Run(ctx, execpkg.Command{Name: "git", Args: []string{"fetch", "origin", refspec}, Dir: gatePath})
+	fetch, err := execpkg.Run(ctx, execpkg.Command{Name: "git", Args: []string{"fetch", "origin", refspec}, Dir: gatePath, Env: gitEnv()})
 	if err != nil {
 		return fmt.Errorf("orchestrator: refresh default branch %s: %w", defaultBranch, err)
 	}
@@ -158,6 +168,7 @@ func refreshDefaultBranch(ctx context.Context, gatePath, defaultBranch string) e
 				Name: "git",
 				Args: []string{"update-ref", "-d", "refs/heads/" + defaultBranch},
 				Dir:  gatePath,
+				Env:  gitEnv(),
 			})
 			if clearErr != nil {
 				return fmt.Errorf("orchestrator: clear deleted default branch %s: %w", defaultBranch, clearErr)
@@ -177,6 +188,7 @@ func extractTrustedConfig(ctx context.Context, gatePath, defaultBranch string) (
 		Name: "git",
 		Args: []string{"show", fmt.Sprintf("refs/heads/%s:%s", defaultBranch, pushedConfigFileName)},
 		Dir:  gatePath,
+		Env:  gitEnv(),
 	})
 	if err != nil {
 		return "", nil, fmt.Errorf("orchestrator: run git show for trusted config: %w", err)
