@@ -68,17 +68,28 @@ Exit code 2 indicates argument or contract errors before any events are emitted.
 
 ## Evidence locations
 
-Evidence is written to:
+Evidence is written to `<evidence-dir>/<hashed-run-id>/<invocation-id>/`:
 
 ```
-<evidence-dir>/<run-id>/
-  manifest.json      — run summary
-  review/            — agent response and findings
-  test/              — stdout.log, stderr.log
-  document/          — findings
-  lint/              — stdout.log, stderr.log
-  terminal.json      — complete terminal summary
+<evidence-dir>/
+  <hashed-run-id>/             (SHA-256 of run_id, lowercase hex)
+    <invocation-id>/           (unique per invocation; lowercase hex)
+      review/
+        findings.json          — agent response and structured findings
+      test/
+        stdout.log             — test stage output
+        stderr.log             — test stage errors
+      document/
+        findings.json          — documentation findings
+      lint/
+        stdout.log             — lint stage output
+        stderr.log             — lint stage errors
+      terminal.json            — run summary and outcome
 ```
+
+Evidence paths are relative to `<evidence-dir>` and must be followed from the events.
+`<invocation-id>` allows multiple Made invocations (reruns) to share the same hashed run
+directory while isolating evidence by invocation instance.
 
 Evidence is available after the process exits with any code ≥ 0.
 
@@ -87,6 +98,47 @@ Evidence is available after the process exits with any code ≥ 0.
 Send SIGTERM or SIGINT. Made emits one `run.completed` event with outcome
 `canceled` and exits 130. Evidence collected before cancellation is preserved.
 The workspace state after cancellation is undefined; treat it as potentially dirty.
+
+## Subprocess and environment isolation (Blocker 6 requirement)
+
+**Critical requirement for security**: `made validate --managed` must execute in an
+unprivileged, isolated process environment. The process must NOT inherit sensitive
+credentials or configuration from the host environment.
+
+### Required isolation boundaries
+
+The validator process MUST be confined to:
+
+- **Filesystem**: Read-only access to `trusted_config` and workspace; writable only to `evidence_dir`
+- **Environment**: Only essential build environment variables (e.g., `PATH`, `HOME` pointing to a temporary sandbox)
+- **Secrets**: No access to Made daemon state, delivery credentials, GitHub credentials, or any production secrets
+- **Network**: No network access unless explicitly required for build/test commands
+- **Privileges**: Non-root; no special capabilities; no capability escalation
+
+### Why this matters
+
+Test and lint stages execute candidate-written code in the workspace. A malicious or
+compromised candidate can cause test processes to:
+
+- Read environment variables containing credentials (GitHub tokens, API keys)
+- Exfiltrate code or secrets to external services
+- Access other workspaces or Made daemon state
+- Modify or escape the intended sandbox
+
+### Implementation responsibility
+
+**Option A (Recommended)**: Consigliere enforces isolation
+- Run Made process in a containerized or VM-based validator sandbox
+- Mount only necessary paths with correct permissions
+- Supply only non-sensitive environment variables
+- Example: `docker run --rm -v workspace:/ws -v evidence:/evidence -v trusted-config:/config:ro -- made validate --managed ...`
+
+**Option B**: Made enforces environment allowlist
+- Made validates or filters the process environment before spawning test/lint subprocesses
+- Not recommended; Consigliere has better visibility into process context
+
+Consigliere should prefer **Option A**: establish the sandbox boundary before invoking Made,
+ensuring isolation is the default behavior independent of Made changes.
 
 ## Version negotiation
 
@@ -144,11 +196,13 @@ A Decisions file from a different SHA is rejected at preflight.
   "run_id": "G-229",
   "mission_id": "M-402",
   "input_sha": "2222222222222222222222222222222222222222",
-  "policy_hash": "sha256:<64-hex>",
+  "base_sha": "1111111111111111111111111111111111111111",
+  "invocation_id": "0987654321fedcba",
+  "policy_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "decisions": [
     {
       "decision_id": "D-184",
-      "finding_fingerprint": "sha256:<64-hex>",
+      "finding_fingerprint": "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
       "outcome": "approved",
       "scope": "sha_bound",
       "rationale": "Accepted for this validation input"
