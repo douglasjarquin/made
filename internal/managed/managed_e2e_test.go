@@ -521,3 +521,82 @@ func gitStatus(t *testing.T, dir string) string {
 	}
 	return strings.TrimSpace(string(out))
 }
+
+// TestValidateFindingPathsRejectAbsolute ensures managed validation rejects
+// absolute paths which could expose workspace structure or escape containment.
+func TestValidateFindingPathsRejectAbsolute(t *testing.T) {
+	input := managed.FingerprintInput{
+		Stage:       "review",
+		Kind:        "ask-user",
+		Code:        "review.example",
+		Class:       "example",
+		Paths:       []string{"/absolute/path"},
+		Description: "test",
+	}
+	err := managed.ValidateStableFindingIdentity(input)
+	if err == nil {
+		t.Error("expected error for absolute path, got nil")
+	}
+	if !strings.Contains(err.Error(), "absolute") {
+		t.Errorf("expected 'absolute' in error, got: %v", err)
+	}
+}
+
+// TestValidateFindingPathsRejectEscape ensures paths cannot use ".." to escape.
+func TestValidateFindingPathsRejectEscape(t *testing.T) {
+	input := managed.FingerprintInput{
+		Stage:       "review",
+		Kind:        "ask-user",
+		Code:        "review.example",
+		Class:       "example",
+		Paths:       []string{"subdir/../../../etc/passwd"},
+		Description: "test",
+	}
+	err := managed.ValidateStableFindingIdentity(input)
+	if err == nil {
+		t.Error("expected error for path with '..', got nil")
+	}
+	if !strings.Contains(err.Error(), "..") {
+		t.Errorf("expected '..' in error, got: %v", err)
+	}
+}
+
+// TestValidateFindingPathsRejectUnclean ensures paths must be clean (no redundant
+// separators or "." components).
+func TestValidateFindingPathsRejectUnclean(t *testing.T) {
+	input := managed.FingerprintInput{
+		Stage:       "review",
+		Kind:        "ask-user",
+		Code:        "review.example",
+		Class:       "example",
+		Paths:       []string{"path/./to/file"},
+		Description: "test",
+	}
+	err := managed.ValidateStableFindingIdentity(input)
+	if err == nil {
+		t.Error("expected error for unclean path, got nil")
+	}
+	if !strings.Contains(err.Error(), "clean") {
+		t.Errorf("expected 'clean' in error, got: %v", err)
+	}
+}
+
+// TestValidateFindingCodeMustBeSpecific ensures that generic codes are rejected
+// with clear guidance that code must be finding-specific, not category-generic.
+func TestValidateFindingCodeMustBeSpecific(t *testing.T) {
+	input := managed.FingerprintInput{
+		Stage:       "review",
+		Kind:        "ask-user",
+		Code:        "", // Empty code
+		Class:       "security",
+		Paths:       []string{"internal/auth.go"},
+		Description: "test",
+	}
+	err := managed.ValidateStableFindingIdentity(input)
+	if err == nil {
+		t.Error("expected error for empty code, got nil")
+	}
+	if !strings.Contains(err.Error(), "finding-specific") {
+		t.Errorf("expected 'finding-specific' guidance in error, got: %v", err)
+	}
+}

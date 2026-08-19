@@ -94,22 +94,52 @@ func stripWorkspacePrefix(path, workspacePrefix string) string {
 // to enable safe Decision binding across reruns with paraphrased descriptions.
 //
 // Requirements:
-// - code: must be a non-empty identifier (e.g. "review.security_issue")
-// - class: must be a non-empty category
-// - paths: must contain at least one repository-relative path
+// - code: must be a non-empty, finding-specific identifier (e.g. "review.security_issue",
+//         not a generic category like "review.issue"). This ensures unique findings on
+//         the same file can be distinguished.
+// - class: must be a non-empty category (e.g. "security", "style", "architecture")
+// - paths: must contain at least one repository-relative path. Paths are validated to be:
+//          * repository-relative (not absolute)
+//          * clean (no redundant separators, no ".")
+//          * free of path-escape sequences ("../")
 // - symbol/locus: strongly recommended when applicable (e.g., "function name")
 //
 // A finding without these fields cannot be safely bound to a Decision and will
-// be rejected to prevent ambiguous decision application.
+// be rejected to prevent ambiguous decision application or unintended path escapes.
 func ValidateStableFindingIdentity(in FingerprintInput) error {
 	if in.Code == "" {
-		return fmt.Errorf("finding missing required 'code' field (stable defect/rule identifier)")
+		return fmt.Errorf("finding missing required 'code' field (stable, finding-specific identifier like 'review.sql_injection', not generic 'review.issue')")
 	}
 	if in.Class == "" {
-		return fmt.Errorf("finding missing required 'class' field (stable category)")
+		return fmt.Errorf("finding missing required 'class' field (stable category like 'security', 'style', 'architecture')")
 	}
 	if len(in.Paths) == 0 {
-		return fmt.Errorf("finding missing required 'paths' field (repository-relative affected paths)")
+		return fmt.Errorf("finding missing required 'paths' field (one or more repository-relative paths)")
 	}
+
+	// Validate paths: must be relative, clean, and free of escape sequences.
+	for i, p := range in.Paths {
+		if p == "" {
+			return fmt.Errorf("finding path[%d] is empty", i)
+		}
+		if filepath.IsAbs(p) {
+			return fmt.Errorf("finding path[%d] is absolute: %q (must be repository-relative)", i, p)
+		}
+
+		// Clean the path and check for modifications that indicate issues.
+		clean := filepath.Clean(p)
+		if clean != p {
+			return fmt.Errorf("finding path[%d] is not clean: %q → %q", i, p, clean)
+		}
+
+		// Reject paths with ".." or "." components.
+		if strings.Contains(p, "..") {
+			return fmt.Errorf("finding path[%d] contains path-escape sequence '..': %q", i, p)
+		}
+		if p == "." || strings.HasPrefix(p, "./") || strings.HasSuffix(p, "/.") || strings.Contains(p, "/./") {
+			return fmt.Errorf("finding path[%d] contains invalid '.' component: %q", i, p)
+		}
+	}
+
 	return nil
 }
