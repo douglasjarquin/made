@@ -7,6 +7,7 @@ import (
 
 	"github.com/douglasjarquin/made/internal/agent"
 	"github.com/douglasjarquin/made/internal/config"
+	"github.com/douglasjarquin/made/internal/evidence"
 	"github.com/douglasjarquin/made/internal/pipeline/document"
 	"github.com/douglasjarquin/made/internal/pipeline/lint"
 	"github.com/douglasjarquin/made/internal/pipeline/review"
@@ -185,7 +186,7 @@ func (r *Runner) reviewStage(ctx context.Context) (Outcome, string, []FindingRep
 			Kind:        string(f.Kind),
 			Code:        f.Code,
 			Class:       f.Class,
-			Description: f.Description,
+			Description: evidence.RedactString(f.Description),
 			Paths:       f.Paths,
 			Symbol:      f.Symbol,
 			Patch:       f.Patch,
@@ -198,7 +199,7 @@ func (r *Runner) reviewStage(ctx context.Context) (Outcome, string, []FindingRep
 		switch f.Kind {
 		case agent.FindingBlocking:
 			outcome = mergeOutcome(outcome, OutcomeFailedTerminal)
-			msg = fmt.Sprintf("blocking finding: %s", f.Description)
+			msg = fmt.Sprintf("blocking finding: %s", evidence.RedactString(f.Description))
 		case agent.FindingAutoFixable:
 			outcome = mergeOutcome(outcome, OutcomeFailedRetryable)
 			if msg == "" {
@@ -215,7 +216,7 @@ func (r *Runner) reviewStage(ctx context.Context) (Outcome, string, []FindingRep
 				r.decisionsUsed[fp] = struct{}{}
 				if dec.Outcome == DecisionRejected {
 					outcome = mergeOutcome(outcome, OutcomeFailedTerminal)
-					msg = fmt.Sprintf("ask-user finding rejected by decision %s: %s", dec.DecisionID, f.Description)
+					msg = fmt.Sprintf("ask-user finding rejected by decision %s: %s", dec.DecisionID, evidence.RedactString(f.Description))
 				}
 				// approved: continue (outcome stays passed or existing failure)
 			}
@@ -298,7 +299,7 @@ func (r *Runner) documentStage(ctx context.Context) (Outcome, string, []FindingR
 			Kind:        string(f.Kind),
 			Code:        f.Code,
 			Class:       f.Class,
-			Description: f.Description,
+			Description: evidence.RedactString(f.Description),
 			Paths:       f.Paths,
 			Symbol:      f.Symbol,
 		}
@@ -317,7 +318,7 @@ func (r *Runner) documentStage(ctx context.Context) (Outcome, string, []FindingR
 			r.decisionsUsed[fp] = struct{}{}
 			if dec.Outcome == DecisionRejected {
 				outcome = mergeOutcome(outcome, OutcomeFailedTerminal)
-				msg = fmt.Sprintf("document finding rejected by decision %s: %s", dec.DecisionID, f.Description)
+				msg = fmt.Sprintf("document finding rejected by decision %s: %s", dec.DecisionID, evidence.RedactString(f.Description))
 			}
 		}
 	}
