@@ -4,7 +4,8 @@
   "mission_id": "M-402",
   "input_sha": "2222222222222222222222222222222222222222",
   "base_sha": "1111111111111111111111111111111111111111",
-  "policy_hash": "sha256:aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899aabbccdd",
+  "invocation_id": "0987654321fedcba",
+  "policy_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "decisions": [
     {
       "decision_id": "D-185",
