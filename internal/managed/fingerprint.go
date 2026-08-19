@@ -94,15 +94,15 @@ func stripWorkspacePrefix(path, workspacePrefix string) string {
 // to enable safe Decision binding across reruns with paraphrased descriptions.
 //
 // Requirements:
-// - code: must be a non-empty, finding-specific identifier (e.g. "review.security_issue",
-//         not a generic category like "review.issue"). This ensures unique findings on
-//         the same file can be distinguished.
-// - class: must be a non-empty category (e.g. "security", "style", "architecture")
-// - paths: must contain at least one repository-relative path. Paths are validated to be:
-//          * repository-relative (not absolute)
-//          * clean (no redundant separators, no ".")
-//          * free of path-escape sequences ("../")
-// - symbol/locus: strongly recommended when applicable (e.g., "function name")
+//   - code: must be a non-empty, finding-specific identifier (e.g. "review.security_issue",
+//     not a generic category like "review.issue"). This ensures unique findings on
+//     the same file can be distinguished.
+//   - class: must be a non-empty category (e.g. "security", "style", "architecture")
+//   - paths: must contain at least one repository-relative path. Paths are validated to be:
+//   - repository-relative (not absolute)
+//   - clean (no redundant separators, no ".")
+//   - free of path-escape sequences ("../")
+//   - symbol/locus: strongly recommended when applicable (e.g., "function name")
 //
 // A finding without these fields cannot be safely bound to a Decision and will
 // be rejected to prevent ambiguous decision application or unintended path escapes.

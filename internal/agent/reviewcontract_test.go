@@ -124,4 +124,3 @@ func TestManagedReviewTask_DefinedForStrictStructuralIdentity(t *testing.T) {
 		t.Fatalf("managed embedded contract mismatch")
 	}
 }
-
