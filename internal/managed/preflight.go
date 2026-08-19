@@ -164,15 +164,37 @@ func RunPreflight(ctx context.Context, opts *Options) (PreflightResult, error) {
 		return PreflightResult{}, fmt.Errorf("preflight: trusted-config hash mismatch: computed %s, expected %s", computedHash, opts.PolicyHash)
 	}
 
-	// evidence-dir is outside the workspace, using canonical path resolution.
+	// evidence-dir must be outside the workspace, using canonical path resolution.
+	// Canonicalize both paths to prevent symlink-based escapes.
 	canonicalWS, err := filepath.EvalSymlinks(opts.Workspace)
 	if err != nil {
 		return PreflightResult{}, fmt.Errorf("preflight: resolve workspace canonical path: %w", err)
 	}
-	evClean := filepath.Clean(opts.EvidenceDir)
-	wsSep := canonicalWS + string(filepath.Separator)
-	if strings.HasPrefix(evClean+string(filepath.Separator), wsSep) || evClean == canonicalWS {
-		return PreflightResult{}, fmt.Errorf("preflight: evidence-dir %q must be outside the workspace %q", opts.EvidenceDir, opts.Workspace)
+
+	// Canonicalize evidence directory. If it doesn't exist, resolve its nearest
+	// existing parent to catch symlinks that point inside the workspace.
+	var canonicalEV string
+	evPath := opts.EvidenceDir
+	for {
+		canonical, err := filepath.EvalSymlinks(evPath)
+		if err == nil {
+			canonicalEV = canonical
+			break
+		}
+		parent := filepath.Dir(evPath)
+		if parent == evPath {
+			// Reached root; use the path as-is
+			canonicalEV = evPath
+			break
+		}
+		evPath = parent
+	}
+
+	// Verify evidence directory is outside workspace
+	evWithSep := canonicalEV + string(filepath.Separator)
+	wsWithSep := canonicalWS + string(filepath.Separator)
+	if evWithSep == wsWithSep || canonicalEV == canonicalWS || strings.HasPrefix(evWithSep, wsWithSep) || strings.HasPrefix(wsWithSep, evWithSep) {
+		return PreflightResult{}, fmt.Errorf("preflight: evidence-dir %q (canonical: %q) must be outside and non-overlapping with workspace %q", opts.EvidenceDir, canonicalEV, canonicalWS)
 	}
 
 	return PreflightResult{ConfigBytes: configBytes}, nil
