@@ -100,17 +100,14 @@ func Run(ctx context.Context, opts *Options, stdout, stderr *os.File) int {
 		stoppedAt = "canceled"
 	}
 
-	// Phase 6: Write terminal evidence manifest.
+	// Phase 6: Write terminal evidence.
+	// This is the single authoritative summary of the run outcome.
 	// Any failure here overrides the outcome to infrastructure_error.
 	manifest := buildTerminalManifest(opts, runner, invID, outcome, ew.Sequence()+1)
 	if writeErr := ev.WriteTerminal(manifest); writeErr != nil {
 		outcome = OutcomeInfrastructureError
 		msg = "terminal evidence write failed: " + writeErr.Error()
 		_, _ = fmt.Fprintln(stderr, "made validate:", msg)
-	}
-	// WriteManifest is best-effort; failure is diagnostic only.
-	if manErr := ev.WriteManifest(manifest); manErr != nil {
-		_, _ = fmt.Fprintln(stderr, "made validate: write evidence manifest:", manErr)
 	}
 
 	// Report unused decisions.

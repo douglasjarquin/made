@@ -66,12 +66,8 @@ func (s *ManagedEvidenceStore) WriteStageFiles(stage string, files map[string][]
 	return refs, nil
 }
 
-// WriteManifest writes manifest.json for this invocation.
-func (s *ManagedEvidenceStore) WriteManifest(manifest any) error {
-	return s.writeJSON(filepath.Join(s.InvocationDir(), "manifest.json"), manifest)
-}
-
 // WriteTerminal writes terminal.json for this invocation.
+// This is the single authoritative summary file for the run outcome.
 func (s *ManagedEvidenceStore) WriteTerminal(terminal any) error {
 	return s.writeJSON(filepath.Join(s.InvocationDir(), "terminal.json"), terminal)
 }
