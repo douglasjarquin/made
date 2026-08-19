@@ -19,6 +19,16 @@ const gateCommandTimeout = 30 * time.Second
 
 const gitZeroSHAValue = "0000000000000000000000000000000000000000"
 
+func gitEnv() []string {
+	return []string{
+		"GIT_CONFIG_COUNT=2",
+		"GIT_CONFIG_KEY_0=commit.gpgsign",
+		"GIT_CONFIG_VALUE_0=false",
+		"GIT_CONFIG_KEY_1=safe.bareRepository",
+		"GIT_CONFIG_VALUE_1=all",
+	}
+}
+
 func runGateCommand(args []string, stdout, stderr *os.File) int {
 	if len(args) < 1 {
 		_, _ = fmt.Fprintln(stderr, "usage: made gate init <target-repo-path> <real-remote-url>")
@@ -251,7 +261,7 @@ func gateInit(ctx context.Context, madeHomeDir, madeBinaryPath, targetRepoPath, 
 }
 
 func ensureRemote(ctx context.Context, repoDir, name, url string) error {
-	res, err := exec.Run(ctx, exec.Command{Name: "git", Args: []string{"remote", "get-url", name}, Dir: repoDir})
+	res, err := exec.Run(ctx, exec.Command{Name: "git", Args: []string{"remote", "get-url", name}, Dir: repoDir, Env: gitEnv()})
 	if err != nil {
 		return fmt.Errorf("git remote get-url %s: %w", name, err)
 	}
@@ -262,7 +272,7 @@ func ensureRemote(ctx context.Context, repoDir, name, url string) error {
 }
 
 func resolveDefaultBranch(ctx context.Context, barePath string) (string, error) {
-	res, err := exec.Run(ctx, exec.Command{Name: "git", Args: []string{"remote", "show", "origin"}, Dir: barePath})
+	res, err := exec.Run(ctx, exec.Command{Name: "git", Args: []string{"remote", "show", "origin"}, Dir: barePath, Env: gitEnv()})
 	if err != nil {
 		return "", fmt.Errorf("git remote show origin: %w", err)
 	}
@@ -285,7 +295,7 @@ func resolveDefaultBranch(ctx context.Context, barePath string) (string, error) 
 }
 
 func runGit(ctx context.Context, dir string, args ...string) error {
-	res, err := exec.Run(ctx, exec.Command{Name: "git", Args: args, Dir: dir})
+	res, err := exec.Run(ctx, exec.Command{Name: "git", Args: args, Dir: dir, Env: gitEnv()})
 	if err != nil {
 		return fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
