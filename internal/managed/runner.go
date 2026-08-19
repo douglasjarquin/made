@@ -232,6 +232,11 @@ func (r *Runner) reviewStage(ctx context.Context) (Outcome, string, []FindingRep
 		msg = result.Message
 	}
 
+	// Check for duplicate fingerprints in this stage (blocker 1: prevent ambiguous decisions).
+	if dupErr := r.checkDuplicateFingerprints(stageReview, findings); dupErr != nil {
+		return OutcomeInfrastructureError, dupErr.Error(), nil, refs
+	}
+
 	return outcome, msg, findings, refs
 }
 
@@ -329,6 +334,11 @@ func (r *Runner) documentStage(ctx context.Context) (Outcome, string, []FindingR
 		return OutcomeInfrastructureError, fmt.Sprintf("document: write evidence: %s", evErr), findings, nil
 	}
 
+	// Check for duplicate fingerprints in this stage (blocker 1: prevent ambiguous decisions).
+	if dupErr := r.checkDuplicateFingerprints(stageDocument, findings); dupErr != nil {
+		return OutcomeInfrastructureError, dupErr.Error(), nil, refs
+	}
+
 	return outcome, msg, findings, refs
 }
 
@@ -372,6 +382,22 @@ func (r *Runner) UnusedDecisions() []DecisionRecord {
 		}
 	}
 	return unused
+}
+
+// checkDuplicateFingerprints verifies that no two findings in a stage have the same fingerprint.
+// This prevents ambiguous decision application where a Decision might approve or reject the
+// wrong finding. Returns an error if duplicates are found.
+func (r *Runner) checkDuplicateFingerprints(stage string, findings []FindingReportedPayload) error {
+	seen := make(map[string]int) // fingerprint -> count
+	for _, f := range findings {
+		seen[f.Fingerprint]++
+	}
+	for fp, count := range seen {
+		if count > 1 {
+			return fmt.Errorf("stage %s: %d findings share fingerprint %s; cannot apply decisions unambiguously", stage, count, fp)
+		}
+	}
+	return nil
 }
 
 // DecisionsApplied returns the fingerprints of decisions that matched a finding.

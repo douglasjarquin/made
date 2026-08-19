@@ -326,6 +326,41 @@ func TestManaged_ReportOnly_NoWorkspaceMutation(t *testing.T) {
 	}
 }
 
+func TestManaged_DuplicateFingerprintDetection(t *testing.T) {
+	// Create two findings with the same code, class, paths, and description.
+	// They must produce identical fingerprints and trigger infrastructure_error.
+	dup := finding(agent.FindingAskUser, "review.style", "style", "duplicate finding", "main.go")
+	opts := e2eOptions(t, "G-dup", "M-dup", agent.Findings{Findings: []agent.Finding{
+		dup,
+		dup, // same finding repeated
+	}})
+
+	res := runManaged(t, context.Background(), opts)
+	if res.exitCode != 1 {
+		t.Fatalf("expected exit 1 (infrastructure_error), got %d (stderr: %s)", res.exitCode, res.stderr)
+	}
+	if got := terminalOutcome(t, res.events); got != "infrastructure_error" {
+		t.Errorf("expected outcome infrastructure_error, got %q", got)
+	}
+	// Verify that the error message mentions duplicate fingerprints.
+	terminalMsg := ""
+	for _, ev := range res.events {
+		if ev["event"] != "run.completed" {
+			continue
+		}
+		payload, ok := ev["payload"].(map[string]any)
+		if !ok {
+			continue
+		}
+		if msg, ok := payload["message"].(string); ok {
+			terminalMsg = msg
+		}
+	}
+	if !strings.Contains(terminalMsg, "share") || !strings.Contains(terminalMsg, "fingerprint") {
+		t.Errorf("error message should mention duplicate fingerprints, got: %q", terminalMsg)
+	}
+}
+
 func TestManaged_ValidateOptions_UsageError(t *testing.T) {
 	// Missing RunID → exit 2, no events emitted.
 	opts := &managed.Options{
