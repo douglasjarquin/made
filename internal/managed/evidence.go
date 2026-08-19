@@ -42,6 +42,7 @@ func (s *ManagedEvidenceStore) StageDir(stage string) string {
 
 // WriteStageFiles writes evidence files for a stage.
 // Returns a list of paths relative to the evidence directory.
+// The returned paths can be resolved as: <evidenceDir>/<path>
 func (s *ManagedEvidenceStore) WriteStageFiles(stage string, files map[string][]byte) ([]string, error) {
 	stageDir := s.StageDir(stage)
 	if err := os.MkdirAll(stageDir, 0o750); err != nil {
@@ -59,7 +60,8 @@ func (s *ManagedEvidenceStore) WriteStageFiles(stage string, files map[string][]
 			_ = os.Remove(tmpPath)
 			return nil, fmt.Errorf("evidence: rename %q: %w", destPath, err)
 		}
-		refs = append(refs, filepath.ToSlash(filepath.Join(s.InvocationID, stage, name)))
+		// Return path relative to evidence-dir: safeRunID/invocationID/stage/file
+		refs = append(refs, filepath.ToSlash(filepath.Join(s.safeRunID, s.InvocationID, stage, name)))
 	}
 	return refs, nil
 }
