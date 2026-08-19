@@ -48,19 +48,19 @@ func validateJSONLFixture(t *testing.T, path string) {
 	if err != nil {
 		t.Fatalf("failed to open fixture: %v", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	var (
-		lastSequence      int
-		runID             string
-		missionID         string
-		invocationID      string
-		inputSHA          string
-		baseSHA           string
-		policyHash        string
-		terminalCount     int
-		seenRunStarted    bool
+		lastSequence   int
+		runID          string
+		missionID      string
+		invocationID   string
+		inputSHA       string
+		baseSHA        string
+		policyHash     string
+		terminalCount  int
+		seenRunStarted bool
 	)
 
 	// Regex for validating hash formats
