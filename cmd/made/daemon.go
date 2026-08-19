@@ -350,6 +350,7 @@ func validateBareGateRepo(path string) error {
 	res, err := exec.Run(ctx, exec.Command{
 		Name: "git",
 		Args: []string{"-C", path, "rev-parse", "--is-bare-repository"},
+		Env:  gitEnv(),
 	})
 	if err != nil {
 		return fmt.Errorf("check bare repository at %s: %w", path, err)
@@ -559,6 +560,7 @@ func validateGateSubmission(ctx context.Context, spoolPath, gatePath, ref, newSH
 	res, err := exec.Run(ctx, exec.Command{
 		Name: "git",
 		Args: []string{"-C", absGate, "rev-parse", "--verify", ref + "^{commit}"},
+		Env:  gitEnv(),
 	})
 	if err != nil {
 		return fmt.Errorf("inspect pushed head: %w", err)
