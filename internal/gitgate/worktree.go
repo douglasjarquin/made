@@ -7,6 +7,17 @@ import (
 	"strings"
 )
 
+// bareRepoEnv returns environment variables for running git commands on bare repositories.
+// It sets safe.bareRepository=all to allow operations on bare repos when the system
+// has safe.bareRepository=explicit configured.
+func bareRepoEnv() []string {
+	return []string{
+		"GIT_CONFIG_COUNT=1",
+		"GIT_CONFIG_KEY_0=safe.bareRepository",
+		"GIT_CONFIG_VALUE_0=all",
+	}
+}
+
 type Worktree struct {
 	Path     string
 	barePath string
@@ -26,6 +37,7 @@ func AddWorktree(barePath, worktreesDir, ref string) (*Worktree, error) {
 
 	cmd := exec.Command("git", "worktree", "add", slot, ref)
 	cmd.Dir = barePath
+	cmd.Env = append(os.Environ(), bareRepoEnv()...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("gitgate: git worktree add %s %s: %w: %s", slot, ref, err, strings.TrimSpace(string(out)))
 	}
@@ -35,6 +47,7 @@ func AddWorktree(barePath, worktreesDir, ref string) (*Worktree, error) {
 func (w *Worktree) Remove() error {
 	cmd := exec.Command("git", "worktree", "remove", "--force", w.Path)
 	cmd.Dir = w.barePath
+	cmd.Env = append(os.Environ(), bareRepoEnv()...)
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		return nil
@@ -45,6 +58,7 @@ func (w *Worktree) Remove() error {
 	}
 	pruneCmd := exec.Command("git", "worktree", "prune")
 	pruneCmd.Dir = w.barePath
+	pruneCmd.Env = append(os.Environ(), bareRepoEnv()...)
 	_ = pruneCmd.Run()
 	return nil
 }
