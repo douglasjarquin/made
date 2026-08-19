@@ -361,6 +361,108 @@ func TestManaged_DuplicateFingerprintDetection(t *testing.T) {
 	}
 }
 
+func TestManaged_ParaphraseStability(t *testing.T) {
+	// When a finding's description is paraphrased on rerun, the fingerprint
+	// (based on code/class/paths/symbol) must remain stable and the approved
+	// Decision from run 1 must still apply in run 2.
+	opts := e2eOptions(t, "G-para", "M-para", agent.Findings{Findings: []agent.Finding{
+		finding(agent.FindingAskUser, "arch.style", "style", "old description", "main.go"),
+	}})
+
+	// Run 1: capture fingerprint and get needs_decision.
+	res1 := runManaged(t, context.Background(), opts)
+	if res1.exitCode != 3 {
+		t.Fatalf("run1: expected exit 3, got %d", res1.exitCode)
+	}
+	fp1 := findingFingerprint(t, res1.events)
+	if fp1 == "" {
+		t.Fatal("run1: no fingerprint")
+	}
+
+	// Run 2: same finding but paraphrased description.
+	opts2 := e2eOptions(t, "G-para", "M-para", agent.Findings{Findings: []agent.Finding{
+		finding(agent.FindingAskUser, "arch.style", "style", "completely different wording", "main.go"),
+	}})
+
+	res2 := runManaged(t, context.Background(), opts2)
+	if res2.exitCode != 3 {
+		t.Fatalf("run2: expected exit 3 (still needs decision), got %d", res2.exitCode)
+	}
+	fp2 := findingFingerprint(t, res2.events)
+	if fp2 == "" {
+		t.Fatal("run2: no fingerprint")
+	}
+
+	// Fingerprints must be identical despite paraphrasing.
+	if fp1 != fp2 {
+		t.Errorf("fingerprints should be stable across paraphrasing: run1=%q run2=%q", fp1, fp2)
+	}
+
+	// Now supply an approving Decision based on fp1 for run 3.
+	decPath := filepath.Join(t.TempDir(), "decisions.json")
+	decContent := map[string]any{
+		"schema_version": 1,
+		"run_id":         opts.RunID,
+		"mission_id":     opts.MissionID,
+		"input_sha":      opts.InputSHA,
+		"base_sha":       opts.BaseSHA,
+		"policy_hash":    opts.PolicyHash,
+		"decisions": []map[string]any{
+			{
+				"decision_id":         "D-1",
+				"finding_fingerprint": fp1,
+				"outcome":             "approved",
+				"scope":               "sha_bound",
+				"rationale":           "approved once",
+			},
+		},
+	}
+	decData, _ := json.MarshalIndent(decContent, "", "  ")
+	if err := os.WriteFile(decPath, decData, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opts.DecisionsPath = decPath
+
+	// Run 3: same finding, same approval Decision → should pass.
+	res3 := runManaged(t, context.Background(), opts)
+	if res3.exitCode != 0 {
+		t.Fatalf("run3: expected exit 0 (decision applies), got %d (stderr: %s)", res3.exitCode, res3.stderr)
+	}
+	if got := terminalOutcome(t, res3.events); got != "passed" {
+		t.Errorf("run3: expected outcome passed, got %q", got)
+	}
+}
+
+func TestManaged_SameFileDifferentFinding(t *testing.T) {
+	// Two different ask-user findings on the same file with the same code/class
+	// must have different fingerprints (because they have different descriptions
+	// as structural identity) and not collide.
+	//
+	// This test verifies the strict finding identity requirements: without stable
+	// structural identity in descriptions (which are now omitted from fingerprints),
+	// we rely on code, class, paths, and symbol being sufficient to disambiguate.
+	//
+	// If two different findings on the same file need different structural markers
+	// (e.g., different symbols or line ranges), they must provide them.
+	
+	// For now, we test that two findings with identical code/class/paths but
+	// different (paraphrased) descriptions get caught by duplicate detection if
+	// they would collide.
+	f1 := finding(agent.FindingAskUser, "style.naming", "style", "should be PascalCase", "main.go")
+	f2 := finding(agent.FindingAskUser, "style.naming", "style", "should be snake_case", "main.go")
+
+	opts := e2eOptions(t, "G-diff", "M-diff", agent.Findings{Findings: []agent.Finding{f1, f2}})
+
+	res := runManaged(t, context.Background(), opts)
+	// These are identical findings structurally (same code/class/paths), so they collide.
+	if res.exitCode != 1 {
+		t.Fatalf("expected exit 1 (infrastructure_error for collision), got %d", res.exitCode)
+	}
+	if got := terminalOutcome(t, res.events); got != "infrastructure_error" {
+		t.Errorf("expected infrastructure_error, got %q", got)
+	}
+}
+
 func TestManaged_ValidateOptions_UsageError(t *testing.T) {
 	// Missing RunID → exit 2, no events emitted.
 	opts := &managed.Options{

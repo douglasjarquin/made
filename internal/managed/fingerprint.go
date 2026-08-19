@@ -3,6 +3,7 @@ package managed
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -29,35 +30,24 @@ type FingerprintInput struct {
 
 // Fingerprint computes a deterministic, stable SHA-256 fingerprint for a finding.
 //
-// The fingerprint is stable across minor line-number movement but not across
-// changes to code, class, kind, symbol, or normalized paths. The format is:
+// For managed mode, the fingerprint is based on structural identity:
+// stage, kind, code, class, normalized paths, and symbol. The description
+// is intentionally excluded to provide stability across paraphrasing, but
+// this requires structural fields to be present. Managed findings without
+// stable structural identity will be rejected at preflight.
 //
-//	sha256:<64-lowercase-hex>
+// The format is: sha256:<64-lowercase-hex>
 func Fingerprint(in FingerprintInput) string {
-	hasStructural := in.Code != "" || in.Class != "" || len(in.Paths) > 0 || in.Symbol != ""
-
-	var parts []string
-	if hasStructural {
-		parts = []string{
-			fingerprintVersion,
-			in.Stage,
-			in.Kind,
-			in.Code,
-			in.Class,
-			normalizePaths(in.Paths, in.WorkspacePrefix),
-			in.Symbol,
-		}
-	} else {
-		parts = []string{
-			fingerprintVersion,
-			in.Stage,
-			in.Kind,
-			"",
-			"",
-			"",
-			"",
-			stripLineRefs(normalizeDescription(in.Description, in.WorkspacePrefix)),
-		}
+	// Managed mode always uses structural fingerprinting.
+	// Description is never used (even if all structural fields are empty).
+	parts := []string{
+		fingerprintVersion,
+		in.Stage,
+		in.Kind,
+		in.Code,
+		in.Class,
+		normalizePaths(in.Paths, in.WorkspacePrefix),
+		in.Symbol,
 	}
 
 	joined := strings.Join(parts, "\x00")
@@ -118,4 +108,29 @@ func stripWorkspacePrefix(path, workspacePrefix string) string {
 		return path[len(prefix):]
 	}
 	return path
+}
+
+// ValidateStableFindingIdentity checks that a finding has sufficient structural
+// identity for managed validation. Managed findings must include stable fields
+// to enable safe Decision binding across reruns with paraphrased descriptions.
+//
+// Requirements:
+// - code: must be a non-empty identifier (e.g. "review.security_issue")
+// - class: must be a non-empty category
+// - paths: must contain at least one repository-relative path
+// - symbol/locus: strongly recommended when applicable (e.g., "function name")
+//
+// A finding without these fields cannot be safely bound to a Decision and will
+// be rejected to prevent ambiguous decision application.
+func ValidateStableFindingIdentity(in FingerprintInput) error {
+	if in.Code == "" {
+		return fmt.Errorf("finding missing required 'code' field (stable defect/rule identifier)")
+	}
+	if in.Class == "" {
+		return fmt.Errorf("finding missing required 'class' field (stable category)")
+	}
+	if len(in.Paths) == 0 {
+		return fmt.Errorf("finding missing required 'paths' field (repository-relative affected paths)")
+	}
+	return nil
 }

@@ -170,6 +170,20 @@ func (r *Runner) reviewStage(ctx context.Context) (Outcome, string, []FindingRep
 	var msg string
 
 	for _, f := range result.Findings {
+		// Validate managed findings have sufficient structural identity.
+		if validationErr := ValidateStableFindingIdentity(FingerprintInput{
+			Stage:           stageReview,
+			Kind:            string(f.Kind),
+			Code:            f.Code,
+			Class:           f.Class,
+			Symbol:          f.Symbol,
+			Paths:           f.Paths,
+			Description:     f.Description,
+			WorkspacePrefix: r.opts.Workspace,
+		}); validationErr != nil {
+			return OutcomeInfrastructureError, fmt.Sprintf("review: invalid finding identity: %s", validationErr), nil, nil
+		}
+
 		fp := Fingerprint(FingerprintInput{
 			Stage:           stageReview,
 			Kind:            string(f.Kind),
@@ -283,6 +297,20 @@ func (r *Runner) documentStage(ctx context.Context) (Outcome, string, []FindingR
 	msg := result.Message
 
 	for _, f := range result.Findings {
+		// Validate managed findings have sufficient structural identity.
+		if validationErr := ValidateStableFindingIdentity(FingerprintInput{
+			Stage:           stageDocument,
+			Kind:            string(f.Kind),
+			Code:            f.Code,
+			Class:           f.Class,
+			Symbol:          f.Symbol,
+			Paths:           f.Paths,
+			Description:     f.Description,
+			WorkspacePrefix: r.opts.Workspace,
+		}); validationErr != nil {
+			return OutcomeInfrastructureError, fmt.Sprintf("document: invalid finding identity: %s", validationErr), nil, nil
+		}
+
 		fp := Fingerprint(FingerprintInput{
 			Stage:           stageDocument,
 			Kind:            string(f.Kind),
