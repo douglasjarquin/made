@@ -41,6 +41,7 @@ type DecisionRecord struct {
 type DecisionsFile struct {
 	SchemaVersion int              `json:"schema_version"`
 	RunID         string           `json:"run_id"`
+	InvocationID  string           `json:"invocation_id"`
 	MissionID     string           `json:"mission_id"`
 	InputSHA      string           `json:"input_sha"`
 	BaseSHA       string           `json:"base_sha"`
@@ -73,7 +74,7 @@ func LoadDecisions(path string, opts *Options) (*Decisions, error) {
 		if err != nil {
 			return nil, fmt.Errorf("decisions: open %q: %w", path, err)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		b, err := io.ReadAll(io.LimitReader(f, 1<<20+1))
 		if err != nil {
 			return nil, fmt.Errorf("decisions: read %q: %w", path, err)

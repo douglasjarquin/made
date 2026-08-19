@@ -224,10 +224,17 @@ func TestManaged_RerunWithApprovedDecision(t *testing.T) {
 	}
 
 	// Second run: same inputs, but supply an approving decision.
+	// Note: The Decisions file includes invocation_id from run1 for reference,
+	// but it doesn't bind the decision - decisions bind only to (run_id, mission_id, input_sha, base_sha, policy_hash).
 	decPath := filepath.Join(t.TempDir(), "decisions.json")
+	invID := getInvocationID(t, res1.events)
+	if invID == "" {
+		t.Fatal("run1: no invocation_id captured")
+	}
 	decContent := map[string]any{
 		"schema_version": 1,
 		"run_id":         opts.RunID,
+		"invocation_id":  invID, // From first run, informational only
 		"mission_id":     opts.MissionID,
 		"input_sha":      opts.InputSHA,
 		"base_sha":       opts.BaseSHA,
@@ -353,6 +360,18 @@ func findingFingerprint(t *testing.T, events []map[string]any) string {
 		if fp, ok := payload["fingerprint"].(string); ok {
 			return fp
 		}
+	}
+	return ""
+}
+
+func getInvocationID(t *testing.T, events []map[string]any) string {
+	t.Helper()
+	if len(events) == 0 {
+		return ""
+	}
+	// Get invocation_id from first event (all events in a run have the same invocation_id)
+	if id, ok := events[0]["invocation_id"].(string); ok {
+		return id
 	}
 	return ""
 }

@@ -71,6 +71,7 @@ type Event struct {
 	ProtocolVersion int       `json:"protocol_version"`
 	Sequence        int       `json:"sequence"`
 	RunID           string    `json:"run_id"`
+	InvocationID    string    `json:"invocation_id"`
 	MissionID       string    `json:"mission_id"`
 	InputSHA        string    `json:"input_sha"`
 	BaseSHA         string    `json:"base_sha"`

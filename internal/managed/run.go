@@ -162,7 +162,3 @@ func buildTerminalManifest(opts *Options, runner *Runner, invID string, outcome 
 		MadeVersion:      MadeVersion,
 	}
 }
-
-func isContextError(err error) bool {
-	return err != nil && (err == context.Canceled || err == context.DeadlineExceeded)
-}

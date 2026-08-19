@@ -142,7 +142,7 @@ func RunPreflight(ctx context.Context, opts *Options) (PreflightResult, error) {
 		if err != nil {
 			return fmt.Errorf("open: %w", err)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		// Verify fd points to a regular file (prevents symlink-swap race between Lstat and Open).
 		fi, err := f.Stat()
 		if err != nil {

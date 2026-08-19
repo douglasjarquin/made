@@ -38,6 +38,7 @@ func (ew *EventWriter) Emit(eventType string, payload any) error {
 		ProtocolVersion: ProtocolVersion,
 		Sequence:        ew.seq,
 		RunID:           ew.opts.RunID,
+		InvocationID:    ew.opts.InvocationID,
 		MissionID:       ew.opts.MissionID,
 		InputSHA:        ew.opts.InputSHA,
 		BaseSHA:         ew.opts.BaseSHA,
