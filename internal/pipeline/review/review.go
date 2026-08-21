@@ -24,6 +24,10 @@ type Options struct {
 	CandidateOutputSHA string
 	Evidence           evidence.Store
 	EvidenceRunID      string
+	// ReportOnly disables auto-fix application. When true, auto-fixable findings
+	// are reported as-is but no patches are applied and no commits are created.
+	// Existing callers that do not set this field retain their current behavior.
+	ReportOnly bool
 }
 
 type Result struct {
@@ -77,13 +81,18 @@ func Run(ctx context.Context, worktreePath string, agentKind agent.Kind, opts Op
 	for _, finding := range spawned.Findings.Findings {
 		switch finding.Kind {
 		case agent.FindingAutoFixable:
-			preSHA, postSHA, applyErr := applyAutoFix(ctx, worktreePath, finding)
-			if applyErr != nil {
-				return Result{}, fmt.Errorf("review: apply auto-fix %q: %w", finding.Description, applyErr)
+			if opts.ReportOnly {
+				// Managed mode: report the finding but do not apply the patch.
+				pending = append(pending, finding)
+			} else {
+				preSHA, postSHA, applyErr := applyAutoFix(ctx, worktreePath, finding)
+				if applyErr != nil {
+					return Result{}, fmt.Errorf("review: apply auto-fix %q: %w", finding.Description, applyErr)
+				}
+				autoFixed = append(autoFixed, postSHA)
+				preFixSHAs = append(preFixSHAs, preSHA)
+				postFixSHAs = append(postFixSHAs, postSHA)
 			}
-			autoFixed = append(autoFixed, postSHA)
-			preFixSHAs = append(preFixSHAs, preSHA)
-			postFixSHAs = append(postFixSHAs, postSHA)
 		case agent.FindingBlocking:
 			blockingMessages = append(blockingMessages, finding.Description)
 			pending = append(pending, finding)

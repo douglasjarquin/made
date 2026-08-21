@@ -19,6 +19,11 @@ type Finding struct {
 	Description string      `json:"description"`
 	Patch       string      `json:"patch,omitempty"`
 	Paths       []string    `json:"paths,omitempty"`
+	// Optional fields added for managed-validation structured output.
+	// Existing agents that do not emit these fields continue to work.
+	Code   string `json:"code,omitempty"`
+	Class  string `json:"class,omitempty"`
+	Symbol string `json:"symbol,omitempty"`
 }
 
 func (f Finding) MarshalJSON() ([]byte, error) {
@@ -35,11 +40,17 @@ func (f Finding) MarshalJSON() ([]byte, error) {
 		Description string      `json:"description"`
 		Patch       *string     `json:"patch"`
 		Paths       []string    `json:"paths"`
+		Code        string      `json:"code,omitempty"`
+		Class       string      `json:"class,omitempty"`
+		Symbol      string      `json:"symbol,omitempty"`
 	}{
 		Kind:        f.Kind,
 		Description: f.Description,
 		Patch:       patch,
 		Paths:       paths,
+		Code:        f.Code,
+		Class:       f.Class,
+		Symbol:      f.Symbol,
 	})
 }
 
@@ -49,6 +60,9 @@ func (f *Finding) UnmarshalJSON(data []byte) error {
 		Description *string         `json:"description"`
 		Patch       json.RawMessage `json:"patch"`
 		Paths       json.RawMessage `json:"paths"`
+		Code        string          `json:"code"`
+		Class       string          `json:"class"`
+		Symbol      string          `json:"symbol"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
@@ -62,6 +76,9 @@ func (f *Finding) UnmarshalJSON(data []byte) error {
 	f.Description = *wire.Description
 	f.Patch = ""
 	f.Paths = nil
+	f.Code = wire.Code
+	f.Class = wire.Class
+	f.Symbol = wire.Symbol
 	if !bytes.Equal(bytes.TrimSpace(wire.Patch), []byte("null")) {
 		if err := json.Unmarshal(wire.Patch, &f.Patch); err != nil {
 			return fmt.Errorf("finding patch must be a string or null: %w", err)

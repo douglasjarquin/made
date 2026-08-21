@@ -1,6 +1,7 @@
 package gitgate_test
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -16,7 +17,13 @@ func TestInitBareCreatesBareRepository(t *testing.T) {
 		t.Fatalf("InitBare(%q) returned error: %v", repoPath, err)
 	}
 
-	out, err := exec.Command("git", "-C", repoPath, "rev-parse", "--is-bare-repository").Output()
+	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--is-bare-repository")
+	cmd.Env = append(os.Environ(),
+		"GIT_CONFIG_COUNT=1",
+		"GIT_CONFIG_KEY_0=safe.bareRepository",
+		"GIT_CONFIG_VALUE_0=all",
+	)
+	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("git rev-parse --is-bare-repository failed: %v", err)
 	}

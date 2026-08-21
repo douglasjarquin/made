@@ -29,7 +29,7 @@ func runCapabilitiesCommand(args []string, stdout, stderr *os.File) int {
 	}
 	return writeJSON(stdout, capabilitiesReport{
 		SchemaVersion: 1, ProtocolVersion: api.Version,
-		Commands: []string{"run.submit", "run.status", "run.list", "run.cancel", "review.decide", "doctor"},
+		Commands: []string{"run.submit", "run.status", "run.list", "run.cancel", "review.decide", "doctor", "validate.managed.v1"},
 		Agents:   supportedAgentNames(),
 	}, stderr, "made capabilities")
 }
