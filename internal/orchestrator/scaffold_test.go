@@ -42,6 +42,40 @@ func TestSetupResolvesTrustedConfigWhenPresentOnDefaultBranch(t *testing.T) {
 	}
 }
 
+func TestSetupBootstrapsFromPushedMadeYmlWhenTrustedCopyAbsent(t *testing.T) {
+	dir := t.TempDir()
+	barePath := filepath.Join(dir, "gate.git")
+	if err := gitgate.InitBare(barePath); err != nil {
+		t.Fatalf("InitBare: %v", err)
+	}
+	runGit(t, barePath, "remote", "add", "origin", barePath)
+
+	src := filepath.Join(dir, "src")
+	initSourceRepo(t, src)
+	mainSHA := pushBranch(t, src, barePath, "main")
+
+	writeFile(t, src, ".made.yml", "version: 1\nno_ci: true\ncommands:\n  test: \"go test ./...\"\n")
+	commit(t, src, "add made.yml on feature branch")
+	featureSHA := pushBranch(t, src, barePath, "feature")
+
+	worktreesDir := filepath.Join(dir, "worktrees")
+	rc, err := Setup(context.Background(), barePath, "main", worktreesDir, "run-bootstrap", featureSHA)
+	if err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+	defer rc.Cleanup(context.Background())
+
+	if !rc.Config.NoCI {
+		t.Fatalf("expected NoCI true from bootstrapped pushed config, got %+v", rc.Config)
+	}
+	if rc.Config.Commands.Test != "go test ./..." {
+		t.Fatalf("expected bootstrapped test command, got %q", rc.Config.Commands.Test)
+	}
+	if revParse(t, rc.Worktree.Path, "HEAD") != featureSHA {
+		t.Fatalf("worktree HEAD = %s, want feature SHA %s (main tip is %s)", revParse(t, rc.Worktree.Path, "HEAD"), featureSHA, mainSHA)
+	}
+}
+
 func TestSetupResolvesEmptyTrustedConfigWhenMadeYmlMissingFromDefaultBranch(t *testing.T) {
 	dir := t.TempDir()
 	barePath := filepath.Join(dir, "gate.git")
