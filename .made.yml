@@ -4,11 +4,18 @@ review:
   required: true
 ci:
   required: true
+validation:
+  lanes:
+    go:
+      paths:
+        - "**/*.go"
+        - "go.mod"
+        - "go.sum"
+      full:
+        - "go build ./..."
+        - "go test ./..."
+        - "go test -race -shuffle=on -count=1 ./..."
+        - "go vet ./..."
+      required_before_push: true
 commands:
-  test: |
-    set -e
-    go build ./...
-    go test ./...
-    go test -race -shuffle=on -count=1 ./...
-    go vet ./...
   lint: golangci-lint run ./...
