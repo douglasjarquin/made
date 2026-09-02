@@ -93,6 +93,12 @@ type chain struct {
 	// failure message that says so explicitly rather than the generic
 	// per-stage wording, since a human now has to notice and clean up.
 	pushed bool
+
+	// evidencePublishedSHA is the exact commit PublishEvidenceSHA put on
+	// origin during pushStage, captured once so prStage's link can never
+	// point at a commit a later, concurrent run advanced the branch to but
+	// never pushed.
+	evidencePublishedSHA string
 }
 
 func (c *chain) run() error {
@@ -352,7 +358,16 @@ func (c *chain) lintStage() error {
 
 func (c *chain) pushStage() error {
 	c.start(stageNamePush)
-	if publisher, ok := c.rc.Evidence.(evidence.Publisher); ok {
+	if orphan, ok := c.rc.Evidence.(*evidence.OrphanBranchStore); ok {
+		sha, publishErr := orphan.PublishEvidenceSHA(c.ctx, c.runID)
+		if publishErr != nil {
+			if finishErr := c.finish(stageNamePush, stageResultFail, publishErr.Error()); finishErr != nil {
+				return finishErr
+			}
+			return c.stageFailure(stageNamePush, publishErr.Error())
+		}
+		c.evidencePublishedSHA = sha
+	} else if publisher, ok := c.rc.Evidence.(evidence.Publisher); ok {
 		var publishErr error
 		if contextual, contextOK := c.rc.Evidence.(evidence.ContextPublisher); contextOK {
 			publishErr = contextual.PublishEvidenceContext(c.ctx, c.runID)
@@ -402,7 +417,7 @@ func (c *chain) prStage() (pr.Result, error) {
 		Base:        c.defaultBranch,
 		Head:        c.branch,
 		EvidenceRef: deriveEvidenceRef(c.rc.Evidence, c.runID),
-		EvidenceURL: deriveEvidenceURL(c.ctx, c.rc.Evidence, c.runID),
+		EvidenceURL: deriveEvidenceURL(c.ctx, c.rc.Worktree.Path, c.evidencePublishedSHA, c.runID),
 		RunID:       c.runID,
 	})
 	if err != nil {

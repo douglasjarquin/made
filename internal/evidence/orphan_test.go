@@ -1,6 +1,7 @@
 package evidence_test
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -91,5 +92,43 @@ func TestOrphanBranchStorePublishesEvidenceToOrigin(t *testing.T) {
 	tree := run(t, remote, "git", "ls-tree", "-r", "--name-only", "refs/heads/made-evidence")
 	if !strings.Contains(tree, "run-remote/summary.txt") {
 		t.Fatalf("remote evidence branch lacks published file: %s", tree)
+	}
+}
+
+func TestOrphanBranchStorePublishEvidenceSHA_ReturnsCommitActuallyOnOrigin(t *testing.T) {
+	repo := initTargetRepo(t)
+	remote := filepath.Join(t.TempDir(), "remote.git")
+	run(t, t.TempDir(), "git", "init", "--bare", "-q", remote)
+	run(t, repo, "git", "remote", "add", "origin", remote)
+	store := &evidence.OrphanBranchStore{RepoPath: repo, Branch: "made-evidence"}
+	if err := store.WriteEvidence("run-a", map[string][]byte{"summary.txt": []byte("a\n")}); err != nil {
+		t.Fatalf("WriteEvidence run-a: %v", err)
+	}
+
+	sha, err := store.PublishEvidenceSHA(context.Background(), "run-a")
+	if err != nil {
+		t.Fatalf("PublishEvidenceSHA: %v", err)
+	}
+	if strings.TrimSpace(sha) == "" {
+		t.Fatal("expected a non-empty commit SHA")
+	}
+
+	// A concurrent run advances the local branch AFTER we published, the way
+	// a second run's WriteEvidence would race with this run's own PR stage.
+	// The SHA already returned to this run must still name a commit that is
+	// actually reachable on origin - not the (unpublished) new tip.
+	if err := store.WriteEvidence("run-b", map[string][]byte{"summary.txt": []byte("b\n")}); err != nil {
+		t.Fatalf("WriteEvidence run-b: %v", err)
+	}
+	newTip := strings.TrimSpace(run(t, repo, "git", "rev-parse", "refs/heads/made-evidence"))
+	if newTip == sha {
+		t.Fatal("test setup invalid: expected the second write to advance the branch tip")
+	}
+
+	if _, err := runNoFatal(remote, "git", "cat-file", "-e", sha); err != nil {
+		t.Fatalf("expected published SHA %s to exist on origin: %v", sha, err)
+	}
+	if _, err := runNoFatal(remote, "git", "cat-file", "-e", newTip); err == nil {
+		t.Fatalf("expected the later, unpublished tip %s to NOT exist on origin yet", newTip)
 	}
 }

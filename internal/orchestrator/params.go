@@ -53,26 +53,19 @@ func deriveEvidenceRef(store evidence.Store, runID string) string {
 	}
 }
 
-// deriveEvidenceURL resolves a clickable GitHub permalink to a run's
-// published evidence, or "" when the store cannot publish evidence, its
-// commit tip cannot be resolved, or the origin remote is not GitHub. The URL
-// pins the resolved commit rather than the branch name so it keeps showing
-// the evidence a PR was actually reviewed against, even after a later run
-// advances the evidence branch.
-func deriveEvidenceURL(ctx context.Context, store evidence.Store, runID string) string {
-	s, ok := store.(*evidence.OrphanBranchStore)
-	if !ok {
+// deriveEvidenceURL builds a clickable GitHub permalink to a run's published
+// evidence from the exact commit SHA that publishing already put on origin
+// (see evidence.OrphanBranchStore.PublishEvidenceSHA), or "" when there is no
+// such SHA or the origin remote is not GitHub.
+func deriveEvidenceURL(ctx context.Context, repoPath, sha, runID string) string {
+	if strings.TrimSpace(sha) == "" {
 		return ""
 	}
-	sha, err := s.CommitSHA(ctx)
-	if err != nil || sha == "" {
+	ghRepoPath := githubRepoPath(originRemoteURL(ctx, repoPath))
+	if ghRepoPath == "" {
 		return ""
 	}
-	repoPath := githubRepoPath(originRemoteURL(ctx, s.RepoPath))
-	if repoPath == "" {
-		return ""
-	}
-	return "https://github.com/" + repoPath + "/tree/" + sha + "/" + runID
+	return "https://github.com/" + ghRepoPath + "/tree/" + sha + "/" + url.PathEscape(runID)
 }
 
 func originRemoteURL(ctx context.Context, repoPath string) string {
