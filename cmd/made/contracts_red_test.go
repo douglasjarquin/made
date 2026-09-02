@@ -48,6 +48,46 @@ func TestCapabilitiesJSONExposesStructuredRunContract(t *testing.T) {
 	_ = stderr
 }
 
+func TestCapabilitiesJSONExposesManagedValidationReviewSourcesAndOptionalStages(t *testing.T) {
+	stdoutFile := tempOutputFile(t)
+	stderrFile := tempOutputFile(t)
+	code := run([]string{"capabilities", "--json"}, stdoutFile, stderrFile)
+	if code != 0 {
+		t.Fatalf("capabilities exit code = %d; stderr=%s", code, readOutputFile(t, stderrFile))
+	}
+	var payload struct {
+		ManagedValidation struct {
+			ReviewSources  []string `json:"review_sources"`
+			OptionalStages []string `json:"optional_stages"`
+		} `json:"managed_validation"`
+	}
+	if err := json.Unmarshal(readOutputFile(t, stdoutFile), &payload); err != nil {
+		t.Fatalf("capabilities output is not JSON: %v", err)
+	}
+	for _, want := range []string{"internal", "external"} {
+		found := false
+		for _, got := range payload.ManagedValidation.ReviewSources {
+			if got == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("managed_validation.review_sources missing %q: %+v", want, payload.ManagedValidation.ReviewSources)
+		}
+	}
+	for _, want := range []string{"review", "test", "document", "lint"} {
+		found := false
+		for _, got := range payload.ManagedValidation.OptionalStages {
+			if got == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("managed_validation.optional_stages missing %q: %+v", want, payload.ManagedValidation.OptionalStages)
+		}
+	}
+}
+
 func TestObsoleteStatusCommandIsRejected(t *testing.T) {
 	stdoutFile := tempOutputFile(t)
 	stderrFile := tempOutputFile(t)

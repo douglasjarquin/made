@@ -7,13 +7,24 @@ import (
 
 	"github.com/douglasjarquin/made/internal/agent"
 	"github.com/douglasjarquin/made/internal/api"
+	"github.com/douglasjarquin/made/internal/managed"
 )
 
 type capabilitiesReport struct {
-	SchemaVersion   int      `json:"schema_version"`
-	ProtocolVersion int      `json:"protocol_version"`
-	Commands        []string `json:"commands"`
-	Agents          []string `json:"agents"`
+	SchemaVersion     int                         `json:"schema_version"`
+	ProtocolVersion   int                         `json:"protocol_version"`
+	Commands          []string                    `json:"commands"`
+	Agents            []string                    `json:"agents"`
+	ManagedValidation managedValidationCapability `json:"managed_validation"`
+}
+
+// managedValidationCapability is exposed additively alongside the existing
+// capabilities fields (see docs/managed-validation-v1.md section 14): a
+// caller can discover which Review sources and which stages are
+// policy-optional without hardcoding either list.
+type managedValidationCapability struct {
+	ReviewSources  []string `json:"review_sources"`
+	OptionalStages []string `json:"optional_stages"`
 }
 
 func runCapabilitiesCommand(args []string, stdout, stderr *os.File) int {
@@ -31,6 +42,10 @@ func runCapabilitiesCommand(args []string, stdout, stderr *os.File) int {
 		SchemaVersion: 1, ProtocolVersion: api.Version,
 		Commands: []string{"run.submit", "run.status", "run.list", "run.cancel", "review.decide", "doctor", "validate.managed.v1"},
 		Agents:   supportedAgentNames(),
+		ManagedValidation: managedValidationCapability{
+			ReviewSources:  []string{managed.ReviewSourceInternal, managed.ReviewSourceExternal},
+			OptionalStages: []string{"review", "test", "document", "lint"},
+		},
 	}, stderr, "made capabilities")
 }
 
