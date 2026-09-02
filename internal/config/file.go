@@ -176,5 +176,5 @@ func (c Config) hasConfiguredValue() bool {
 		c.CI.Required || c.CI.RerunBudget != 0 || c.CI.CheckScope != "" || len(c.Test.Evidence.Branch) > 0 || c.Test.Evidence.RetentionBytes != nil ||
 		c.Test.Evidence.StoreInRepo || len(c.Test.Evidence.Dir) > 0 || len(c.Commands.Test) > 0 ||
 		len(c.Commands.Lint) > 0 || len(c.Agent) > 0 || len(c.Agents) > 0 || c.AllowRepoCommands ||
-		len(c.Stages) > 0 || len(c.Validation.Lanes) > 0
+		len(c.Stages) > 0 || len(c.Validation.Lanes) > 0 || c.Validation.NoReuse
 }

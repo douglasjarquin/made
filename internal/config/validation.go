@@ -12,6 +12,12 @@ import (
 // that as a single catch-all lane.
 type Validation struct {
 	Lanes map[string]Lane `yaml:"lanes"`
+	// NoReuse disables receipt-based reuse (project issue #33 Phase 3)
+	// repository-wide: every selected lane's Full commands always execute,
+	// even when a matching receipt exists. Lane selection and enforcement
+	// (Phase 2) are unaffected - this only controls whether a successful
+	// prior result can stand in for running the commands again.
+	NoReuse bool `yaml:"no_reuse"`
 }
 
 // Lane groups the local validation relevant to a set of paths. Full
