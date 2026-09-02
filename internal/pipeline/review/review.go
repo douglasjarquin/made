@@ -28,6 +28,10 @@ type Options struct {
 	// are reported as-is but no patches are applied and no commits are created.
 	// Existing callers that do not set this field retain their current behavior.
 	ReportOnly bool
+	// Guides carries trusted-base guide bindings (project issue #40) through
+	// to the review task's contract and prompt text. Nil for callers that
+	// configure no guides, preserving pre-feature behavior exactly.
+	Guides []agent.ReviewGuideRef
 }
 
 type Result struct {

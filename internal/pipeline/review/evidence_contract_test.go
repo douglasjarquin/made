@@ -3,6 +3,7 @@ package review_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/douglasjarquin/made/internal/agent"
@@ -76,3 +77,66 @@ func TestRun_WritesVersionedReviewEvidenceWithCandidateOutputSHA(t *testing.T) {
 		t.Fatalf("review response = %q, want structured empty findings", store.files["review-response.json"])
 	}
 }
+
+func TestRun_PassesConfiguredGuidesIntoReviewContract(t *testing.T) {
+	bin := agenttest.Build(t)
+	f := setupFixture(t)
+	wt := f.addWorktree(t)
+	t.Cleanup(func() { _ = wt.Remove() })
+	scenarioPath := writeScenario(t, agent.Findings{})
+	store := &recordingEvidenceStore{}
+	baseSHA := headSHA(t, wt.Path)
+
+	_, err := review.Run(context.Background(), wt.Path, agent.KindCodex, review.Options{
+		BinaryPath:    bin,
+		BaseBranch:    "HEAD",
+		Evidence:      store,
+		EvidenceRunID: "run-review-guides",
+		Guides: []agent.ReviewGuideRef{
+			{Path: ".made/features/README.md", ContentHash: "sha256:" + fixtureGuideHash, Bytes: 7},
+		},
+		ExtraEnv: []string{
+			"FAKE_AGENT_KIND=codex",
+			"FAKE_AGENT_SCENARIO=" + scenarioPath,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	metadata, ok := store.files["review-contract.json"]
+	if !ok {
+		t.Fatalf("review evidence files = %v, want review-contract.json", store.files)
+	}
+	var contract struct {
+		Guides []struct {
+			Path        string `json:"path"`
+			ContentHash string `json:"content_hash"`
+			Bytes       int    `json:"bytes"`
+			ReadCommand string `json:"read_command"`
+		} `json:"guides"`
+		GuideInstructions string `json:"guide_instructions"`
+	}
+	if err := json.Unmarshal(metadata, &contract); err != nil {
+		t.Fatalf("decode review-contract.json: %v", err)
+	}
+	if len(contract.Guides) != 1 {
+		t.Fatalf("expected 1 guide in review-contract.json, got %+v", contract.Guides)
+	}
+	g := contract.Guides[0]
+	if g.Path != ".made/features/README.md" || g.ContentHash != "sha256:"+fixtureGuideHash || g.Bytes != 7 {
+		t.Fatalf("guide metadata = %+v, want the configured path/hash/bytes", g)
+	}
+	if g.ReadCommand != "git show "+baseSHA+":.made/features/README.md" {
+		t.Fatalf("ReadCommand = %q, want git show %s:.made/features/README.md", g.ReadCommand, baseSHA)
+	}
+	if contract.GuideInstructions == "" {
+		t.Fatal("expected non-empty guide_instructions when guides are configured")
+	}
+	prompt, ok := store.files["review-prompt.txt"]
+	if !ok || !strings.Contains(string(prompt), g.ReadCommand) {
+		t.Fatalf("review-prompt.txt = %q, want it to include the guide read command", prompt)
+	}
+}
+
+const fixtureGuideHash = "0000000000000000000000000000000000000000000000000000000000000000000"
