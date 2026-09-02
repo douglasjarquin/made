@@ -25,12 +25,13 @@ import (
 )
 
 type Options struct {
-	Title       string
-	Base        string
-	Head        string
-	EvidenceRef string
-	EvidenceURL string
-	RunID       string
+	Title           string
+	Base            string
+	Head            string
+	EvidenceRef     string
+	EvidenceURL     string
+	RunID           string
+	PipelineSummary string
 }
 
 type Result struct {
@@ -61,7 +62,7 @@ func Run(ctx context.Context, ghClient *github.Client, opts Options) (Result, er
 
 	url, err := ghClient.CreatePR(ctx, github.CreatePROptions{
 		Title: opts.Title,
-		Body:  body(opts.EvidenceRef, opts.EvidenceURL, opts.RunID),
+		Body:  body(opts.EvidenceRef, opts.EvidenceURL, opts.RunID, opts.PipelineSummary),
 		Base:  opts.Base,
 		Head:  opts.Head,
 	})
@@ -76,13 +77,25 @@ func Run(ctx context.Context, ghClient *github.Client, opts Options) (Result, er
 	}, nil
 }
 
-func body(evidenceRef, evidenceURL, runID string) string {
+// body renders the PR description: a top-line evidence pointer, a "##
+// Pipeline" section (the human-readable summary when one was built, or
+// nothing when it wasn't), and - always, regardless of the summary - an
+// HTML comment carrying the machine-checkable attestation fields the
+// dogfood-required CI gate looks for. Keeping that comment's field lines
+// unconditional means adding the pretty summary can never regress the gate.
+func body(evidenceRef, evidenceURL, runID, pipelineSummary string) string {
 	displayEvidence := evidenceRef
 	if strings.TrimSpace(evidenceURL) != "" {
 		displayEvidence = fmt.Sprintf("[%s](%s)", evidenceRef, evidenceURL)
 	}
-	return fmt.Sprintf(
-		"Evidence: %s\n\n## Pipeline\nProtocol-Version: %d\nRun-ID: %s\nEvidence: %s\n",
-		displayEvidence, api.Version, runID, displayEvidence,
-	)
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Evidence: %s\n\n", displayEvidence)
+	b.WriteString("## Pipeline\n\n")
+	if strings.TrimSpace(pipelineSummary) != "" {
+		b.WriteString(pipelineSummary)
+		b.WriteString("\n\n")
+	}
+	fmt.Fprintf(&b, "<!--\nProtocol-Version: %d\nRun-ID: %s\nEvidence: %s\n-->\n", api.Version, runID, displayEvidence)
+	return b.String()
 }

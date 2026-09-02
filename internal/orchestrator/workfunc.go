@@ -99,6 +99,14 @@ type chain struct {
 	// point at a commit a later, concurrent run advanced the branch to but
 	// never pushed.
 	evidencePublishedSHA string
+
+	// stageMessages mirrors stages by name: finish() records each stage's
+	// human-readable message here so prStage can render it into the PR's
+	// pipeline summary without widening daemon.StageResult's own schema.
+	stageMessages map[string]string
+	// reviewFixDescriptions holds the description of every auto-fixed
+	// review finding, in the order the review stage applied them.
+	reviewFixDescriptions []string
 }
 
 func (c *chain) run() error {
@@ -197,6 +205,10 @@ func (c *chain) start(stage string) {
 
 func (c *chain) finish(stage, result, message string) error {
 	c.stages = append(c.stages, daemon.StageResult{Name: stage, Result: result})
+	if c.stageMessages == nil {
+		c.stageMessages = map[string]string{}
+	}
+	c.stageMessages[stage] = message
 	if err := c.rm.UpdateStages(c.runID, append([]daemon.StageResult(nil), c.stages...)); err != nil {
 		return err
 	}
@@ -275,6 +287,7 @@ func (c *chain) reviewStage() error {
 			record.PreFixSHA = result.PreFixSHAs[autoFixIndex]
 			record.PostFixSHA = result.PostFixSHAs[autoFixIndex]
 			autoFixIndex++
+			c.reviewFixDescriptions = append(c.reviewFixDescriptions, finding.Description)
 		}
 		durableFindings = append(durableFindings, record)
 	}
@@ -413,12 +426,13 @@ func (c *chain) prStage() (pr.Result, error) {
 	}
 
 	result, err := pr.Run(c.ctx, c.rc.GitHub, pr.Options{
-		Title:       title,
-		Base:        c.defaultBranch,
-		Head:        c.branch,
-		EvidenceRef: deriveEvidenceRef(c.rc.Evidence, c.runID),
-		EvidenceURL: deriveEvidenceURL(c.ctx, c.rc.Worktree.Path, c.evidencePublishedSHA, c.runID),
-		RunID:       c.runID,
+		Title:           title,
+		Base:            c.defaultBranch,
+		Head:            c.branch,
+		EvidenceRef:     deriveEvidenceRef(c.rc.Evidence, c.runID),
+		EvidenceURL:     deriveEvidenceURL(c.ctx, c.rc.Worktree.Path, c.evidencePublishedSHA, c.runID),
+		RunID:           c.runID,
+		PipelineSummary: renderPipelineSummary(c.stages, c.stageMessages, c.reviewFixDescriptions),
 	})
 	if err != nil {
 		if finishErr := c.finish(stageNamePR, stageResultFail, err.Error()); finishErr != nil {
