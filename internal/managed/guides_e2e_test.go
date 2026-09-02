@@ -307,8 +307,8 @@ func TestManaged_MultipleGuidesAllBoundInOrder(t *testing.T) {
 	configContent := "version: 1\nagent: codex\ncommands:\n  test: \"true\"\n  lint: \"true\"\n" +
 		"review:\n  guides:\n    - \"docs/b.md\"\n    - \"docs/a.md\"\n    - \".made/features/README.md\"\n"
 	configPath, policyHash := makeTrustedConfigWithFiles(t, ".made.yml", configContent, map[string]string{
-		"docs/b.md":                 "guide b",
-		"docs/a.md":                 "guide a",
+		"docs/b.md":                "guide b",
+		"docs/a.md":                "guide a",
 		".made/features/README.md": "feature index",
 	})
 
@@ -352,7 +352,7 @@ func TestManaged_MultipleGuidesAllBoundInOrder(t *testing.T) {
 	if bIdx < 0 || aIdx < 0 || readmeIdx < 0 {
 		t.Fatalf("expected all three guides in the task log, got: %s", log)
 	}
-	if !(bIdx < aIdx && aIdx < readmeIdx) {
+	if bIdx >= aIdx || aIdx >= readmeIdx {
 		t.Fatalf("expected guide order b, a, README preserved in task log, got indices %d,%d,%d", bIdx, aIdx, readmeIdx)
 	}
 }
