@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/douglasjarquin/made/internal/api"
 	"github.com/douglasjarquin/made/internal/github"
 )
 
@@ -28,6 +29,7 @@ type Options struct {
 	Base        string
 	Head        string
 	EvidenceRef string
+	RunID       string
 }
 
 type Result struct {
@@ -52,10 +54,13 @@ func Run(ctx context.Context, ghClient *github.Client, opts Options) (Result, er
 	if strings.TrimSpace(opts.EvidenceRef) == "" {
 		return Result{}, fmt.Errorf("pr: EvidenceRef must not be empty")
 	}
+	if strings.TrimSpace(opts.RunID) == "" {
+		return Result{}, fmt.Errorf("pr: RunID must not be empty")
+	}
 
 	url, err := ghClient.CreatePR(ctx, github.CreatePROptions{
 		Title: opts.Title,
-		Body:  body(opts.EvidenceRef),
+		Body:  body(opts.EvidenceRef, opts.RunID),
 		Base:  opts.Base,
 		Head:  opts.Head,
 	})
@@ -70,6 +75,9 @@ func Run(ctx context.Context, ghClient *github.Client, opts Options) (Result, er
 	}, nil
 }
 
-func body(evidenceRef string) string {
-	return fmt.Sprintf("Evidence: %s\n", evidenceRef)
+func body(evidenceRef, runID string) string {
+	return fmt.Sprintf(
+		"Evidence: %s\n\n## Pipeline\nProtocol-Version: %d\nRun-ID: %s\nEvidence: %s\n",
+		evidenceRef, api.Version, runID, evidenceRef,
+	)
 }

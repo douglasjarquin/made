@@ -35,6 +35,7 @@ func TestRun_OpensPRWithEvidenceLink(t *testing.T) {
 		Base:        "main",
 		Head:        "made/run-123",
 		EvidenceRef: "evidence/run-123/summary.txt",
+		RunID:       "run-123",
 	})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -55,6 +56,47 @@ func TestRun_OpensPRWithEvidenceLink(t *testing.T) {
 	}
 }
 
+func TestRun_PRBodyCarriesPipelineAttestation(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "invocations.log")
+	c := newClient(t, []string{"FAKE_GH_PR_URL=https://github.com/example/repo/pull/9"}, logPath)
+
+	_, err := pr.Run(context.Background(), c, pr.Options{
+		Title:       "made: automated change",
+		Base:        "main",
+		Head:        "made/run-321",
+		EvidenceRef: "evidence/run-321/summary.txt",
+		RunID:       "run-321",
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read invocation log: %v", err)
+	}
+	log := string(data)
+	for _, want := range []string{"## Pipeline", "Run-ID: run-321", "Protocol-Version: "} {
+		if !strings.Contains(log, want) {
+			t.Fatalf("expected PR body to contain %q, log:\n%s", want, log)
+		}
+	}
+}
+
+func TestRun_RejectsEmptyRunID(t *testing.T) {
+	c := newClient(t, nil, "")
+
+	_, err := pr.Run(context.Background(), c, pr.Options{
+		Title:       "made: automated change",
+		Base:        "main",
+		Head:        "made/run-000",
+		EvidenceRef: "evidence/run-000/summary.txt",
+	})
+	if err == nil {
+		t.Fatal("expected an error when RunID is empty")
+	}
+}
+
 func TestRun_NeverInvokesMergeCommand(t *testing.T) {
 	logPath := filepath.Join(t.TempDir(), "invocations.log")
 	c := newClient(t, []string{"FAKE_GH_PR_URL=https://github.com/example/repo/pull/8"}, logPath)
@@ -64,6 +106,7 @@ func TestRun_NeverInvokesMergeCommand(t *testing.T) {
 		Base:        "main",
 		Head:        "made/run-456",
 		EvidenceRef: "evidence/run-456/summary.txt",
+		RunID:       "run-456",
 	})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -102,6 +145,7 @@ func TestRun_ReportsGHFailureAsInfrastructureError(t *testing.T) {
 		Base:        "main",
 		Head:        "made/run-999",
 		EvidenceRef: "evidence/run-999/summary.txt",
+		RunID:       "run-999",
 	})
 	if err == nil {
 		t.Fatal("expected GitHub API failure to be returned as infrastructure error")

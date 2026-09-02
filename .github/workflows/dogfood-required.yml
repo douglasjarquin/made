@@ -1,0 +1,45 @@
+name: Require made pipeline attestation
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dogfood-required-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: PR must carry a made pipeline attestation
+    runs-on: ubuntu-latest
+    # Automation accounts open PRs a made pipeline run could not have produced.
+    if: >-
+      github.event.pull_request.user.login != 'github-actions[bot]' &&
+      github.event.pull_request.user.login != 'dependabot[bot]'
+    steps:
+      - name: Verify PR body attestation
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if [ -z "$PR_BODY" ]; then
+            echo "PR body is empty: made's pipeline always writes a body." >&2
+            exit 1
+          fi
+          if ! grep -qF '## Pipeline' <<<"$PR_BODY"; then
+            echo "PR body is missing the '## Pipeline' attestation section." >&2
+            echo "This repository requires PRs to be raised via made's own pipeline (dogfooding)." >&2
+            exit 1
+          fi
+          if ! grep -qE '^Run-ID: .+' <<<"$PR_BODY"; then
+            echo "PR body's '## Pipeline' section is missing a non-empty Run-ID." >&2
+            exit 1
+          fi
+          if ! grep -qE '^Protocol-Version: [0-9]+' <<<"$PR_BODY"; then
+            echo "PR body's '## Pipeline' section is missing a numeric Protocol-Version." >&2
+            exit 1
+          fi

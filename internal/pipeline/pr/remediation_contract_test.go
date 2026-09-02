@@ -29,7 +29,7 @@ func TestRun_CreatePRIsIdempotentByRepositoryBaseAndHead(t *testing.T) {
 		t.Fatalf("write strict gh fake: %v", err)
 	}
 	c := &github.Client{Binary: bin, Dir: t.TempDir(), ExtraEnv: []string{"STRICT_GH_LOG=" + logPath, "STRICT_GH_STATE=" + statePath}}
-	opts := pr.Options{Title: "title", Base: "main", Head: "feature", EvidenceRef: "run-1"}
+	opts := pr.Options{Title: "title", Base: "main", Head: "feature", EvidenceRef: "run-1", RunID: "run-1"}
 	for i := 0; i < 2; i++ {
 		result, err := pr.Run(context.Background(), c, opts)
 		if err != nil || !result.OK {
