@@ -149,6 +149,7 @@ run.
 - Obtains a Review via one of two sources, selected by `--review-source` (default `internal`):
   - `internal`: spawns the configured agent in report-only mode; requires structured JSON output
   - `external`: accepts one caller-supplied review result bound to the exact base SHA, input SHA, policy hash, and review-contract hash (section 11a); Made launches no reviewer of its own on this path
+- Optionally consults trusted `review.guides` (section 11b); a project with none configured is unaffected
 - Does NOT apply auto-fix patches
 - Does NOT create commits
 - Both sources' findings are normalized through one shared fingerprint/classification/Decision path
@@ -380,11 +381,13 @@ For managed validation, every finding must include:
 
 Made builds one canonical, versioned `ReviewContract` for every run, covering
 the finding taxonomy, finding kinds, exact `base_sha`/`input_sha`, the exact
-diff instructions, and nonmutation/authority rules. Its `sha256:<hex>` hash
-(`review_contract_hash`) is reproducible by any caller from the documented
-schema and these inputs alone - Made does not need to be asked for it first.
-`guide_paths` is a reserved, always-empty extension point for supplemental
-review guides (issue #40); it is not implemented in V1.
+diff instructions, nonmutation/authority rules, and - when `review.guides` is
+configured (section 11b) - the resolved guide bindings and read
+instructions. Its `sha256:<hex>` hash (`review_contract_hash`) is
+reproducible by any caller from the documented schema and these inputs
+alone - Made does not need to be asked for it first. The hash changes
+whenever guide order, path, or content changes, so a result produced
+against stale guides is never silently reused.
 
 A caller choosing `--review-source external` renders this contract for its
 own reviewer, then submits one JSON file at `--review-result` matching:
@@ -418,6 +421,77 @@ informational provenance only: Made never rejects a result because
 `actual_model` is absent, differs from `requested_model`, or equals it. Made
 does not select or invoke any model on this path - it only classifies the
 findings the caller's reviewer already produced.
+
+---
+
+## 11b. Review guides (issue #40)
+
+A project may point Review at zero or more trusted, repository-relative
+guide files under `review.guides` in its config:
+
+```yaml
+review:
+  guides:
+    - ".made/features/README.md"
+    - "docs/architecture.md"
+```
+
+No guides configured, or an empty list, leaves Review exactly as before.
+Guides are generic: a feature map is a recommended convention
+(`.made/features/README.md` as a concise index linking to focused files),
+not a dedicated Made subsystem - Made does not parse feature IDs, enforce
+Markdown headings, or build a behavior graph. Guide paths are always taken
+from trusted configuration, never a candidate's own command overrides,
+mirroring `test.evidence`.
+
+For each run, Made resolves every configured guide from the trusted root -
+the directory implied by `--trusted-config`'s own layout, the only trusted
+base managed mode has today (see the note on `made verify`, issue #41,
+below) - rejecting an absolute path, a `..` escape, a symlink, a directory,
+or anything but a regular file, and enforcing conservative bounds on guide
+count, path length, individual and aggregate guide bytes. A configured guide
+that is missing or unsafe in the trusted base is an `infrastructure_error`
+raised before Review runs, not a Review finding. Candidate edits, deletions,
+or additions at the same path, and candidate edits to `review.guides`
+itself, never change which bytes govern the current run.
+
+Each resolved guide is bound into the `ReviewContract` as
+`{path, content_hash, bytes}`, alongside a fixed instruction:
+
+> Read every configured top-level guide. When a guide is an index, follow
+> only the entries relevant to the exact base-to-input change unless the
+> change is broad enough to require a full sweep.
+
+Made never eagerly concatenates guide content into the review prompt. The
+internal reviewer receives each guide's exact path/hash/bytes plus a bounded
+`git show <base_sha>:<guide_path>` read command; an external reviewer
+receives the identical metadata through the rendered contract. Guide prose
+is context only - Made never executes a command because a guide's text
+suggests it, and Test/Lint commands still come only from trusted
+configuration.
+
+An external review result may optionally echo a bounded `guides_consulted`
+diagnostic:
+
+```json
+{
+  "guides_consulted": [
+    {"path": ".made/features/README.md", "content_hash": "sha256:..."}
+  ]
+}
+```
+
+Each entry must name a currently configured guide with that guide's exact
+current `content_hash`; an invented path, a stale hash, a duplicate path, or
+more entries than the configured guide count is rejected. `guides_consulted`
+is diagnostic, not proof: Made validates paths and hashes but never claims
+cryptographic proof that a model read or understood the prose.
+
+Managed mode's trusted base today is exactly the `--trusted-config` file
+Made was given, hash-verified against `--policy-hash`; there is no
+daemon-mediated "trusted base at a git ref" yet. `made verify` (issue #41)
+is expected to add that; until then, guides are resolved from the same
+filesystem location the trusted config was read from, not from a git ref.
 
 ---
 
@@ -582,7 +656,8 @@ Managed V1 does not implement:
 - Generating Cursor skills or subagent files, or selecting/invoking a Cursor model
 - Enforcing which model an external reviewer actually used
 - The simpler `made verify` interface (a later issue) or repo-root config discovery for managed mode
-- `review.guides` supplemental review documents (a later issue; the review contract's `guide_paths` field is reserved for it)
+- Resolving `review.guides` from a trusted base at a git ref (that arrives with `made verify`, issue #41); V1 resolves guides from the trusted config's own filesystem location
+- A dedicated feature-map parser, manifest, initializer, or `feature-map init/check` subsystem
 - Generic SCM adapters
 - A TUI or new persistence database
 - A replacement for the standalone daemon
