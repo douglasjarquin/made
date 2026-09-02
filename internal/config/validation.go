@@ -31,6 +31,10 @@ type Lane struct {
 	Quick              []string `yaml:"quick"`
 	Full               []string `yaml:"full"`
 	RequiredBeforePush bool     `yaml:"required_before_push"`
+	// NoReuse disables receipt-based reuse for this lane only, regardless of
+	// Validation.NoReuse. A repository can disable reuse everywhere except
+	// one lane it doesn't trust yet, or vice versa.
+	NoReuse bool `yaml:"no_reuse"`
 }
 
 // FullShellCommands tokenizes each Full command the same way
