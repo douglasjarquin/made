@@ -237,6 +237,56 @@ func TestLaneFullCommandsForTest_NoReuseIgnoresPublishedReceipt(t *testing.T) {
 	}
 }
 
+func TestLaneFullCommandsForTest_PerLaneNoReuseIgnoresPublishedReceiptForThatLaneOnly(t *testing.T) {
+	dir := gitInitWithCommit(t, "base")
+	runGit(t, dir, "config", "user.email", "orchestrator-test@example.com")
+	runGit(t, dir, "config", "user.name", "orchestrator-test")
+	addOrigin(t, dir)
+	runGit(t, dir, "checkout", "-q", "-b", "feature")
+	writeFile(t, dir, "main.go", "package main\n")
+	writeFile(t, dir, "README.md", "docs\n")
+	runGit(t, dir, "add", "-A")
+	runGit(t, dir, "commit", "-q", "-m", "add main.go and README.md")
+
+	cfg := config.Config{
+		Validation: config.Validation{
+			Lanes: map[string]config.Lane{
+				"go":   {Paths: []string{"**/*.go"}, Full: []string{"echo go-full"}, RequiredBeforePush: true, NoReuse: true},
+				"docs": {Paths: []string{"**/*.md"}, Full: []string{"echo docs-full"}, RequiredBeforePush: true},
+			},
+		},
+	}
+	c := &chain{ctx: context.Background(), defaultBranch: "main", runID: "run-per-lane-no-reuse", rc: &RunContext{Config: cfg, Worktree: &gitgate.Worktree{Path: dir}}}
+
+	first, err := c.laneFullCommandsForTest()
+	if err != nil {
+		t.Fatalf("laneFullCommandsForTest (first): %v", err)
+	}
+	if len(first.Extras) != 2 {
+		t.Fatalf("expected both lanes to run on the first pass, got %+v", first)
+	}
+	c.publishLaneReceipts(first)
+
+	second, err := c.laneFullCommandsForTest()
+	if err != nil {
+		t.Fatalf("laneFullCommandsForTest (second): %v", err)
+	}
+	extraNames := map[string]bool{}
+	for _, e := range second.Extras {
+		extraNames[e.Name] = true
+	}
+	reusedNames := map[string]bool{}
+	for _, r := range second.Reused {
+		reusedNames[r.Name] = true
+	}
+	if !extraNames["go"] {
+		t.Fatalf("expected the go lane (no_reuse: true) to re-execute despite a published receipt, got %+v", second)
+	}
+	if !reusedNames["docs"] {
+		t.Fatalf("expected the docs lane (no per-lane override) to be reused, got %+v", second)
+	}
+}
+
 // TestResolveWorktreeRef_ScopesToGivenRepoPath guards against a real
 // regression: resolveWorktreeRef must run git in repoPath, not in whatever
 // directory the calling process happens to be in. Two independent repos

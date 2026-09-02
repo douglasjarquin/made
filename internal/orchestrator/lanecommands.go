@@ -82,7 +82,7 @@ func (c *chain) laneFullCommandsForTest() (laneTestPlan, error) {
 	}
 	repoIdentity := originRemoteURL(c.ctx, c.rc.Worktree.Path)
 	receiptStore := &receipt.Store{RepoPath: c.rc.Worktree.Path}
-	noReuse := c.rc.Config.Validation.NoReuse
+	repoNoReuse := c.rc.Config.Validation.NoReuse
 
 	var plan laneTestPlan
 	for _, decision := range decisions {
@@ -108,7 +108,7 @@ func (c *chain) laneFullCommandsForTest() (laneTestPlan, error) {
 				matchedPaths: decision.MatchedPaths,
 				command:      cmd,
 			})
-			if !noReuse {
+			if !repoNoReuse && !lane.NoReuse {
 				if existing, found, _ := receiptStore.Get(c.ctx, fp.Hash()); found {
 					plan.Reused = append(plan.Reused, reusedLaneCommand{
 						Name:            name,
