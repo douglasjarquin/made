@@ -19,7 +19,7 @@ review:
 `)
 	evidenceDir := makeEvidenceDir(t)
 
-	contractHash, err := managed.BuildReviewContract(baseSHA, inputSHA, policyHash).Hash()
+	contractHash, err := managed.BuildReviewContract(baseSHA, inputSHA, policyHash, nil).Hash()
 	if err != nil {
 		t.Fatal(err)
 	}

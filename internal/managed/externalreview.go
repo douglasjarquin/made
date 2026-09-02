@@ -31,6 +31,11 @@ type ExternalReviewIdentity struct {
 	InputSHA     string
 	PolicyHash   string
 	ContractHash string
+	// Guides is the trusted, configured guide set (project issue #40) an
+	// external result's optional guides_consulted diagnostic is checked
+	// against: every entry must name a configured path with its exact
+	// current content_hash.
+	Guides []GuideBinding
 }
 
 // ExternalReviewResult is Made's strict, bounded, versioned schema for a
@@ -49,6 +54,17 @@ type ExternalReviewResult struct {
 	PolicyHash            string            `json:"policy_hash"`
 	ReviewContractHash    string            `json:"review_contract_hash"`
 	Findings              []ExternalFinding `json:"findings"`
+	GuidesConsulted       []GuideConsulted  `json:"guides_consulted,omitempty"`
+}
+
+// GuideConsulted is one bounded, optional diagnostic entry (project issue
+// #40) an external reviewer echoes back to acknowledge which configured
+// guide it read. Made validates it names a configured path with that
+// guide's exact current content hash; it never claims proof the reviewer
+// understood the prose.
+type GuideConsulted struct {
+	Path        string `json:"path"`
+	ContentHash string `json:"content_hash"`
 }
 
 // ExternalFinding is one finding inside an ExternalReviewResult. Its shape
@@ -177,6 +193,44 @@ func validateExternalReviewResult(r ExternalReviewResult, want ExternalReviewIde
 			return fmt.Errorf("managed: external review result finding[%d] duplicates an earlier finding (structural identity %s)", i, identity)
 		}
 		seen[identity] = f
+	}
+	return validateGuidesConsulted(r.GuidesConsulted, want.Guides)
+}
+
+func validateGuidesConsulted(consulted []GuideConsulted, configured []GuideBinding) error {
+	if len(consulted) > maxConsultedGuideCount {
+		return fmt.Errorf("managed: external review result has %d guides_consulted entries, exceeding the maximum of %d", len(consulted), maxConsultedGuideCount)
+	}
+	known := make(map[string]GuideBinding, len(configured))
+	for _, g := range configured {
+		known[g.Path] = g
+	}
+	seen := make(map[string]struct{}, len(consulted))
+	for i, c := range consulted {
+		label := fmt.Sprintf("guides_consulted[%d]", i)
+		if err := boundString(label+".path", c.Path, maxExternalReviewPathBytes); err != nil {
+			return err
+		}
+		if c.Path == "" {
+			return fmt.Errorf("managed: external review result %s is missing path", label)
+		}
+		if _, dup := seen[c.Path]; dup {
+			return fmt.Errorf("managed: external review result %s duplicates path %q", label, c.Path)
+		}
+		seen[c.Path] = struct{}{}
+		guide, ok := known[c.Path]
+		if !ok {
+			return fmt.Errorf("managed: external review result %s references unconfigured guide %q", label, c.Path)
+		}
+		if err := boundString(label+".content_hash", c.ContentHash, maxExternalReviewStringBytes); err != nil {
+			return err
+		}
+		if c.ContentHash == "" {
+			return fmt.Errorf("managed: external review result %s is missing content_hash", label)
+		}
+		if c.ContentHash != guide.ContentHash {
+			return fmt.Errorf("managed: external review result %s content_hash %q does not match configured guide %q hash %q (stale reference)", label, c.ContentHash, c.Path, guide.ContentHash)
+		}
 	}
 	return nil
 }
