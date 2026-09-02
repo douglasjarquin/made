@@ -27,10 +27,15 @@ func resolveReviewTask(ctx context.Context, worktreePath string, opts Options) (
 			return agent.ReviewTask{}, fmt.Errorf("resolve trusted base %q: %w", baseBranch, err)
 		}
 	}
-	return agent.NewReviewTask(agent.ReviewInput{
+	reviewInput := agent.ReviewInput{
 		TrustedBaseBranch:  baseBranch,
 		TrustedBaseSHA:     baseSHA,
 		CandidateInputSHA:  candidateSHA,
 		CandidateOutputSHA: opts.CandidateOutputSHA,
-	})
+	}
+	// Managed-validation mode requires strict structural identity for findings.
+	if opts.ReportOnly {
+		return agent.NewManagedReviewTask(reviewInput)
+	}
+	return agent.NewReviewTask(reviewInput)
 }

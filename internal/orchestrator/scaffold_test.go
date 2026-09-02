@@ -294,6 +294,11 @@ func commit(t *testing.T, dir, message string) {
 		"GIT_AUTHOR_EMAIL=orchestrator-test@example.com",
 		"GIT_COMMITTER_NAME=orchestrator-test",
 		"GIT_COMMITTER_EMAIL=orchestrator-test@example.com",
+		"GIT_CONFIG_COUNT=2",
+		"GIT_CONFIG_KEY_0=commit.gpgsign",
+		"GIT_CONFIG_VALUE_0=false",
+		"GIT_CONFIG_KEY_1=safe.bareRepository",
+		"GIT_CONFIG_VALUE_1=all",
 	)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git commit in %s failed: %v: %s", dir, err, out)
@@ -304,6 +309,13 @@ func pushBranch(t *testing.T, srcDir, barePath, branch string) string {
 	t.Helper()
 	cmd := exec.Command("git", "push", barePath, "HEAD:refs/heads/"+branch)
 	cmd.Dir = srcDir
+	cmd.Env = append(os.Environ(),
+		"GIT_CONFIG_COUNT=2",
+		"GIT_CONFIG_KEY_0=commit.gpgsign",
+		"GIT_CONFIG_VALUE_0=false",
+		"GIT_CONFIG_KEY_1=safe.bareRepository",
+		"GIT_CONFIG_VALUE_1=all",
+	)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git push %s in %s failed: %v: %s", branch, srcDir, err, out)
 	}
@@ -314,6 +326,13 @@ func revParse(t *testing.T, dir, ref string) string {
 	t.Helper()
 	cmd := exec.Command("git", "rev-parse", ref)
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_CONFIG_COUNT=2",
+		"GIT_CONFIG_KEY_0=commit.gpgsign",
+		"GIT_CONFIG_VALUE_0=false",
+		"GIT_CONFIG_KEY_1=safe.bareRepository",
+		"GIT_CONFIG_VALUE_1=all",
+	)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git rev-parse %s in %s failed: %v: %s", ref, dir, err, out)
@@ -325,6 +344,13 @@ func runGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_CONFIG_COUNT=2",
+		"GIT_CONFIG_KEY_0=commit.gpgsign",
+		"GIT_CONFIG_VALUE_0=false",
+		"GIT_CONFIG_KEY_1=safe.bareRepository",
+		"GIT_CONFIG_VALUE_1=all",
+	)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v in %s failed: %v: %s", args, dir, err, out)
 	}

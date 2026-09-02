@@ -33,9 +33,21 @@ func run(t *testing.T, dir string, extraEnv []string, name string, args ...strin
 	t.Helper()
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
+	env := os.Environ()
 	if extraEnv != nil {
-		cmd.Env = append(os.Environ(), extraEnv...)
+		env = append(env, extraEnv...)
 	}
+	// Ensure safe.bareRepository and gpgsign are configured for git operations in tests.
+	if name == "git" {
+		env = append(env,
+			"GIT_CONFIG_COUNT=2",
+			"GIT_CONFIG_KEY_0=commit.gpgsign",
+			"GIT_CONFIG_VALUE_0=false",
+			"GIT_CONFIG_KEY_1=safe.bareRepository",
+			"GIT_CONFIG_VALUE_1=all",
+		)
+	}
+	cmd.Env = env
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("%s %v in %s failed: %v: %s", name, args, dir, err, out)
@@ -46,6 +58,11 @@ func run(t *testing.T, dir string, extraEnv []string, name string, args ...strin
 func pushRef(dir, remote string) (string, error) {
 	cmd := exec.Command("git", "push", remote, "HEAD:refs/heads/main")
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_CONFIG_COUNT=1",
+		"GIT_CONFIG_KEY_0=safe.bareRepository",
+		"GIT_CONFIG_VALUE_0=all",
+	)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
