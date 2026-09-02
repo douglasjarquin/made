@@ -107,6 +107,10 @@ type chain struct {
 	// reviewFixDescriptions holds the description of every auto-fixed
 	// review finding, in the order the review stage applied them.
 	reviewFixDescriptions []string
+	// reusedLaneCommands holds every validation lane command the Test stage
+	// satisfied from an existing receipt instead of running, for prStage's
+	// pipeline summary.
+	reusedLaneCommands []reusedLaneCommand
 }
 
 func (c *chain) run() error {
@@ -316,6 +320,7 @@ func (c *chain) testStage() error {
 	if err != nil {
 		return err
 	}
+	c.reusedLaneCommands = lanePlan.Reused
 	result, err := test.Run(c.ctx, c.rc.Worktree.Path, c.runID, c.rc.Config.TestCommand(), lanePlan.Extras, c.rc.Evidence)
 	if err != nil {
 		return err
@@ -437,7 +442,7 @@ func (c *chain) prStage() (pr.Result, error) {
 		EvidenceRef:     deriveEvidenceRef(c.rc.Evidence, c.runID),
 		EvidenceURL:     deriveEvidenceURL(c.ctx, c.rc.Worktree.Path, c.evidencePublishedSHA, c.runID),
 		RunID:           c.runID,
-		PipelineSummary: renderPipelineSummary(c.stages, c.stageMessages, c.reviewFixDescriptions),
+		PipelineSummary: renderPipelineSummary(c.stages, c.stageMessages, c.reviewFixDescriptions, c.reusedLaneCommands),
 	})
 	if err != nil {
 		if finishErr := c.finish(stageNamePR, stageResultFail, err.Error()); finishErr != nil {

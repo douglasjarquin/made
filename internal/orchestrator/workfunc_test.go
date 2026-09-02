@@ -367,19 +367,19 @@ func TestNewWorkFunc_SecondIdenticalRunReusesReceiptInsteadOfReexecuting(t *test
 	branch2 := "feature-lane-reuse-2"
 	pushBranch(t, f.src, f.barePath, branch2)
 
-	runOnce := func(pushBranchName string) daemon.RunSnapshot {
+	runOnce := func(pushBranchName, ghLog string) (daemon.RunSnapshot, string) {
 		wt := f.worktree(t, sha)
 		defer func() { _ = wt.Remove() }()
-		rc := newRunContext(wt, cfg, ghBin, "")
+		rc := newRunContext(wt, cfg, ghBin, ghLog)
 		rm := daemon.NewRunManager()
 		reviewDecisions := daemon.NewReviewDecisions()
 		runID := rm.NewRunID()
 		wf := NewWorkFunc(rm, reviewDecisions, nil, runID, f.defaultBranch, pushBranchName, Options{ReviewOptions: cleanReviewOptions(t)})
 		submitWorkFunc(t, rm, runID, "repo-lane-reuse", pushBranchName, wf, rc)
-		return waitForRunEnded(t, rm, runID, 30*time.Second)
+		return waitForRunEnded(t, rm, runID, 30*time.Second), runID
 	}
 
-	first := runOnce(branch)
+	first, firstRunID := runOnce(branch, "")
 	if first.Status != daemon.RunAwaitingMerge {
 		t.Fatalf("first run: expected RunAwaitingMerge, got %v (err=%v)", first.Status, first.Err)
 	}
@@ -391,9 +391,19 @@ func TestNewWorkFunc_SecondIdenticalRunReusesReceiptInsteadOfReexecuting(t *test
 		t.Fatalf("expected the lane command to run exactly once on the first run, counter file:\n%s", afterFirst)
 	}
 
-	second := runOnce(branch2)
+	secondGHLog := filepath.Join(t.TempDir(), "gh-invocations.log")
+	second, _ := runOnce(branch2, secondGHLog)
 	if second.Status != daemon.RunAwaitingMerge {
 		t.Fatalf("second run: expected RunAwaitingMerge, got %v (err=%v)", second.Status, second.Err)
+	}
+	secondLog, err := os.ReadFile(secondGHLog)
+	if err != nil {
+		t.Fatalf("read second run's gh invocation log: %v", err)
+	}
+	for _, want := range []string{"Reused validation", "greeting", firstRunID} {
+		if !strings.Contains(string(secondLog), want) {
+			t.Fatalf("expected the second run's real PR body to contain %q, gh log:\n%s", want, secondLog)
+		}
 	}
 	afterSecond, err := os.ReadFile(counterFile)
 	if err != nil {
