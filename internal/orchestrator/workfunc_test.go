@@ -331,6 +331,48 @@ func TestNewWorkFunc_FullPassPRTitleMatchesPushedCommitSubject(t *testing.T) {
 	}
 }
 
+func TestNewWorkFunc_RequiredLaneFullCommandFailureHaltsRun(t *testing.T) {
+	f := newWFFixture(t)
+	branch := "feature-lane-fail"
+	sha := f.pushFeature(t, branch, "add greeting file", "greeting.txt", "hello\n")
+	wt := f.worktree(t, sha)
+	defer func() { _ = wt.Remove() }()
+
+	ghBin := githubtest.Build(t)
+	cfg := config.Config{
+		Agent:    string(agent.KindCodex),
+		Commands: config.Commands{Test: "true", Lint: "true"},
+		CI:       config.CI{RerunBudget: 1},
+		Validation: config.Validation{
+			Lanes: map[string]config.Lane{
+				"docs": {
+					Paths:              []string{"**/*.txt"},
+					Full:               []string{"echo docs-lane-checked-out; exit 9"},
+					RequiredBeforePush: true,
+				},
+			},
+		},
+	}
+	rc := newRunContext(wt, cfg, ghBin, "")
+
+	rm := daemon.NewRunManager()
+	reviewDecisions := daemon.NewReviewDecisions()
+	runID := rm.NewRunID()
+
+	wf := NewWorkFunc(rm, reviewDecisions, nil, runID, f.defaultBranch, branch, Options{
+		ReviewOptions: cleanReviewOptions(t),
+	})
+	submitWorkFunc(t, rm, runID, "repo-lane-fail", branch, wf, rc)
+
+	snap := waitForRunEnded(t, rm, runID, 30*time.Second)
+	if snap.Status != daemon.RunFailed {
+		t.Fatalf("expected RunFailed when a required lane's Full command fails, got %v (message=%q)", snap.Status, snap.Message)
+	}
+	if f.branchOnRealRemote(t, branch) {
+		t.Fatalf("expected the failed lane to block Push, but %s was pushed to the real remote", branch)
+	}
+}
+
 func TestNewWorkFunc_FullPassPRBodyRendersPipelineSummary(t *testing.T) {
 	f := newWFFixture(t)
 	branch := "feature-pr-summary"

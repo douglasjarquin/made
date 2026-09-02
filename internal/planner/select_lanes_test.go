@@ -18,9 +18,9 @@ func laneNamed(t *testing.T, decisions []LaneDecision, name string) LaneDecision
 }
 
 func TestSelectLanes_NoLanesConfiguredFallsBackToDefault(t *testing.T) {
-	decisions, err := selectLanes(nil, []string{"main.go"})
+	decisions, err := SelectLanes(nil, []string{"main.go"})
 	if err != nil {
-		t.Fatalf("selectLanes: %v", err)
+		t.Fatalf("SelectLanes: %v", err)
 	}
 	if len(decisions) != 1 || decisions[0].Name != defaultLaneName || decisions[0].Action != "run" {
 		t.Fatalf("expected a single running default lane, got %+v", decisions)
@@ -32,9 +32,9 @@ func TestSelectLanes_PathSelectsMatchingLaneOnly(t *testing.T) {
 		"go":   {Paths: []string{"**/*.go"}, RequiredBeforePush: true},
 		"docs": {Paths: []string{"**/*.md"}, RequiredBeforePush: true},
 	}
-	decisions, err := selectLanes(lanes, []string{"main.go"})
+	decisions, err := SelectLanes(lanes, []string{"main.go"})
 	if err != nil {
-		t.Fatalf("selectLanes: %v", err)
+		t.Fatalf("SelectLanes: %v", err)
 	}
 	if got := laneNamed(t, decisions, "go"); got.Action != "run" {
 		t.Fatalf("expected go lane to run, got %+v", got)
@@ -49,9 +49,9 @@ func TestSelectLanes_PathCanSelectMultipleLanes(t *testing.T) {
 		"go":        {Paths: []string{"**/*.go"}, RequiredBeforePush: true},
 		"workflows": {Paths: []string{".github/workflows/**"}, RequiredBeforePush: true},
 	}
-	decisions, err := selectLanes(lanes, []string{"main.go", ".github/workflows/ci.yml"})
+	decisions, err := SelectLanes(lanes, []string{"main.go", ".github/workflows/ci.yml"})
 	if err != nil {
-		t.Fatalf("selectLanes: %v", err)
+		t.Fatalf("SelectLanes: %v", err)
 	}
 	if got := laneNamed(t, decisions, "go"); got.Action != "run" {
 		t.Fatalf("expected go lane to run, got %+v", got)
@@ -66,9 +66,9 @@ func TestSelectLanes_UnknownPathFailsOpenToAllRequiredLanes(t *testing.T) {
 		"go":   {Paths: []string{"**/*.go"}, RequiredBeforePush: true},
 		"docs": {Paths: []string{"**/*.md"}, RequiredBeforePush: true},
 	}
-	decisions, err := selectLanes(lanes, []string{"weird.unknownext"})
+	decisions, err := SelectLanes(lanes, []string{"weird.unknownext"})
 	if err != nil {
-		t.Fatalf("selectLanes: %v", err)
+		t.Fatalf("SelectLanes: %v", err)
 	}
 	for _, name := range []string{"go", "docs"} {
 		got := laneNamed(t, decisions, name)
@@ -82,9 +82,9 @@ func TestSelectLanes_UnknownPathDoesNotForceNonRequiredLane(t *testing.T) {
 	lanes := map[string]config.Lane{
 		"optional": {Paths: []string{"**/*.md"}, RequiredBeforePush: false},
 	}
-	decisions, err := selectLanes(lanes, []string{"weird.unknownext"})
+	decisions, err := SelectLanes(lanes, []string{"weird.unknownext"})
 	if err != nil {
-		t.Fatalf("selectLanes: %v", err)
+		t.Fatalf("SelectLanes: %v", err)
 	}
 	if got := laneNamed(t, decisions, "optional"); got.Action != "skip" {
 		t.Fatalf("expected a non-required lane to stay skipped despite an unclassified path, got %+v", got)
@@ -95,9 +95,9 @@ func TestSelectLanes_DependsOnPatternAlsoSelectsLane(t *testing.T) {
 	lanes := map[string]config.Lane{
 		"go": {Paths: []string{"**/*.go"}, DependsOn: []string{".github/workflows/ci.yml"}, RequiredBeforePush: true},
 	}
-	decisions, err := selectLanes(lanes, []string{".github/workflows/ci.yml"})
+	decisions, err := SelectLanes(lanes, []string{".github/workflows/ci.yml"})
 	if err != nil {
-		t.Fatalf("selectLanes: %v", err)
+		t.Fatalf("SelectLanes: %v", err)
 	}
 	if got := laneNamed(t, decisions, "go"); got.Action != "run" {
 		t.Fatalf("expected a depends_on match to select the lane, got %+v", got)
@@ -108,7 +108,7 @@ func TestSelectLanes_MalformedPatternPropagatesError(t *testing.T) {
 	lanes := map[string]config.Lane{
 		"broken": {Paths: []string{"[unterminated"}},
 	}
-	if _, err := selectLanes(lanes, []string{"anything"}); err == nil {
+	if _, err := SelectLanes(lanes, []string{"anything"}); err == nil {
 		t.Fatal("expected an error for a malformed lane pattern")
 	}
 }
@@ -118,9 +118,9 @@ func TestSelectLanes_IsDeterministicOrder(t *testing.T) {
 		"zzz": {Paths: []string{"**/*.zzz"}, RequiredBeforePush: true},
 		"aaa": {Paths: []string{"**/*.aaa"}, RequiredBeforePush: true},
 	}
-	first, err := selectLanes(lanes, []string{"file.aaa"})
+	first, err := SelectLanes(lanes, []string{"file.aaa"})
 	if err != nil {
-		t.Fatalf("selectLanes: %v", err)
+		t.Fatalf("SelectLanes: %v", err)
 	}
 	if first[0].Name != "aaa" || first[1].Name != "zzz" {
 		t.Fatalf("expected lane decisions sorted by name, got %+v", first)

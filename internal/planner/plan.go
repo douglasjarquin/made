@@ -50,6 +50,23 @@ type StageDecision struct {
 	Reason string `json:"reason"`
 }
 
+// ChangedPaths resolves baseRef and candidateRef in the repository at
+// repoPath and returns every path their diff touched (see
+// changedPathsBetween for rename/copy handling). It runs only read-only
+// git commands, so a caller outside this package (the orchestrator, to
+// select lanes mid-run) can reuse the exact same logic BuildPlan uses.
+func ChangedPaths(ctx context.Context, repoPath, baseRef, candidateRef string) ([]string, error) {
+	baseSHA, err := resolveGitRef(ctx, repoPath, baseRef)
+	if err != nil {
+		return nil, fmt.Errorf("planner: resolve base ref %q: %w", baseRef, err)
+	}
+	candidateSHA, err := resolveGitRef(ctx, repoPath, candidateRef)
+	if err != nil {
+		return nil, fmt.Errorf("planner: resolve candidate ref %q: %w", candidateRef, err)
+	}
+	return changedPathsBetween(ctx, repoPath, baseSHA, candidateSHA)
+}
+
 // BuildPlan computes a Plan for the diff between baseRef and candidateRef in
 // the repository at repoPath, using cfg as the already-resolved effective
 // configuration. It runs only read-only git commands.
@@ -70,7 +87,7 @@ func BuildPlan(ctx context.Context, repoPath, baseRef, candidateRef string, cfg 
 	if err != nil {
 		return Plan{}, fmt.Errorf("planner: hash effective config: %w", err)
 	}
-	lanes, err := selectLanes(cfg.Validation.Lanes, changedPaths)
+	lanes, err := SelectLanes(cfg.Validation.Lanes, changedPaths)
 	if err != nil {
 		return Plan{}, fmt.Errorf("planner: select validation lanes: %w", err)
 	}

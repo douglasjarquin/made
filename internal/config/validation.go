@@ -14,16 +14,29 @@ type Validation struct {
 	Lanes map[string]Lane `yaml:"lanes"`
 }
 
-// Lane groups the local validation relevant to a set of paths. Quick
-// commands give fast feedback during remediation; Full commands are the
-// proof required before Push when RequiredBeforePush is set. Neither list
-// runs anywhere yet - Phase 2's execution wiring is a separate change.
+// Lane groups the local validation relevant to a set of paths. Full
+// commands are the proof orchestrator's Test stage runs, in addition to
+// commands.test, when this lane is selected. Quick is reserved for a future
+// remediation checkpoint made's linear (non-iterative) pipeline does not
+// have yet - it is parsed and validated but nothing executes it.
 type Lane struct {
 	Paths              []string `yaml:"paths"`
 	DependsOn          []string `yaml:"depends_on"`
 	Quick              []string `yaml:"quick"`
 	Full               []string `yaml:"full"`
 	RequiredBeforePush bool     `yaml:"required_before_push"`
+}
+
+// FullShellCommands tokenizes each Full command the same way
+// Config.TestCommand/LintCommand do, skipping empty entries.
+func (l Lane) FullShellCommands() [][]string {
+	cmds := make([][]string, 0, len(l.Full))
+	for _, c := range l.Full {
+		if tok := shellCommand(c); tok != nil {
+			cmds = append(cmds, tok)
+		}
+	}
+	return cmds
 }
 
 func (v Validation) validate() error {
