@@ -210,13 +210,16 @@ func (c Config) hasConfiguredValue() bool {
 
 // ParseBytes parses a Config from an already-read byte slice.
 // This is used by managed-validation mode, which reads and hash-verifies the
-// config bytes exactly once before parsing, to avoid TOCTOU issues.
+// config bytes exactly once before parsing, to avoid TOCTOU issues. It skips
+// Validate's "required Review implies a configured agent" check because
+// managed mode can also satisfy required Review with an external result;
+// see Config.ValidateWithoutReviewAgentRequirement.
 func ParseBytes(data []byte) (Config, error) {
 	cfg, _, err := parseConfigBytes(data, "<managed-trusted-config>")
 	if err != nil {
 		return Config{}, err
 	}
-	if err := cfg.Validate(); err != nil {
+	if err := cfg.ValidateWithoutReviewAgentRequirement(); err != nil {
 		return Config{}, fmt.Errorf("config: validate: %w", err)
 	}
 	return cfg, nil
