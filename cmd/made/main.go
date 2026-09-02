@@ -39,6 +39,8 @@ func run(args []string, stdout, stderr *os.File) int {
 		return runGateCommand(args[1:], stdout, stderr)
 	case "receipts":
 		return runReceiptsCommand(args[1:], stdout, stderr)
+	case "config":
+		return runConfigCommand(args[1:], stdout, stderr)
 	default:
 		_, _ = fmt.Fprintf(stderr, "made: unknown command %q\n", args[0])
 		return 2
