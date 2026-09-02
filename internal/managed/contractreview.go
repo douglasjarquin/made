@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+
+	"github.com/douglasjarquin/made/internal/agent"
 )
 
 var reviewContractTaxonomy = []string{
@@ -36,23 +38,25 @@ var reviewContractAuthorityRules = []string{
 // executor produces the result. Its Hash binds an external result to this
 // exact contract, so a caller cannot silently narrow or reinterpret it.
 type ReviewContract struct {
-	SchemaVersion    int      `json:"schema_version"`
-	Taxonomy         []string `json:"taxonomy"`
-	FindingKinds     []string `json:"finding_kinds"`
-	BaseSHA          string   `json:"base_sha"`
-	InputSHA         string   `json:"input_sha"`
-	PolicyHash       string   `json:"policy_hash"`
-	DiffInstructions string   `json:"diff_instructions"`
-	NonmutationRules []string `json:"nonmutation_rules"`
-	AuthorityRules   []string `json:"authority_rules"`
-	GuidePaths       []string `json:"guide_paths,omitempty"`
+	SchemaVersion     int            `json:"schema_version"`
+	Taxonomy          []string       `json:"taxonomy"`
+	FindingKinds      []string       `json:"finding_kinds"`
+	BaseSHA           string         `json:"base_sha"`
+	InputSHA          string         `json:"input_sha"`
+	PolicyHash        string         `json:"policy_hash"`
+	DiffInstructions  string         `json:"diff_instructions"`
+	NonmutationRules  []string       `json:"nonmutation_rules"`
+	AuthorityRules    []string       `json:"authority_rules"`
+	Guides            []GuideBinding `json:"guides,omitempty"`
+	GuideInstructions string         `json:"guide_instructions,omitempty"`
 }
 
-// BuildReviewContract constructs the canonical contract for one run. Guide
-// paths/hashes (issue #40) are not implemented; GuidePaths is a clean,
-// always-empty extension point reserved for that later issue.
-func BuildReviewContract(baseSHA, inputSHA, policyHash string) ReviewContract {
-	return ReviewContract{
+// BuildReviewContract constructs the canonical contract for one run. guides
+// is the trusted base's resolved guide bindings (project issue #40, see
+// ResolveTrustedGuides); nil for a project that configures none, which
+// leaves the contract identical to its pre-guide shape.
+func BuildReviewContract(baseSHA, inputSHA, policyHash string, guides []GuideBinding) ReviewContract {
+	contract := ReviewContract{
 		SchemaVersion:    ReviewContractVersion,
 		Taxonomy:         append([]string(nil), reviewContractTaxonomy...),
 		FindingKinds:     append([]string(nil), reviewContractFindingKinds...),
@@ -63,6 +67,11 @@ func BuildReviewContract(baseSHA, inputSHA, policyHash string) ReviewContract {
 		NonmutationRules: append([]string(nil), reviewContractNonmutationRules...),
 		AuthorityRules:   append([]string(nil), reviewContractAuthorityRules...),
 	}
+	if len(guides) > 0 {
+		contract.Guides = append([]GuideBinding(nil), guides...)
+		contract.GuideInstructions = agent.ReviewGuideInstruction
+	}
+	return contract
 }
 
 // Hash returns the contract's stable sha256:<hex> identity. A caller
