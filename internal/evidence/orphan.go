@@ -22,18 +22,34 @@ func (s *OrphanBranchStore) PublishEvidence(runID string) error {
 }
 
 func (s *OrphanBranchStore) PublishEvidenceContext(ctx context.Context, runID string) error {
+	_, err := s.PublishEvidenceSHA(ctx, runID)
+	return err
+}
+
+// PublishEvidenceSHA resolves the evidence branch's current tip and pushes
+// exactly that commit to origin, returning its SHA. Resolving and pushing
+// the same literal SHA (rather than the symbolic branch ref) means the
+// value returned here always names a commit this call actually put on
+// origin - a caller building a permalink from it never risks naming a
+// commit a later, concurrent run advanced the local branch to but has not
+// pushed yet.
+func (s *OrphanBranchStore) PublishEvidenceSHA(ctx context.Context, runID string) (string, error) {
 	if err := validateEvidenceInput(runID, nil, s.RetentionBytes); err != nil {
-		return err
+		return "", err
 	}
 	branch := s.Branch
 	if branch == "" {
 		branch = DefaultBranch
 	}
 	ref := "refs/heads/" + branch
-	if _, err := s.runGit(ctx, nil, nil, "push", "origin", ref+":"+ref); err != nil {
-		return fmt.Errorf("evidence: publish branch %s: %w", branch, err)
+	sha, err := s.runGit(ctx, nil, nil, "rev-parse", "--verify", ref)
+	if err != nil {
+		return "", fmt.Errorf("evidence: resolve %s tip: %w", branch, err)
 	}
-	return nil
+	if _, err := s.runGit(ctx, nil, nil, "push", "origin", sha+":"+ref); err != nil {
+		return "", fmt.Errorf("evidence: publish branch %s: %w", branch, err)
+	}
+	return sha, nil
 }
 
 // Location names where a run's evidence commit lives on the orphan branch,

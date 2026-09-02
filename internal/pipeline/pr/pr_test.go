@@ -83,6 +83,33 @@ func TestRun_PRBodyCarriesPipelineAttestation(t *testing.T) {
 	}
 }
 
+func TestRun_PRBodyLinksEvidenceWhenURLKnown(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "invocations.log")
+	c := newClient(t, []string{"FAKE_GH_PR_URL=https://github.com/example/repo/pull/10"}, logPath)
+
+	_, err := pr.Run(context.Background(), c, pr.Options{
+		Title:       "made: automated change",
+		Base:        "main",
+		Head:        "made/run-654",
+		EvidenceRef: "made-evidence:run-654",
+		EvidenceURL: "https://github.com/example/repo/tree/abc123/run-654",
+		RunID:       "run-654",
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read invocation log: %v", err)
+	}
+	log := string(data)
+	want := "[made-evidence:run-654](https://github.com/example/repo/tree/abc123/run-654)"
+	if !strings.Contains(log, want) {
+		t.Fatalf("expected PR body to link evidence as %q, log:\n%s", want, log)
+	}
+}
+
 func TestRun_RejectsEmptyRunID(t *testing.T) {
 	c := newClient(t, nil, "")
 

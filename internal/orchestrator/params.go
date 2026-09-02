@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/douglasjarquin/made/internal/config"
@@ -50,6 +51,60 @@ func deriveEvidenceRef(store evidence.Store, runID string) string {
 	default:
 		return runID
 	}
+}
+
+// deriveEvidenceURL builds a clickable GitHub permalink to a run's published
+// evidence from the exact commit SHA that publishing already put on origin
+// (see evidence.OrphanBranchStore.PublishEvidenceSHA), or "" when there is no
+// such SHA or the origin remote is not GitHub.
+func deriveEvidenceURL(ctx context.Context, repoPath, sha, runID string) string {
+	if strings.TrimSpace(sha) == "" {
+		return ""
+	}
+	ghRepoPath := githubRepoPath(originRemoteURL(ctx, repoPath))
+	if ghRepoPath == "" {
+		return ""
+	}
+	return "https://github.com/" + ghRepoPath + "/tree/" + sha + "/" + url.PathEscape(runID)
+}
+
+func originRemoteURL(ctx context.Context, repoPath string) string {
+	res, err := execpkg.Run(ctx, execpkg.Command{
+		Name: "git",
+		Args: []string{"remote", "get-url", "origin"},
+		Dir:  repoPath,
+	})
+	if err != nil || res.ExitCode != 0 {
+		return ""
+	}
+	return strings.TrimSpace(string(res.Stdout))
+}
+
+func githubRepoPath(remote string) string {
+	remote = strings.TrimSpace(remote)
+	if remote == "" {
+		return ""
+	}
+	if strings.HasPrefix(remote, "git@github.com:") {
+		return cleanGitHubRepoPath(strings.TrimPrefix(remote, "git@github.com:"))
+	}
+	parsed, err := url.Parse(remote)
+	if err != nil || !strings.EqualFold(parsed.Host, "github.com") {
+		return ""
+	}
+	return cleanGitHubRepoPath(strings.TrimPrefix(parsed.Path, "/"))
+}
+
+func cleanGitHubRepoPath(repo string) string {
+	repo = strings.TrimSuffix(strings.TrimSpace(repo), ".git")
+	parts := strings.Split(repo, "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return ""
+	}
+	if strings.ContainsAny(repo, "\n\r <>[]()\\") || strings.Contains(repo, "..") {
+		return ""
+	}
+	return url.PathEscape(parts[0]) + "/" + url.PathEscape(parts[1])
 }
 
 func deriveDocumentRules(cfg config.Config) []document.Rule {

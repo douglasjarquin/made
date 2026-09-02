@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -111,5 +112,63 @@ func TestDeriveEvidenceRef_DistinguishesModes(t *testing.T) {
 
 	if orphan == inRepo {
 		t.Fatalf("expected distinguishable references for the two evidence modes, both were %q", orphan)
+	}
+}
+
+func TestGitHubRepoPath(t *testing.T) {
+	cases := map[string]string{
+		"https://github.com/douglasjarquin/made.git": "douglasjarquin/made",
+		"https://github.com/douglasjarquin/made":     "douglasjarquin/made",
+		"git@github.com:douglasjarquin/made.git":     "douglasjarquin/made",
+		"https://gitlab.com/douglasjarquin/made.git": "",
+		"":                     "",
+		"not a url at all\n<>": "",
+	}
+	for remote, want := range cases {
+		if got := githubRepoPath(remote); got != want {
+			t.Fatalf("githubRepoPath(%q) = %q, want %q", remote, got, want)
+		}
+	}
+}
+
+func TestDeriveEvidenceURL_GitHubRemoteWithKnownSHA(t *testing.T) {
+	dir := gitInitWithCommit(t, "seed")
+	runGit(t, dir, "remote", "add", "origin", "https://github.com/douglasjarquin/made.git")
+
+	got := deriveEvidenceURL(context.Background(), dir, "abc123", "run-abc")
+
+	want := "https://github.com/douglasjarquin/made/tree/abc123/run-abc"
+	if got != want {
+		t.Fatalf("deriveEvidenceURL = %q, want %q", got, want)
+	}
+}
+
+func TestDeriveEvidenceURL_EscapesRunID(t *testing.T) {
+	dir := gitInitWithCommit(t, "seed")
+	runGit(t, dir, "remote", "add", "origin", "https://github.com/douglasjarquin/made.git")
+
+	got := deriveEvidenceURL(context.Background(), dir, "abc123", "run with spaces")
+
+	want := "https://github.com/douglasjarquin/made/tree/abc123/run%20with%20spaces"
+	if got != want {
+		t.Fatalf("deriveEvidenceURL = %q, want %q", got, want)
+	}
+}
+
+func TestDeriveEvidenceURL_NonGitHubRemoteReturnsEmpty(t *testing.T) {
+	dir := gitInitWithCommit(t, "seed")
+	runGit(t, dir, "remote", "add", "origin", "https://gitlab.com/douglasjarquin/made.git")
+
+	if got := deriveEvidenceURL(context.Background(), dir, "abc123", "run-abc"); got != "" {
+		t.Fatalf("expected empty URL for non-GitHub remote, got %q", got)
+	}
+}
+
+func TestDeriveEvidenceURL_EmptySHAReturnsEmpty(t *testing.T) {
+	dir := gitInitWithCommit(t, "seed")
+	runGit(t, dir, "remote", "add", "origin", "https://github.com/douglasjarquin/made.git")
+
+	if got := deriveEvidenceURL(context.Background(), dir, "", "run-abc"); got != "" {
+		t.Fatalf("expected empty URL when no SHA was published, got %q", got)
 	}
 }
