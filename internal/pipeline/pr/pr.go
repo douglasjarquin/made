@@ -29,6 +29,7 @@ type Options struct {
 	Base        string
 	Head        string
 	EvidenceRef string
+	EvidenceURL string
 	RunID       string
 }
 
@@ -60,7 +61,7 @@ func Run(ctx context.Context, ghClient *github.Client, opts Options) (Result, er
 
 	url, err := ghClient.CreatePR(ctx, github.CreatePROptions{
 		Title: opts.Title,
-		Body:  body(opts.EvidenceRef, opts.RunID),
+		Body:  body(opts.EvidenceRef, opts.EvidenceURL, opts.RunID),
 		Base:  opts.Base,
 		Head:  opts.Head,
 	})
@@ -75,9 +76,13 @@ func Run(ctx context.Context, ghClient *github.Client, opts Options) (Result, er
 	}, nil
 }
 
-func body(evidenceRef, runID string) string {
+func body(evidenceRef, evidenceURL, runID string) string {
+	displayEvidence := evidenceRef
+	if strings.TrimSpace(evidenceURL) != "" {
+		displayEvidence = fmt.Sprintf("[%s](%s)", evidenceRef, evidenceURL)
+	}
 	return fmt.Sprintf(
 		"Evidence: %s\n\n## Pipeline\nProtocol-Version: %d\nRun-ID: %s\nEvidence: %s\n",
-		evidenceRef, api.Version, runID, evidenceRef,
+		displayEvidence, api.Version, runID, displayEvidence,
 	)
 }

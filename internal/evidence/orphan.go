@@ -36,6 +36,21 @@ func (s *OrphanBranchStore) PublishEvidenceContext(ctx context.Context, runID st
 	return nil
 }
 
+// CommitSHA resolves the current tip of the evidence branch, so a caller can
+// build a permalink that stays valid even after a later run advances the
+// branch to a new commit.
+func (s *OrphanBranchStore) CommitSHA(ctx context.Context) (string, error) {
+	branch := s.Branch
+	if branch == "" {
+		branch = DefaultBranch
+	}
+	sha, err := s.runGit(ctx, nil, nil, "rev-parse", "refs/heads/"+branch)
+	if err != nil {
+		return "", fmt.Errorf("evidence: resolve %s tip: %w", branch, err)
+	}
+	return sha, nil
+}
+
 // Location names where a run's evidence commit lives on the orphan branch,
 // in the same "refs/heads/<branch>:<path>" shorthand git itself uses (e.g.
 // `git show`), so callers get a reference they can act on directly rather

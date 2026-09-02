@@ -402,6 +402,7 @@ func (c *chain) prStage() (pr.Result, error) {
 		Base:        c.defaultBranch,
 		Head:        c.branch,
 		EvidenceRef: deriveEvidenceRef(c.rc.Evidence, c.runID),
+		EvidenceURL: deriveEvidenceURL(c.ctx, c.rc.Evidence, c.runID),
 		RunID:       c.runID,
 	})
 	if err != nil {
