@@ -41,6 +41,14 @@ type Receipt struct {
 type Store struct {
 	RepoPath string
 	Branch   string
+	// MaxAge, when non-zero, is a logical retention window: Get treats any
+	// receipt whose CompletedAt is older than MaxAge as not found, even
+	// though it remains durably stored. This never rewrites or deletes git
+	// history - true object-level garbage collection needs branch history
+	// rewriting, which conflicts with every other operation on this branch
+	// being fast-forward-only and non-destructive, and is deliberately not
+	// implemented here. Zero means no age-based expiry.
+	MaxAge time.Duration
 }
 
 func (s *Store) branch() string {
@@ -80,8 +88,7 @@ func (s *Store) Put(ctx context.Context, fingerprintHash string, r Receipt) (str
 // Get only reads local git refs; it never fetches from origin. Within a
 // single made gate, every worktree shares one bare repository's refs, so a
 // receipt Put by any run there is immediately visible without a fetch. A
-// separate, freshly cloned gate would not see it - an accepted limitation
-// of this schema-only foundation; nothing consumes Get yet.
+// separate, freshly cloned gate would not see it - an accepted limitation.
 func (s *Store) Get(ctx context.Context, fingerprintHash string) (Receipt, bool, string) {
 	ref := "refs/heads/" + s.branch() + ":" + receiptPath(fingerprintHash) + "/receipt.json"
 	res, err := execpkg.Run(ctx, execpkg.Command{Name: "git", Args: []string{"show", ref}, Dir: s.RepoPath})
@@ -95,9 +102,55 @@ func (s *Store) Get(ctx context.Context, fingerprintHash string) (Receipt, bool,
 	if r.SchemaVersion != ReceiptSchemaVersion {
 		return Receipt{}, false, fmt.Sprintf("unsupported receipt schema version %d", r.SchemaVersion)
 	}
+	if s.MaxAge > 0 {
+		if age := time.Since(r.CompletedAt); age > s.MaxAge {
+			return Receipt{}, false, fmt.Sprintf("receipt expired: completed %s ago, max age %s", age.Round(time.Second), s.MaxAge)
+		}
+	}
 	return r, true, "found"
 }
 
 func receiptPath(fingerprintHash string) string {
 	return "receipts/" + strings.ReplaceAll(fingerprintHash, ":", "-")
+}
+
+// List returns every receipt published on this branch - diagnostics only,
+// ignoring MaxAge entirely (a caller inspecting what's stored wants to see
+// expired entries too, not have them silently hidden). Like Get, List never
+// hard-errors on a state that just means "nothing to list": a nonexistent
+// branch or corrupt individual entries are skipped rather than failing the
+// whole call, since diagnostics must remain usable even when some receipts
+// are unreadable.
+func (s *Store) List(ctx context.Context) ([]Receipt, error) {
+	branch := s.branch()
+	res, err := execpkg.Run(ctx, execpkg.Command{
+		Name: "git",
+		Args: []string{"ls-tree", "-r", "--name-only", "refs/heads/" + branch},
+		Dir:  s.RepoPath,
+	})
+	if err != nil || res.ExitCode != 0 {
+		return nil, nil
+	}
+
+	var receipts []Receipt
+	for _, line := range strings.Split(string(res.Stdout), "\n") {
+		path := strings.TrimSpace(line)
+		if path == "" || !strings.HasSuffix(path, "/receipt.json") {
+			continue
+		}
+		show, err := execpkg.Run(ctx, execpkg.Command{
+			Name: "git",
+			Args: []string{"show", "refs/heads/" + branch + ":" + path},
+			Dir:  s.RepoPath,
+		})
+		if err != nil || show.ExitCode != 0 {
+			continue
+		}
+		var r Receipt
+		if err := json.Unmarshal(show.Stdout, &r); err != nil || r.SchemaVersion != ReceiptSchemaVersion {
+			continue
+		}
+		receipts = append(receipts, r)
+	}
+	return receipts, nil
 }

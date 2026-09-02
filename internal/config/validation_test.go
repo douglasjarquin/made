@@ -5,9 +5,51 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/douglasjarquin/made/internal/config"
 )
+
+func TestConfig_Validate_AcceptsWellFormedReceiptMaxAge(t *testing.T) {
+	cfg := config.Config{Validation: config.Validation{ReceiptMaxAge: "72h"}}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected a well-formed receipt_max_age to validate, got %v", err)
+	}
+}
+
+func TestConfig_Validate_RejectsMalformedReceiptMaxAge(t *testing.T) {
+	cfg := config.Config{Validation: config.Validation{ReceiptMaxAge: "not-a-duration"}}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected an error for a malformed receipt_max_age")
+	}
+}
+
+func TestConfig_Validate_RejectsNonPositiveReceiptMaxAge(t *testing.T) {
+	cfg := config.Config{Validation: config.Validation{ReceiptMaxAge: "-1h"}}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected an error for a non-positive receipt_max_age")
+	}
+}
+
+func TestValidation_EffectiveReceiptMaxAge_DefaultsWhenUnset(t *testing.T) {
+	got, err := (config.Validation{}).EffectiveReceiptMaxAge()
+	if err != nil {
+		t.Fatalf("EffectiveReceiptMaxAge: %v", err)
+	}
+	if got != config.DefaultReceiptMaxAge {
+		t.Fatalf("expected default %s, got %s", config.DefaultReceiptMaxAge, got)
+	}
+}
+
+func TestValidation_EffectiveReceiptMaxAge_HonorsOverride(t *testing.T) {
+	got, err := (config.Validation{ReceiptMaxAge: "1h"}).EffectiveReceiptMaxAge()
+	if err != nil {
+		t.Fatalf("EffectiveReceiptMaxAge: %v", err)
+	}
+	if got != time.Hour {
+		t.Fatalf("expected 1h, got %s", got)
+	}
+}
 
 func TestConfig_Validate_AcceptsWellFormedValidationLane(t *testing.T) {
 	cfg := config.Config{
