@@ -56,6 +56,63 @@ func TestReviewTask_EmbedsVersionedIdentityScopeAndTaxonomy(t *testing.T) {
 	}
 }
 
+func TestReviewTask_NoGuidesOmitsGuideFieldsAndInstructions(t *testing.T) {
+	input := agent.ReviewInput{
+		TrustedBaseBranch: "main",
+		TrustedBaseSHA:    strings.Repeat("a", 40),
+		CandidateInputSHA: strings.Repeat("b", 40),
+	}
+	task, err := agent.NewReviewTask(input)
+	if err != nil {
+		t.Fatalf("NewReviewTask: %v", err)
+	}
+	if len(task.Contract.Guides) != 0 {
+		t.Fatalf("expected no guides in contract, got %+v", task.Contract.Guides)
+	}
+	if task.Contract.GuideInstructions != "" {
+		t.Fatalf("expected no guide instructions, got %q", task.Contract.GuideInstructions)
+	}
+	if strings.Contains(task.Text, "guide") {
+		t.Fatalf("expected no guide mention in task text with no guides configured, got %q", task.Text)
+	}
+}
+
+func TestReviewTask_GuidesEmbedPathHashByteCountAndReadCommand(t *testing.T) {
+	baseSHA := strings.Repeat("a", 40)
+	input := agent.ReviewInput{
+		TrustedBaseBranch: "main",
+		TrustedBaseSHA:    baseSHA,
+		CandidateInputSHA: strings.Repeat("b", 40),
+		Guides: []agent.ReviewGuideRef{
+			{Path: ".made/features/README.md", ContentHash: "sha256:" + strings.Repeat("c", 64), Bytes: 42},
+		},
+	}
+	task, err := agent.NewReviewTask(input)
+	if err != nil {
+		t.Fatalf("NewReviewTask: %v", err)
+	}
+	if len(task.Contract.Guides) != 1 {
+		t.Fatalf("expected 1 guide in contract, got %+v", task.Contract.Guides)
+	}
+	g := task.Contract.Guides[0]
+	if g.Path != ".made/features/README.md" || g.ContentHash != input.Guides[0].ContentHash || g.Bytes != 42 {
+		t.Fatalf("guide contract fields = %+v, want path/hash/bytes to match input", g)
+	}
+	wantCommand := "git show " + baseSHA + ":.made/features/README.md"
+	if g.ReadCommand != wantCommand {
+		t.Fatalf("ReadCommand = %q, want %q", g.ReadCommand, wantCommand)
+	}
+	if task.Contract.GuideInstructions != agent.ReviewGuideInstruction {
+		t.Fatalf("GuideInstructions = %q, want %q", task.Contract.GuideInstructions, agent.ReviewGuideInstruction)
+	}
+	if !strings.Contains(task.Text, agent.ReviewGuideInstruction) {
+		t.Fatalf("task text missing guide instruction: %q", task.Text)
+	}
+	if !strings.Contains(task.Text, wantCommand) {
+		t.Fatalf("task text missing guide read command: %q", task.Text)
+	}
+}
+
 func TestReviewTask_RejectsMissingTrustedBaseIdentity(t *testing.T) {
 	_, err := agent.NewReviewTask(agent.ReviewInput{
 		TrustedBaseBranch: "main",
