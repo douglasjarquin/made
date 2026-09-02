@@ -23,6 +23,8 @@ func TestLaneFullCommandsForTest_NoLanesConfiguredReturnsNil(t *testing.T) {
 
 func TestLaneFullCommandsForTest_SelectedLaneProducesExtraCommand(t *testing.T) {
 	dir := gitInitWithCommit(t, "base")
+	runGit(t, dir, "config", "user.email", "orchestrator-test@example.com")
+	runGit(t, dir, "config", "user.name", "orchestrator-test")
 	runGit(t, dir, "checkout", "-q", "-b", "feature")
 	writeFile(t, dir, "main.go", "package main\n")
 	runGit(t, dir, "add", "-A")
@@ -51,6 +53,8 @@ func TestLaneFullCommandsForTest_SelectedLaneProducesExtraCommand(t *testing.T) 
 
 func TestLaneFullCommandsForTest_UnselectedLaneProducesNoCommand(t *testing.T) {
 	dir := gitInitWithCommit(t, "base")
+	runGit(t, dir, "config", "user.email", "orchestrator-test@example.com")
+	runGit(t, dir, "config", "user.name", "orchestrator-test")
 	runGit(t, dir, "checkout", "-q", "-b", "feature")
 	writeFile(t, dir, "README.md", "docs change\n")
 	runGit(t, dir, "add", "-A")
