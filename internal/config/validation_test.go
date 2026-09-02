@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -115,6 +116,98 @@ func TestConfig_Validate_RejectsEmptyLaneName(t *testing.T) {
 func TestConfig_Validate_NoLanesConfiguredIsValid(t *testing.T) {
 	if err := (config.Config{}).Validate(); err != nil {
 		t.Fatalf("expected no validation lanes to be valid (Phase 1 default-lane fallback), got %v", err)
+	}
+}
+
+func TestConfig_Validate_NoGuidesIsValid(t *testing.T) {
+	if err := (config.Config{Review: config.Review{Guides: nil}}).Validate(); err != nil {
+		t.Fatalf("expected no guides to be valid, got %v", err)
+	}
+}
+
+func TestConfig_Validate_EmptyGuidesListIsValid(t *testing.T) {
+	if err := (config.Config{Review: config.Review{Guides: []string{}}}).Validate(); err != nil {
+		t.Fatalf("expected an empty guides list to be valid, got %v", err)
+	}
+}
+
+func TestConfig_Validate_AcceptsMultipleValidGuides(t *testing.T) {
+	cfg := config.Config{Review: config.Review{Guides: []string{
+		".made/features/README.md",
+		"docs/architecture.md",
+		"docs/security-threat-model.md",
+	}}}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected multiple valid guides to validate, got %v", err)
+	}
+}
+
+func TestConfig_Validate_RejectsDuplicateNormalizedGuidePaths(t *testing.T) {
+	cfg := config.Config{Review: config.Review{Guides: []string{
+		"docs/architecture.md",
+		"docs/./architecture.md",
+	}}}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected an error for duplicate normalized guide paths")
+	}
+	if !strings.Contains(err.Error(), "duplicate") {
+		t.Fatalf("expected error to mention duplicate guide paths, got %v", err)
+	}
+}
+
+func TestConfig_Validate_RejectsAbsoluteGuidePath(t *testing.T) {
+	cfg := config.Config{Review: config.Review{Guides: []string{"/etc/passwd"}}}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected an error for an absolute guide path")
+	}
+	if !strings.Contains(err.Error(), "absolute") {
+		t.Fatalf("expected error to mention absolute path, got %v", err)
+	}
+}
+
+func TestConfig_Validate_RejectsParentTraversalGuidePath(t *testing.T) {
+	cfg := config.Config{Review: config.Review{Guides: []string{"../outside.md"}}}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected an error for a guide path that escapes the repository root")
+	}
+	if !strings.Contains(err.Error(), "escape") {
+		t.Fatalf("expected error to mention repository-root escape, got %v", err)
+	}
+}
+
+func TestConfig_Validate_RejectsEmptyGuidePath(t *testing.T) {
+	cfg := config.Config{Review: config.Review{Guides: []string{""}}}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected an error for an empty guide path")
+	}
+}
+
+func TestConfig_Validate_RejectsOversizedGuidePath(t *testing.T) {
+	cfg := config.Config{Review: config.Review{Guides: []string{strings.Repeat("a", 600) + ".md"}}}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected an error for an oversized guide path")
+	}
+	if !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("expected error to mention the size bound, got %v", err)
+	}
+}
+
+func TestConfig_Validate_RejectsTooManyGuides(t *testing.T) {
+	guides := make([]string, 21)
+	for i := range guides {
+		guides[i] = fmt.Sprintf("docs/guide-%d.md", i)
+	}
+	cfg := config.Config{Review: config.Review{Guides: guides}}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected an error for too many configured guides")
+	}
+	if !strings.Contains(err.Error(), "maximum") {
+		t.Fatalf("expected error to mention the maximum guide count, got %v", err)
 	}
 }
 

@@ -201,7 +201,7 @@ func readConfigBytes(path string, beforeRead func()) ([]byte, bool, error) {
 }
 
 func (c Config) hasConfiguredValue() bool {
-	return len(c.Document.Rules) > 0 || c.Review.Required || c.DisableProjectSettings || c.NoCI ||
+	return len(c.Document.Rules) > 0 || c.Review.Required || len(c.Review.Guides) > 0 || c.DisableProjectSettings || c.NoCI ||
 		c.CI.Required || c.CI.RerunBudget != 0 || c.CI.CheckScope != "" || len(c.Test.Evidence.Branch) > 0 || c.Test.Evidence.RetentionBytes != nil ||
 		c.Test.Evidence.StoreInRepo || len(c.Test.Evidence.Dir) > 0 || len(c.Commands.Test) > 0 ||
 		len(c.Commands.Lint) > 0 || len(c.Agent) > 0 || len(c.Agents) > 0 || c.AllowRepoCommands ||

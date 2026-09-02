@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"path"
+	"strings"
 	"time"
 
 	"github.com/douglasjarquin/made/internal/agent"
@@ -11,6 +13,12 @@ import (
 const (
 	defaultStageTimeout      = 30 * time.Minute
 	defaultEvidenceRetention = 4 << 20
+	// MaxReviewGuides and MaxReviewGuidePathBytes bound review.guides at
+	// config-validation time, before any file is ever read. They are
+	// deliberately small: guides are a short, curated index into product
+	// knowledge, not a bulk document store (project issue #40).
+	MaxReviewGuides         = 20
+	MaxReviewGuidePathBytes = 512
 )
 
 type Config struct {
@@ -81,7 +89,35 @@ type DocumentRule struct {
 }
 
 type Review struct {
-	Required bool `yaml:"required"`
+	Required bool     `yaml:"required"`
+	Guides   []string `yaml:"guides"`
+}
+
+func (r Review) validate() error {
+	if len(r.Guides) > MaxReviewGuides {
+		return fmt.Errorf("config: review.guides has %d entries, exceeding the maximum of %d", len(r.Guides), MaxReviewGuides)
+	}
+	seen := make(map[string]struct{}, len(r.Guides))
+	for i, raw := range r.Guides {
+		if raw == "" {
+			return fmt.Errorf("config: review.guides[%d] must not be empty", i)
+		}
+		if len(raw) > MaxReviewGuidePathBytes {
+			return fmt.Errorf("config: review.guides[%d] %q exceeds %d bytes", i, raw, MaxReviewGuidePathBytes)
+		}
+		if path.IsAbs(raw) {
+			return fmt.Errorf("config: review.guides[%d] %q must be a repository-relative path, not absolute", i, raw)
+		}
+		cleaned := path.Clean(raw)
+		if cleaned == ".." || strings.HasPrefix(cleaned, "../") || path.IsAbs(cleaned) {
+			return fmt.Errorf("config: review.guides[%d] %q must not escape the repository root", i, raw)
+		}
+		if _, dup := seen[cleaned]; dup {
+			return fmt.Errorf("config: review.guides[%d] %q duplicates an earlier configured guide (normalized: %q)", i, raw, cleaned)
+		}
+		seen[cleaned] = struct{}{}
+	}
+	return nil
 }
 
 type CI struct {
@@ -165,6 +201,9 @@ func (c Config) validateCommon() error {
 		}
 	}
 	if err := c.Validation.validate(); err != nil {
+		return err
+	}
+	if err := c.Review.validate(); err != nil {
 		return err
 	}
 	return nil
