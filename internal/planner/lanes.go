@@ -17,14 +17,14 @@ type LaneDecision struct {
 	RequiredBeforePush bool     `json:"required_before_push"`
 }
 
-// selectLanes decides, for each configured lane, whether the changed paths
+// SelectLanes decides, for each configured lane, whether the changed paths
 // select it. With no lanes configured it falls back to Phase 1's single
 // catch-all "default" lane, preserving today's full-pipeline behavior.
 //
 // A path matching no configured lane fails open: every RequiredBeforePush
 // lane is forced to "run" regardless of its own path match, since an
 // unclassified change cannot be proven safe to skip.
-func selectLanes(lanes map[string]config.Lane, changedPaths []string) ([]LaneDecision, error) {
+func SelectLanes(lanes map[string]config.Lane, changedPaths []string) ([]LaneDecision, error) {
 	if len(lanes) == 0 {
 		return []LaneDecision{defaultLaneDecision(changedPaths)}, nil
 	}

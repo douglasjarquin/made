@@ -312,7 +312,11 @@ func (c *chain) reviewStage() error {
 
 func (c *chain) testStage() error {
 	c.start(stageNameTest)
-	result, err := test.Run(c.ctx, c.rc.Worktree.Path, c.runID, c.rc.Config.TestCommand(), c.rc.Evidence)
+	extraCommands, err := c.laneFullCommandsForTest()
+	if err != nil {
+		return err
+	}
+	result, err := test.Run(c.ctx, c.rc.Worktree.Path, c.runID, c.rc.Config.TestCommand(), extraCommands, c.rc.Evidence)
 	if err != nil {
 		return err
 	}
