@@ -81,7 +81,11 @@ func (c *chain) laneFullCommandsForTest() (laneTestPlan, error) {
 		return laneTestPlan{}, fmt.Errorf("orchestrator: hash effective config for validation lanes: %w", err)
 	}
 	repoIdentity := originRemoteURL(c.ctx, c.rc.Worktree.Path)
-	receiptStore := &receipt.Store{RepoPath: c.rc.Worktree.Path}
+	maxAge, err := c.rc.Config.Validation.EffectiveReceiptMaxAge()
+	if err != nil {
+		return laneTestPlan{}, fmt.Errorf("orchestrator: resolve receipt retention window: %w", err)
+	}
+	receiptStore := &receipt.Store{RepoPath: c.rc.Worktree.Path, MaxAge: maxAge}
 	repoNoReuse := c.rc.Config.Validation.NoReuse
 
 	var plan laneTestPlan

@@ -7,9 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/douglasjarquin/made/internal/config"
 	"github.com/douglasjarquin/made/internal/gitgate"
+	"github.com/douglasjarquin/made/internal/receipt"
 )
 
 func addOrigin(t *testing.T, dir string) {
@@ -234,6 +236,53 @@ func TestLaneFullCommandsForTest_NoReuseIgnoresPublishedReceipt(t *testing.T) {
 	}
 	if len(second.Reused) != 0 {
 		t.Fatalf("expected nothing marked reused under NoReuse, got %+v", second.Reused)
+	}
+}
+
+func TestLaneFullCommandsForTest_ExpiredReceiptIsNotReused(t *testing.T) {
+	dir, _, c := setupLaneReuseFixture(t)
+
+	first, err := c.laneFullCommandsForTest()
+	if err != nil {
+		t.Fatalf("laneFullCommandsForTest (first): %v", err)
+	}
+	if len(first.fingerprints) != 1 {
+		t.Fatalf("expected 1 fingerprint, got %+v", first.fingerprints)
+	}
+	fp := first.fingerprints[0].Fingerprint
+
+	store := &receipt.Store{RepoPath: dir}
+	stale := receipt.Receipt{
+		SchemaVersion: receipt.ReceiptSchemaVersion,
+		Fingerprint:   fp,
+		SourceRunID:   "run-old",
+		StartedAt:     time.Now().Add(-48 * time.Hour).UTC(),
+		CompletedAt:   time.Now().Add(-48 * time.Hour).UTC(),
+		MadeVersion:   "dev",
+	}
+	if _, err := store.Put(context.Background(), fp.Hash(), stale); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	cfgShortRetention := config.Config{
+		Validation: config.Validation{
+			ReceiptMaxAge: "1h",
+			Lanes: map[string]config.Lane{
+				"go": {Paths: []string{"**/*.go"}, Full: []string{"echo go-full"}, RequiredBeforePush: true},
+			},
+		},
+	}
+	c2 := &chain{ctx: context.Background(), defaultBranch: "main", runID: "run-fresh", rc: &RunContext{Config: cfgShortRetention, Worktree: &gitgate.Worktree{Path: dir}}}
+
+	second, err := c2.laneFullCommandsForTest()
+	if err != nil {
+		t.Fatalf("laneFullCommandsForTest (second): %v", err)
+	}
+	if len(second.Extras) != 1 {
+		t.Fatalf("expected the expired receipt to be ignored and the command to re-execute, got %+v", second)
+	}
+	if len(second.Reused) != 0 {
+		t.Fatalf("expected nothing marked reused for an expired receipt, got %+v", second.Reused)
 	}
 }
 

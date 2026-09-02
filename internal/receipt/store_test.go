@@ -99,6 +99,102 @@ func TestStore_GetFailsOpenOnEmptyRepo(t *testing.T) {
 	}
 }
 
+func TestStore_MaxAge_ExpiredReceiptTreatedAsNotFound(t *testing.T) {
+	dir := initRepoWithOrigin(t)
+	store := &receipt.Store{RepoPath: dir, MaxAge: 24 * time.Hour}
+	stale := testReceipt()
+	stale.CompletedAt = time.Now().Add(-48 * time.Hour).UTC()
+
+	if _, err := store.Put(context.Background(), stale.Fingerprint.Hash(), stale); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	_, ok, reason := store.Get(context.Background(), stale.Fingerprint.Hash())
+	if ok {
+		t.Fatal("expected an expired receipt to be treated as not found")
+	}
+	if reason == "" {
+		t.Fatal("expected a non-empty reason")
+	}
+}
+
+func TestStore_MaxAge_FreshReceiptStillFound(t *testing.T) {
+	dir := initRepoWithOrigin(t)
+	store := &receipt.Store{RepoPath: dir, MaxAge: 24 * time.Hour}
+	fresh := testReceipt()
+	fresh.CompletedAt = time.Now().Add(-1 * time.Hour).UTC()
+
+	if _, err := store.Put(context.Background(), fresh.Fingerprint.Hash(), fresh); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	_, ok, reason := store.Get(context.Background(), fresh.Fingerprint.Hash())
+	if !ok {
+		t.Fatalf("expected a fresh receipt to still be found, reason: %s", reason)
+	}
+}
+
+func TestStore_MaxAge_ZeroMeansNoExpiry(t *testing.T) {
+	dir := initRepoWithOrigin(t)
+	store := &receipt.Store{RepoPath: dir}
+	ancient := testReceipt()
+	ancient.CompletedAt = time.Unix(0, 0).UTC()
+
+	if _, err := store.Put(context.Background(), ancient.Fingerprint.Hash(), ancient); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	_, ok, reason := store.Get(context.Background(), ancient.Fingerprint.Hash())
+	if !ok {
+		t.Fatalf("expected zero MaxAge to mean no expiry, reason: %s", reason)
+	}
+}
+
+func TestStore_List_ReturnsAllPublishedReceipts(t *testing.T) {
+	dir := initRepoWithOrigin(t)
+	store := &receipt.Store{RepoPath: dir}
+	a := testReceipt()
+	b := testReceipt()
+	b.Fingerprint.Lane = "docs"
+	b.SourceRunID = "run-xyz"
+
+	if _, err := store.Put(context.Background(), a.Fingerprint.Hash(), a); err != nil {
+		t.Fatalf("Put a: %v", err)
+	}
+	if _, err := store.Put(context.Background(), b.Fingerprint.Hash(), b); err != nil {
+		t.Fatalf("Put b: %v", err)
+	}
+
+	got, err := store.List(context.Background())
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 receipts, got %+v", got)
+	}
+	sourceRunIDs := map[string]bool{}
+	for _, r := range got {
+		sourceRunIDs[r.SourceRunID] = true
+	}
+	if !sourceRunIDs["run-abc"] || !sourceRunIDs["run-xyz"] {
+		t.Fatalf("expected both receipts by source run ID, got %+v", got)
+	}
+}
+
+func TestStore_List_EmptyBranchReturnsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	runGitForReceiptTest(t, dir, "init", "-q", "-b", "main")
+	store := &receipt.Store{RepoPath: dir}
+
+	got, err := store.List(context.Background())
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected no receipts on an empty repo, got %+v", got)
+	}
+}
+
 func TestStore_DistinguishesFingerprints(t *testing.T) {
 	dir := initRepoWithOrigin(t)
 	store := &receipt.Store{RepoPath: dir}

@@ -4,7 +4,15 @@ import (
 	"fmt"
 	"path"
 	"strings"
+	"time"
 )
+
+// DefaultReceiptMaxAge is the retention window applied when
+// Validation.ReceiptMaxAge is unset: a receipt older than this is treated
+// as not found, never reused, regardless of the fingerprint otherwise
+// matching. It exists to bound how far into the past a stale toolchain or
+// dependency state can silently stand in for a fresh run.
+const DefaultReceiptMaxAge = 7 * 24 * time.Hour
 
 // Validation carries additive, opt-in path-aware validation lanes (see
 // project issue #33 Phase 2). A repository with no lanes configured keeps
@@ -18,6 +26,20 @@ type Validation struct {
 	// (Phase 2) are unaffected - this only controls whether a successful
 	// prior result can stand in for running the commands again.
 	NoReuse bool `yaml:"no_reuse"`
+	// ReceiptMaxAge overrides DefaultReceiptMaxAge, as a Go duration string
+	// (e.g. "72h"). A receipt older than this is never reused, regardless
+	// of the fingerprint otherwise matching exactly.
+	ReceiptMaxAge string `yaml:"receipt_max_age"`
+}
+
+// EffectiveReceiptMaxAge parses ReceiptMaxAge, or returns
+// DefaultReceiptMaxAge when it is unset. Callers can assume this always
+// succeeds after Validate has accepted the config.
+func (v Validation) EffectiveReceiptMaxAge() (time.Duration, error) {
+	if v.ReceiptMaxAge == "" {
+		return DefaultReceiptMaxAge, nil
+	}
+	return time.ParseDuration(v.ReceiptMaxAge)
 }
 
 // Lane groups the local validation relevant to a set of paths. Full
@@ -50,6 +72,13 @@ func (l Lane) FullShellCommands() [][]string {
 }
 
 func (v Validation) validate() error {
+	if v.ReceiptMaxAge != "" {
+		if d, err := time.ParseDuration(v.ReceiptMaxAge); err != nil {
+			return fmt.Errorf("config: validation.receipt_max_age: %w", err)
+		} else if d <= 0 {
+			return fmt.Errorf("config: validation.receipt_max_age must be positive, got %q", v.ReceiptMaxAge)
+		}
+	}
 	for name, lane := range v.Lanes {
 		if name == "" {
 			return fmt.Errorf("config: validation.lanes has an empty lane name")
