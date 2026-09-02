@@ -261,4 +261,3 @@ func TestExternalReview_ActualModelEqualToRequestedAccepted(t *testing.T) {
 		t.Fatalf("expected actual_model equal to requested_model to be accepted, got: %v", err)
 	}
 }
-

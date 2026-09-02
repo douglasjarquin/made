@@ -36,16 +36,16 @@ var reviewContractAuthorityRules = []string{
 // executor produces the result. Its Hash binds an external result to this
 // exact contract, so a caller cannot silently narrow or reinterpret it.
 type ReviewContract struct {
-	SchemaVersion     int      `json:"schema_version"`
-	Taxonomy          []string `json:"taxonomy"`
-	FindingKinds      []string `json:"finding_kinds"`
-	BaseSHA           string   `json:"base_sha"`
-	InputSHA          string   `json:"input_sha"`
-	PolicyHash        string   `json:"policy_hash"`
-	DiffInstructions  string   `json:"diff_instructions"`
-	NonmutationRules  []string `json:"nonmutation_rules"`
-	AuthorityRules    []string `json:"authority_rules"`
-	GuidePaths        []string `json:"guide_paths,omitempty"`
+	SchemaVersion    int      `json:"schema_version"`
+	Taxonomy         []string `json:"taxonomy"`
+	FindingKinds     []string `json:"finding_kinds"`
+	BaseSHA          string   `json:"base_sha"`
+	InputSHA         string   `json:"input_sha"`
+	PolicyHash       string   `json:"policy_hash"`
+	DiffInstructions string   `json:"diff_instructions"`
+	NonmutationRules []string `json:"nonmutation_rules"`
+	AuthorityRules   []string `json:"authority_rules"`
+	GuidePaths       []string `json:"guide_paths,omitempty"`
 }
 
 // BuildReviewContract constructs the canonical contract for one run. Guide

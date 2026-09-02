@@ -114,22 +114,6 @@ func changedFilesWithSHAs(ctx context.Context, worktreePath, baseSHA, inputSHA s
 	return files, nil
 }
 
-func changedFilesWithRange(ctx context.Context, worktreePath, gitRange string) ([]string, error) {
-	cmd := exec.CommandContext(ctx, "git", "-C", worktreePath, "diff", "--name-only", gitRange)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("git diff --name-only %s: %w: %s", gitRange, err, strings.TrimSpace(string(out)))
-	}
-
-	var files []string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if line != "" {
-			files = append(files, line)
-		}
-	}
-	return files, nil
-}
-
 func changedFiles(ctx context.Context, worktreePath, baseBranch string) ([]string, error) {
 	cmd := exec.CommandContext(ctx, "git", "-C", worktreePath, "diff", "--name-only", baseBranch+"...HEAD")
 	out, err := cmd.CombinedOutput()

@@ -21,12 +21,12 @@ const (
 // one Review result. It carries the exact identity a result must be bound
 // to, independent of how the result is produced.
 type ReviewRequest struct {
-	Workspace   string
-	BaseSHA     string
-	InputSHA    string
-	PolicyHash  string
+	Workspace    string
+	BaseSHA      string
+	InputSHA     string
+	PolicyHash   string
 	ContractHash string
-	Timeout     time.Duration
+	Timeout      time.Duration
 
 	// Internal-only.
 	AgentKind       agent.Kind

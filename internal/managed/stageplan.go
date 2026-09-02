@@ -28,11 +28,11 @@ const (
 // stages ran and which were absent or disabled - even when a run stops
 // early at the first blocking stage.
 type StagePlanEntry struct {
-	Stage         string
-	State         StagePlanState
-	Reason        string
-	TestExtras    []test.ExtraCommand // stageTest only
-	ReviewSource  string              // stageReview only: resolved "internal" or "external"
+	Stage        string
+	State        StagePlanState
+	Reason       string
+	TestExtras   []test.ExtraCommand // stageTest only
+	ReviewSource string              // stageReview only: resolved "internal" or "external"
 }
 
 // StagePlan is the full, policy-derived plan for one managed-validation run.
