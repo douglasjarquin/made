@@ -28,13 +28,22 @@ type laneCommandFingerprint struct {
 	Fingerprint receipt.Fingerprint
 }
 
+// reusedLaneCommand records enough about a receipt hit to satisfy issue
+// #33's "reused evidence clearly identifies the source run and fingerprint"
+// requirement wherever it is surfaced (the PR pipeline summary).
+type reusedLaneCommand struct {
+	Name            string
+	FingerprintHash string
+	SourceRunID     string
+}
+
 // laneTestPlan is laneFullCommandsForTest's result: Extras are the lane Full
-// commands the Test stage must actually run; Reused names lanes a valid
+// commands the Test stage must actually run; Reused describes lanes a valid
 // receipt already covers, for visibility only - nothing downstream treats
 // Reused as having "passed" beyond simply not needing to run again.
 type laneTestPlan struct {
 	Extras       []test.ExtraCommand
-	Reused       []string
+	Reused       []reusedLaneCommand
 	fingerprints []laneCommandFingerprint
 }
 
@@ -100,8 +109,12 @@ func (c *chain) laneFullCommandsForTest() (laneTestPlan, error) {
 				command:      cmd,
 			})
 			if !noReuse {
-				if _, found, _ := receiptStore.Get(c.ctx, fp.Hash()); found {
-					plan.Reused = append(plan.Reused, name)
+				if existing, found, _ := receiptStore.Get(c.ctx, fp.Hash()); found {
+					plan.Reused = append(plan.Reused, reusedLaneCommand{
+						Name:            name,
+						FingerprintHash: fp.Hash(),
+						SourceRunID:     existing.SourceRunID,
+					})
 					continue
 				}
 			}

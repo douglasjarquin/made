@@ -202,8 +202,14 @@ func TestLaneFullCommandsForTest_ReusesAfterAPublishedReceipt(t *testing.T) {
 	if len(second.Extras) != 0 {
 		t.Fatalf("expected no extra commands once a receipt was published, got %+v", second)
 	}
-	if len(second.Reused) != 1 || second.Reused[0] != "go" {
+	if len(second.Reused) != 1 || second.Reused[0].Name != "go" {
 		t.Fatalf("expected the go lane to be reported reused, got %+v", second)
+	}
+	if second.Reused[0].SourceRunID != "run-reuse-fixture" {
+		t.Fatalf("expected reused entry to identify the source run, got %+v", second.Reused[0])
+	}
+	if second.Reused[0].FingerprintHash == "" {
+		t.Fatalf("expected reused entry to carry a fingerprint hash, got %+v", second.Reused[0])
 	}
 }
 

@@ -22,11 +22,14 @@ var pipelineSummaryStageDisplayName = map[string]string{
 }
 
 // renderPipelineSummary renders the human-readable body of the PR's "##
-// Pipeline" section: a made-branded status table plus, when the review
-// stage auto-fixed anything, a collapsible list of what it fixed. It
-// renders only the finished stages it is given - by construction that
-// excludes PR and CI, since neither has run yet when this is called.
-func renderPipelineSummary(stages []daemon.StageResult, messages map[string]string, reviewFixDescriptions []string) string {
+// Pipeline" section: a made-branded status table, a collapsible list of
+// what Review auto-fixed (if anything), and a collapsible list of which
+// validation lanes were satisfied by an existing receipt instead of
+// actually running (if any) - each reused entry names its source run and
+// fingerprint, per issue #33's reuse-visibility requirement. It renders
+// only the finished stages it is given - by construction that excludes PR
+// and CI, since neither has run yet when this is called.
+func renderPipelineSummary(stages []daemon.StageResult, messages map[string]string, reviewFixDescriptions []string, reused []reusedLaneCommand) string {
 	if len(stages) == 0 {
 		return ""
 	}
@@ -53,6 +56,14 @@ func renderPipelineSummary(stages []daemon.StageResult, messages map[string]stri
 		b.WriteString("\n<details>\n<summary><strong>Review fixes</strong></summary>\n\n")
 		for i, fix := range reviewFixDescriptions {
 			fmt.Fprintf(&b, "%d. %s\n", i+1, fix)
+		}
+		b.WriteString("\n</details>\n")
+	}
+
+	if len(reused) > 0 {
+		b.WriteString("\n<details>\n<summary><strong>Reused validation</strong></summary>\n\n")
+		for _, r := range reused {
+			fmt.Fprintf(&b, "- %s: reused from run `%s` (fingerprint `%s`)\n", r.Name, r.SourceRunID, r.FingerprintHash)
 		}
 		b.WriteString("\n</details>\n")
 	}
