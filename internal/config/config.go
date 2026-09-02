@@ -26,6 +26,7 @@ type Config struct {
 	Agents                 []string         `yaml:"agents"`
 	AllowRepoCommands      bool             `yaml:"allow_repo_commands"`
 	Stages                 map[string]Stage `yaml:"stages"`
+	Validation             Validation       `yaml:"validation"`
 }
 
 type Stage struct {
@@ -142,6 +143,9 @@ func (c Config) Validate() error {
 		if configured != string(agent.KindCodex) {
 			return fmt.Errorf("config: unsupported agent %q at agents[%d]; supported agents: %q", configured, index, agent.KindCodex)
 		}
+	}
+	if err := c.Validation.validate(); err != nil {
+		return err
 	}
 	return nil
 }

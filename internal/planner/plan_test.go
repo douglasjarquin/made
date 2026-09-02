@@ -187,6 +187,51 @@ func TestBuildPlan_DoesNotMutateRepositoryState(t *testing.T) {
 	}
 }
 
+func TestBuildPlan_ConfiguredLanesSelectByPath(t *testing.T) {
+	dir := initRepoWithBase(t)
+	runGit(t, dir, "checkout", "-q", "-b", "feature")
+	writeFile(t, dir, "main.go", "package main\n")
+	runGit(t, dir, "add", "-A")
+	runGit(t, dir, "commit", "-q", "-m", "add main.go")
+
+	cfg := config.Config{
+		Validation: config.Validation{
+			Lanes: map[string]config.Lane{
+				"go":   {Paths: []string{"**/*.go"}, RequiredBeforePush: true},
+				"docs": {Paths: []string{"**/*.md"}, RequiredBeforePush: true},
+			},
+		},
+	}
+
+	plan, err := planner.BuildPlan(context.Background(), dir, "main", "HEAD", cfg)
+	if err != nil {
+		t.Fatalf("BuildPlan: %v", err)
+	}
+
+	if len(plan.Lanes) != 2 {
+		t.Fatalf("expected 2 lane decisions, got %+v", plan.Lanes)
+	}
+	var goLane, docsLane *planner.LaneDecision
+	for i := range plan.Lanes {
+		switch plan.Lanes[i].Name {
+		case "go":
+			goLane = &plan.Lanes[i]
+		case "docs":
+			docsLane = &plan.Lanes[i]
+		}
+	}
+	if goLane == nil || goLane.Action != "run" {
+		t.Fatalf("expected go lane to run, got %+v", goLane)
+	}
+	if docsLane == nil || docsLane.Action != "skip" {
+		t.Fatalf("expected docs lane to skip, got %+v", docsLane)
+	}
+	test := stageDecision(t, plan, "test")
+	if test.Action != "run" {
+		t.Fatalf("expected test stage to run because the go lane matched, got %+v", test)
+	}
+}
+
 func stageDecision(t *testing.T, plan planner.Plan, name string) planner.StageDecision {
 	t.Helper()
 	for _, s := range plan.Stages {

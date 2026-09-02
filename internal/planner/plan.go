@@ -25,8 +25,9 @@ import (
 )
 
 // PlanVersion is bumped whenever the Plan or StageDecision shape changes in
-// a way a consumer of `made plan --json` should notice.
-const PlanVersion = 1
+// a way a consumer of `made plan --json` should notice. v2 added the Lanes
+// field (project issue #33 Phase 2); existing fields are unchanged.
+const PlanVersion = 2
 
 const defaultLaneName = "default"
 
@@ -39,6 +40,7 @@ type Plan struct {
 	ConfigHash   string          `json:"config_hash"`
 	ChangedPaths []string        `json:"changed_paths"`
 	Stages       []StageDecision `json:"stages"`
+	Lanes        []LaneDecision  `json:"lanes"`
 }
 
 type StageDecision struct {
@@ -68,6 +70,10 @@ func BuildPlan(ctx context.Context, repoPath, baseRef, candidateRef string, cfg 
 	if err != nil {
 		return Plan{}, fmt.Errorf("planner: hash effective config: %w", err)
 	}
+	lanes, err := selectLanes(cfg.Validation.Lanes, changedPaths)
+	if err != nil {
+		return Plan{}, fmt.Errorf("planner: select validation lanes: %w", err)
+	}
 
 	return Plan{
 		PlanVersion:  PlanVersion,
@@ -77,23 +83,36 @@ func BuildPlan(ctx context.Context, repoPath, baseRef, candidateRef string, cfg 
 		CandidateSHA: candidateSHA,
 		ConfigHash:   configHash,
 		ChangedPaths: changedPaths,
-		Stages:       buildStageDecisions(changedPaths),
+		Stages:       buildStageDecisions(lanes),
+		Lanes:        lanes,
 	}, nil
 }
 
-func buildStageDecisions(changedPaths []string) []StageDecision {
-	defaultLaneAction, defaultLaneReason := "run", fmt.Sprintf("%d path(s) matched lane %q", len(changedPaths), defaultLaneName)
-	if len(changedPaths) == 0 {
-		defaultLaneAction, defaultLaneReason = "skip", "no changed paths"
+// buildStageDecisions derives the fixed pipeline stages' run/skip status
+// from the lane decisions: Test and Lint run whenever any lane does, since
+// today's single Test/Lint commands still cover every lane's local
+// validation (Phase 2's execution wiring, which would let each lane run
+// its own quick/full commands independently, is a separate change).
+func buildStageDecisions(lanes []LaneDecision) []StageDecision {
+	action, reason := "skip", "no lane selected"
+	var running []string
+	for _, l := range lanes {
+		if l.Action == "run" {
+			running = append(running, l.Name)
+		}
+	}
+	if len(running) > 0 {
+		action = "run"
+		reason = fmt.Sprintf("lane(s) selected: %s", strings.Join(running, ", "))
 	}
 
 	return []StageDecision{
 		{Name: "intent", Action: "run", Reason: "built-in precondition"},
 		{Name: "rebase", Action: "run", Reason: "branch operation is never reused"},
 		{Name: "review", Action: "run", Reason: "AI review is not reusable"},
-		{Name: "test", Lane: defaultLaneName, Action: defaultLaneAction, Reason: defaultLaneReason},
+		{Name: "test", Action: action, Reason: reason},
 		{Name: "document", Action: "run", Reason: "built-in precondition"},
-		{Name: "lint", Lane: defaultLaneName, Action: defaultLaneAction, Reason: defaultLaneReason},
+		{Name: "lint", Action: action, Reason: reason},
 		{Name: "push", Action: "run", Reason: "external side effect"},
 		{Name: "pr", Action: "run", Reason: "external side effect"},
 		{Name: "ci", Action: "run", Reason: "remote evidence"},

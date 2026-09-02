@@ -93,6 +93,14 @@ func printHumanPlan(stdout *os.File, plan planner.Plan) {
 	for _, s := range plan.Stages {
 		_, _ = fmt.Fprintf(stdout, "  %-15s %-6s %s\n", stageDisplayName(s.Name), s.Action, s.Reason)
 	}
+
+	if len(plan.Lanes) == 0 {
+		return
+	}
+	_, _ = fmt.Fprintln(stdout, "\nValidation lanes:")
+	for _, l := range plan.Lanes {
+		_, _ = fmt.Fprintf(stdout, "  %-15s %-6s %s\n", l.Name, l.Action, l.Reason)
+	}
 }
 
 func stageDisplayName(name string) string {
