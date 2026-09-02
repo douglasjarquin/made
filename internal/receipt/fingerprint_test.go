@@ -27,8 +27,9 @@ func baseFingerprint() receipt.Fingerprint {
 }
 
 func TestFingerprint_HashIsDeterministic(t *testing.T) {
-	f := baseFingerprint()
-	if f.Hash() != f.Hash() {
+	a := baseFingerprint()
+	b := baseFingerprint()
+	if a.Hash() != b.Hash() {
 		t.Fatal("expected Hash() to be deterministic for identical fields")
 	}
 }
