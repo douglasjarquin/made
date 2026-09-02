@@ -31,9 +31,23 @@ func LoadEffectiveConfig(trustedPath, pushedPath string) (Config, error) {
 		return Config{}, fmt.Errorf("config: trusted copy at %q could not be read: %w", trustedPath, err)
 	}
 
-	pushed, _, err := loadConfigFile(pushedPath)
+	pushed, pushedExists, err := loadConfigFile(pushedPath)
 	if err != nil {
 		return Config{}, fmt.Errorf("config: pushed copy at %q could not be read: %w", pushedPath, err)
+	}
+
+	if !trustedExists && pushedExists {
+		effective := pushed
+		if effective.CI.RerunBudget == 0 {
+			effective.CI.RerunBudget = defaultCIRerunBudget
+		}
+		if effective.CI.CheckScope == "" {
+			effective.CI.CheckScope = github.CheckScopeRequired
+		}
+		if err := effective.Validate(); err != nil {
+			return Config{}, fmt.Errorf("config: validate effective configuration: %w", err)
+		}
+		return effective, nil
 	}
 
 	effective := Config{

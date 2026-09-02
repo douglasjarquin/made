@@ -177,9 +177,27 @@ func TestLoadEffectiveConfig_RuleB_PushedHonoredWhenAllowRepoCommands(t *testing
 	}
 }
 
-// Rule (c): with no trusted copy at all, the executable fields must resolve
-// to empty/zero-value - never silently fall back to the pushed copy.
-func TestLoadEffectiveConfig_RuleC_NoTrustedCopyZeroesExecutableFields(t *testing.T) {
+// Rule (c): with no trusted copy and no pushed copy, effective config is empty.
+func TestLoadEffectiveConfig_RuleC_NoConfigCopiesYieldsEmptyConfig(t *testing.T) {
+	cfg, err := LoadEffectiveConfig("", "")
+	if err != nil {
+		t.Fatalf("LoadEffectiveConfig returned unexpected error: %v", err)
+	}
+
+	if len(cfg.Commands.Test) != 0 || len(cfg.Commands.Lint) != 0 {
+		t.Errorf("Commands = %+v, want zero-value (no config copies present)", cfg.Commands)
+	}
+	if cfg.Agent != "" {
+		t.Errorf("Agent = %q, want empty (no config copies present)", cfg.Agent)
+	}
+	if len(cfg.Agents) != 0 {
+		t.Errorf("Agents = %v, want empty (no config copies present)", cfg.Agents)
+	}
+}
+
+// Rule (c), bootstrap case: when default branch has no .made.yml yet but the
+// pushed branch adds one, the pushed copy is the effective config.
+func TestLoadEffectiveConfig_RuleC_BootstrapFromPushedWhenTrustedAbsent(t *testing.T) {
 	dir := t.TempDir()
 	pushedPath := writeConfigFile(t, dir, "pushed.yaml", pushedFixture)
 
@@ -188,24 +206,28 @@ func TestLoadEffectiveConfig_RuleC_NoTrustedCopyZeroesExecutableFields(t *testin
 		t.Fatalf("LoadEffectiveConfig returned unexpected error: %v", err)
 	}
 
-	if len(cfg.Commands.Test) != 0 || len(cfg.Commands.Lint) != 0 {
-		t.Errorf("Commands = %+v, want zero-value (no trusted copy present)", cfg.Commands)
+	if cfg.Commands.Test != "pushed-test-cmd" {
+		t.Errorf("Commands.Test = %q, want pushed copy's value %q", cfg.Commands.Test, "pushed-test-cmd")
 	}
-	if cfg.Agent != "" {
-		t.Errorf("Agent = %q, want empty (no trusted copy present)", cfg.Agent)
+	if cfg.Commands.Lint != "pushed-lint-cmd" {
+		t.Errorf("Commands.Lint = %q, want pushed copy's value %q", cfg.Commands.Lint, "pushed-lint-cmd")
 	}
-	if len(cfg.Agents) != 0 {
-		t.Errorf("Agents = %v, want empty (no trusted copy present)", cfg.Agents)
+	if cfg.Agent != "codex" {
+		t.Errorf("Agent = %q, want pushed copy's value %q", cfg.Agent, "codex")
+	}
+	if cfg.Review.Required {
+		t.Errorf("Review.Required = true, want false from pushed copy during bootstrap")
+	}
+	if len(cfg.Document.Rules) != 1 || cfg.Document.Rules[0].PathPattern != "pushed/**" {
+		t.Errorf("Document = %+v, want pushed copy's rules during bootstrap", cfg.Document)
 	}
 
-	// Also verify with a trusted path pointing at a nonexistent file, which
-	// must be treated the same as "no trusted copy" (not a read error).
 	cfg2, err := LoadEffectiveConfig(filepath.Join(dir, "does-not-exist.yaml"), pushedPath)
 	if err != nil {
 		t.Fatalf("LoadEffectiveConfig with nonexistent trusted path returned unexpected error: %v", err)
 	}
-	if len(cfg2.Commands.Test) != 0 || cfg2.Agent != "" || len(cfg2.Agents) != 0 {
-		t.Errorf("executable fields = %+v/%q/%v, want zero-value for nonexistent trusted file", cfg2.Commands, cfg2.Agent, cfg2.Agents)
+	if cfg2.Commands.Test != "pushed-test-cmd" {
+		t.Errorf("Commands.Test = %q, want pushed copy bootstrap via missing trusted path", cfg2.Commands.Test)
 	}
 }
 
