@@ -83,7 +83,7 @@ func BuildPlan(ctx context.Context, repoPath, baseRef, candidateRef string, cfg 
 	if err != nil {
 		return Plan{}, fmt.Errorf("planner: compute changed paths: %w", err)
 	}
-	configHash, err := hashConfig(cfg)
+	configHash, err := HashConfig(cfg)
 	if err != nil {
 		return Plan{}, fmt.Errorf("planner: hash effective config: %w", err)
 	}
@@ -136,7 +136,11 @@ func buildStageDecisions(lanes []LaneDecision) []StageDecision {
 	}
 }
 
-func hashConfig(cfg config.Config) (string, error) {
+// HashConfig is BuildPlan's config-hash step, exported so a caller building
+// a receipt.Fingerprint (orchestrator) uses the exact same effective-config
+// identity `made plan` reports - keeping "why a lane ran" and "why a lane's
+// result was reused" consistent with each other.
+func HashConfig(cfg config.Config) (string, error) {
 	data, err := json.Marshal(cfg)
 	if err != nil {
 		return "", err

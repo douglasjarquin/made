@@ -331,6 +331,79 @@ func TestNewWorkFunc_FullPassPRTitleMatchesPushedCommitSubject(t *testing.T) {
 	}
 }
 
+// TestNewWorkFunc_SecondIdenticalRunReusesReceiptInsteadOfReexecuting is the
+// end-to-end proof of Phase 3's actual "reuse" outcome (project issue #33):
+// a lane's Full command that only appends to a counter file must run
+// exactly once across two full, real, independent orchestrator runs of the
+// literal same candidate. Two separate git worktrees checked out from one
+// shared bare gate repo (as production always uses) prove the receipt
+// published by the first run's Test stage is visible to the second's
+// without any fetch.
+func TestNewWorkFunc_SecondIdenticalRunReusesReceiptInsteadOfReexecuting(t *testing.T) {
+	f := newWFFixture(t)
+	branch := "feature-lane-reuse"
+	sha := f.pushFeature(t, branch, "add greeting file", "greeting.txt", "hello\n")
+
+	counterFile := filepath.Join(t.TempDir(), "counter.txt")
+	cfg := config.Config{
+		Agent:    string(agent.KindCodex),
+		Commands: config.Commands{Test: "true", Lint: "true"},
+		CI:       config.CI{RerunBudget: 1},
+		Validation: config.Validation{
+			Lanes: map[string]config.Lane{
+				"greeting": {
+					Paths:              []string{"**/*.txt"},
+					Full:               []string{"echo ran >> " + counterFile},
+					RequiredBeforePush: true,
+				},
+			},
+		},
+	}
+	ghBin := githubtest.Build(t)
+
+	// The second run pushes to a distinct branch name, at the exact same
+	// commit, so its Push stage never conflicts with the first run's - a
+	// fingerprint has no branch-name field, so this cannot affect reuse.
+	branch2 := "feature-lane-reuse-2"
+	pushBranch(t, f.src, f.barePath, branch2)
+
+	runOnce := func(pushBranchName string) daemon.RunSnapshot {
+		wt := f.worktree(t, sha)
+		defer func() { _ = wt.Remove() }()
+		rc := newRunContext(wt, cfg, ghBin, "")
+		rm := daemon.NewRunManager()
+		reviewDecisions := daemon.NewReviewDecisions()
+		runID := rm.NewRunID()
+		wf := NewWorkFunc(rm, reviewDecisions, nil, runID, f.defaultBranch, pushBranchName, Options{ReviewOptions: cleanReviewOptions(t)})
+		submitWorkFunc(t, rm, runID, "repo-lane-reuse", pushBranchName, wf, rc)
+		return waitForRunEnded(t, rm, runID, 30*time.Second)
+	}
+
+	first := runOnce(branch)
+	if first.Status != daemon.RunAwaitingMerge {
+		t.Fatalf("first run: expected RunAwaitingMerge, got %v (err=%v)", first.Status, first.Err)
+	}
+	afterFirst, err := os.ReadFile(counterFile)
+	if err != nil {
+		t.Fatalf("read counter file after first run: %v", err)
+	}
+	if got := strings.Count(string(afterFirst), "ran\n"); got != 1 {
+		t.Fatalf("expected the lane command to run exactly once on the first run, counter file:\n%s", afterFirst)
+	}
+
+	second := runOnce(branch2)
+	if second.Status != daemon.RunAwaitingMerge {
+		t.Fatalf("second run: expected RunAwaitingMerge, got %v (err=%v)", second.Status, second.Err)
+	}
+	afterSecond, err := os.ReadFile(counterFile)
+	if err != nil {
+		t.Fatalf("read counter file after second run: %v", err)
+	}
+	if got := strings.Count(string(afterSecond), "ran\n"); got != 1 {
+		t.Fatalf("expected the second identical run to REUSE the receipt and NOT re-execute the lane command, counter file:\n%s", afterSecond)
+	}
+}
+
 func TestNewWorkFunc_RequiredLaneFullCommandFailureHaltsRun(t *testing.T) {
 	f := newWFFixture(t)
 	branch := "feature-lane-fail"
