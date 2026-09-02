@@ -121,8 +121,8 @@ func TestGitHubRepoPath(t *testing.T) {
 		"https://github.com/douglasjarquin/made":     "douglasjarquin/made",
 		"git@github.com:douglasjarquin/made.git":     "douglasjarquin/made",
 		"https://gitlab.com/douglasjarquin/made.git": "",
-		"":                                            "",
-		"not a url at all\n<>":                        "",
+		"":                     "",
+		"not a url at all\n<>": "",
 	}
 	for remote, want := range cases {
 		if got := githubRepoPath(remote); got != want {
