@@ -9,9 +9,10 @@ Schema version: 1
 ## 1. Purpose
 
 `made validate --managed` is an additive, short-lived, daemonless execution shape
-that Consigliere invokes to validate an immutable input commit SHA.
+that a caller or orchestrator (for example Consigliere, Cursor Cloud, or a CI
+job) invokes to validate an immutable input commit SHA.
 
-Made validates. Consigliere orchestrates.
+Made validates. The caller orchestrates.
 
 ---
 
@@ -20,16 +21,17 @@ Made validates. Consigliere orchestrates.
 ### Made owns
 
 - Loading and verifying a trusted Made policy snapshot
+- Deriving the stage plan from that policy: which of review/test/document/lint run, and which are `not_configured` or `disabled`
 - Verifying the immutable workspace HEAD equals the supplied input SHA
-- Executing validation stages: review, test, document, lint
-- Running the configured review Agent in report-only mode
-- Producing structured findings with stable fingerprints
+- Executing every planned stage
+- Obtaining Review either by launching Made's configured internal agent (report-only) or by accepting one caller-supplied external review result
+- Producing structured findings with stable fingerprints through one shared classification path, regardless of Review source
 - Applying supplied Decisions to matching ask-user findings
 - Writing validation evidence outside the Agent workspace
 - Emitting a versioned JSON event stream to stdout
 - Returning one terminal validation outcome
 
-### Consigliere owns
+### The caller owns
 
 - Missions, Attempts, workspaces, Agent lifecycle
 - Human Questions and boss Decisions
@@ -52,10 +54,12 @@ made validate --managed --json-events \
   --trusted-config /absolute/path/to/.made.yml \
   --policy-hash sha256:<64-lowercase-hex> \
   --evidence-dir /absolute/path/to/evidence \
+  [--review-source internal|external] \
+  [--review-result /absolute/path/to/review-result.json] \
   [--decisions /absolute/path/to/decisions.json]
 ```
 
-All flags are required except `--decisions`.
+All flags are required except `--review-source`, `--review-result`, and `--decisions`.
 
 ### Flag semantics
 
@@ -71,6 +75,8 @@ All flags are required except `--decisions`.
 | `--trusted-config` | Absolute path to trusted policy file |
 | `--policy-hash` | `sha256:<64-lowercase-hex>` of trusted-config bytes |
 | `--evidence-dir` | Absolute path outside workspace for evidence output |
+| `--review-source` | Optional; `internal` (default) or `external` - how Review is obtained when policy enables it |
+| `--review-result` | Optional; absolute path to a caller-supplied external review result; required when `--review-source=external` |
 | `--decisions` | Optional; path to Decisions JSON file |
 
 ---
@@ -101,7 +107,7 @@ A preflight failure emits an `infrastructure_error` or usage-error terminal even
 
 ## 5. Stages
 
-Managed V1 executes exactly these stages in order:
+Managed V1 considers exactly these stages, in order:
 
 ```
 review → test → document → lint
@@ -109,25 +115,50 @@ review → test → document → lint
 
 Managed V1 never executes: intent, rebase, push, pr, ci, merge.
 
+### Stage plan
+
+Before any stage runs, Made derives a plan from trusted policy alone. Each
+stage resolves to one of:
+
+| State | Meaning |
+|---|---|
+| `run` | The stage executes |
+| `not_configured` | No applicable command/rule/agent is configured; the stage never executes and is never reported as passed |
+| `disabled` | `stages.<name>.enabled: false` explicitly turns the stage off; it never executes |
+
+- **Review** runs when `review.required` is `true` or an `agent` is configured; otherwise `not_configured`.
+- **Test** runs when `commands.test` or a selected validation-lane `full` command (issue #33) is configured; otherwise `not_configured`.
+- **Document** runs when at least one `document.rules` entry is configured; otherwise `not_configured`.
+- **Lint** runs when `commands.lint` is configured; otherwise `not_configured`.
+
+Every stage still emits `stage.started`/`stage.completed` even when
+`not_configured` or `disabled`, so the terminal result always identifies
+exactly which stages ran and which were absent or disabled - never silently.
+A run whose plan has no stage in the `run` state fails with
+`infrastructure_error` rather than issuing a meaningless `passed` receipt.
+
 ### Stop-at-first-action rule
 
-Managed V1 stops after the first stage that produces a non-pass outcome.
-All findings from that stage are reported before stopping.
-Later stages do not run.
+Managed V1 stops after the first `run` stage that produces a non-pass
+outcome. All findings from that stage are reported before stopping. Later
+stages do not run. A `not_configured` or `disabled` stage never stops the
+run.
 
 ### Review (report-only)
 
-- Spawns the configured Codex review Agent
-- Requires structured JSON output
+- Obtains a Review via one of two sources, selected by `--review-source` (default `internal`):
+  - `internal`: spawns the configured agent in report-only mode; requires structured JSON output
+  - `external`: accepts one caller-supplied review result bound to the exact base SHA, input SHA, policy hash, and review-contract hash (section 11a); Made launches no reviewer of its own on this path
 - Does NOT apply auto-fix patches
 - Does NOT create commits
+- Both sources' findings are normalized through one shared fingerprint/classification/Decision path
 - Emits all findings as `finding.reported` events
 - Applies supplied Decisions to ask-user findings
 - Classify: unresolved ask-user → `needs_decision`; rejected ask-user → `failed_terminal`; auto-fixable → `failed_retryable`; blocking → `failed_terminal`
 
 ### Test
 
-- Runs the trusted configured test command
+- Runs the trusted configured test command plus any validation-lane `full` commands selected for the changed paths (issue #33)
 - Command non-zero exit → `failed_retryable`
 - Spawn / evidence failure → `infrastructure_error`
 
@@ -261,12 +292,16 @@ The terminal event `run.completed` carries:
 
 | Outcome | Meaning |
 |---|---|
-| `passed` | All stages passed; all ask-user findings have approving Decisions |
+| `passed` | Every `run` stage passed; all ask-user findings have approving Decisions |
 | `needs_decision` | At least one ask-user finding has no applicable Decision |
 | `failed_retryable` | Auto-fixable finding, test failure, or lint failure |
 | `failed_terminal` | Blocking finding, rejected Decision, or policy violation |
-| `infrastructure_error` | Config hash mismatch, malformed agent output, workspace mutation, evidence failure, etc. |
+| `infrastructure_error` | Config hash mismatch, malformed agent/external-review output, workspace mutation, evidence failure, no effective validation work configured, etc. |
 | `canceled` | Context or process cancellation observed; cleanup complete |
+
+`not_configured` and `disabled` are stage-level coverage states reported on
+`stage.completed` events (section 9); they never appear as a run's terminal
+outcome.
 
 ### Exit codes
 
@@ -338,6 +373,51 @@ For managed validation, every finding must include:
 - **paths**: One or more repository-relative paths affected by the finding
 - **symbol**: Strongly recommended when applicable (e.g., function name, class name, line range)
 - **description**: Human-readable explanation (not used in fingerprint; serves as evidence)
+
+---
+
+## 11a. Review contract and external review-result contract
+
+Made builds one canonical, versioned `ReviewContract` for every run, covering
+the finding taxonomy, finding kinds, exact `base_sha`/`input_sha`, the exact
+diff instructions, and nonmutation/authority rules. Its `sha256:<hex>` hash
+(`review_contract_hash`) is reproducible by any caller from the documented
+schema and these inputs alone - Made does not need to be asked for it first.
+`guide_paths` is a reserved, always-empty extension point for supplemental
+review guides (issue #40); it is not implemented in V1.
+
+A caller choosing `--review-source external` renders this contract for its
+own reviewer, then submits one JSON file at `--review-result` matching:
+
+```json
+{
+  "schema_version": 1,
+  "review_contract_version": 1,
+  "executor": "cursor",
+  "reviewer": "made-reviewer",
+  "requested_model": "claude-opus-5[effort=high]",
+  "actual_model": null,
+  "base_sha": "1111111111111111111111111111111111111111",
+  "input_sha": "2222222222222222222222222222222222222222",
+  "policy_hash": "sha256:...",
+  "review_contract_hash": "sha256:...",
+  "findings": []
+}
+```
+
+Made rejects the result unless: the schema and contract versions are
+supported; `base_sha`, `input_sha`, `policy_hash`, and `review_contract_hash`
+match exactly; every string and array is within bounds (see
+`internal/managed/externalreview.go` for exact limits); every finding has a
+valid kind and the same structural identity fields internal findings
+require (section 11); and no two findings share a fingerprint with
+conflicting kinds. Unknown top-level fields are rejected outright.
+
+`executor`, `reviewer`, `requested_model`, and `actual_model` are
+informational provenance only: Made never rejects a result because
+`actual_model` is absent, differs from `requested_model`, or equals it. Made
+does not select or invoke any model on this path - it only classifies the
+findings the caller's reviewer already produced.
 
 ---
 
@@ -468,7 +548,7 @@ Managed mode does not modify:
 - The standalone pipeline's `parkForApproval` wait
 - Any daemon persistence
 
-`made capabilities --json` is extended additively: `"validate.managed.v1"` is added to the `commands` list.
+`made capabilities --json` is extended additively: `"validate.managed.v1"` is added to the `commands` list, and a `managed_validation` object reports `review_sources` (`["internal", "external"]`) and `optional_stages` (`["review", "test", "document", "lint"]`).
 
 ---
 
@@ -490,7 +570,7 @@ On an unexpected panic: evidence is best-effort. The exit code is non-zero (not 
 
 Managed V1 does not implement:
 
-- Consigliere integration code or client
+- Any specific caller's integration code or client (Consigliere, Cursor Cloud, or otherwise)
 - Mission repair budgets or Mission-level waiver authorization
 - Workspace creation or trusted mirror creation
 - Privileged Git push, PR creation, CI monitoring, merge
@@ -499,6 +579,10 @@ Managed V1 does not implement:
 - Bidirectional tracker synchronization
 - Herdr integration
 - A second Agent kind
+- Generating Cursor skills or subagent files, or selecting/invoking a Cursor model
+- Enforcing which model an external reviewer actually used
+- The simpler `made verify` interface (a later issue) or repo-root config discovery for managed mode
+- `review.guides` supplemental review documents (a later issue; the review contract's `guide_paths` field is reserved for it)
 - Generic SCM adapters
 - A TUI or new persistence database
 - A replacement for the standalone daemon

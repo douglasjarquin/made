@@ -1,7 +1,8 @@
 # Made Managed Validation — Integration Reference
 
-This document is written for Consigliere implementers. It describes the exact
-Made interface without requiring knowledge of Made internals.
+This document is written for implementers of a calling orchestrator (for
+example Consigliere, Cursor Cloud, or a CI job). It describes the exact Made
+interface without requiring knowledge of Made internals.
 
 ---
 
@@ -17,8 +18,16 @@ made validate --managed --json-events \
   --trusted-config /absolute/path/to/.made.yml \
   --policy-hash sha256:<64-lowercase-hex> \
   --evidence-dir /absolute/path/outside/workspace \
+  [--review-source internal|external] \
+  [--review-result /absolute/path/to/review-result.json] \
   [--decisions /absolute/path/to/decisions.json]
 ```
+
+`--review-source` selects how Review is obtained when trusted policy enables
+it, and defaults to `internal` (Made launches its own configured agent) when
+omitted. `--review-source external` accepts one caller-supplied review
+result instead — Made never launches a reviewer of its own on that path —
+and requires `--review-result`.
 
 ## Required inputs
 
@@ -59,12 +68,12 @@ Exit code 2 indicates argument or contract errors before any events are emitted.
 
 | Outcome | When | Next action |
 |---|---|---|
-| `passed` | All stages passed | Consigliere proceeds to delivery |
-| `needs_decision` | Ask-user finding with no Decision | Consigliere asks human; rerun with Decisions file |
-| `failed_retryable` | Auto-fixable finding, test/lint failure | Consigliere schedules repair Attempt |
-| `failed_terminal` | Blocking finding or rejected Decision | Consigliere notifies; no repair |
-| `infrastructure_error` | Config hash mismatch, workspace mutation, etc. | Consigliere quarantines workspace |
-| `canceled` | Signal or context cancellation | Consigliere retries or aborts Mission |
+| `passed` | Every configured, enabled stage passed (`not_configured`/`disabled` stages don't block) | Caller proceeds to delivery |
+| `needs_decision` | Ask-user finding with no Decision | Caller asks a human; rerun with a Decisions file |
+| `failed_retryable` | Auto-fixable finding, test/lint failure | Caller schedules a repair attempt |
+| `failed_terminal` | Blocking finding or rejected Decision | Caller notifies; no repair |
+| `infrastructure_error` | Config hash mismatch, workspace mutation, no effective validation work configured, etc. | Caller quarantines the workspace |
+| `canceled` | Signal or context cancellation | Caller retries or aborts the run |
 
 ## Evidence locations
 
@@ -127,7 +136,7 @@ compromised candidate can cause test processes to:
 
 ### Implementation responsibility
 
-**Option A (Recommended)**: Consigliere enforces isolation
+**Option A (Recommended)**: the caller enforces isolation
 - Run Made process in a containerized or VM-based validator sandbox
 - Mount only necessary paths with correct permissions
 - Supply only non-sensitive environment variables
@@ -135,9 +144,9 @@ compromised candidate can cause test processes to:
 
 **Option B**: Made enforces environment allowlist
 - Made validates or filters the process environment before spawning test/lint subprocesses
-- Not recommended; Consigliere has better visibility into process context
+- Not recommended; the caller has better visibility into process context
 
-Consigliere should prefer **Option A**: establish the sandbox boundary before invoking Made,
+The caller should prefer **Option A**: establish the sandbox boundary before invoking Made,
 ensuring isolation is the default behavior independent of Made changes.
 
 ## Version negotiation
@@ -214,4 +223,4 @@ A Decisions file from a different SHA is rejected at preflight.
 Supported `outcome` values: `approved`, `rejected`  
 Supported `scope` values: `one_shot`, `sha_bound`, `mission_finding_waiver`
 
-Made validates and echoes scope metadata; Consigliere owns whether a Decision was authorized.
+Made validates and echoes scope metadata; the caller owns whether a Decision was authorized.
