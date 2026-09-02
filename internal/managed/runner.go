@@ -10,7 +10,6 @@ import (
 	"github.com/douglasjarquin/made/internal/evidence"
 	"github.com/douglasjarquin/made/internal/pipeline/document"
 	"github.com/douglasjarquin/made/internal/pipeline/lint"
-	"github.com/douglasjarquin/made/internal/pipeline/review"
 	"github.com/douglasjarquin/made/internal/pipeline/test"
 )
 
@@ -28,6 +27,7 @@ type Runner struct {
 	ew        *EventWriter
 	evidence  *ManagedEvidenceStore
 	decisions *Decisions
+	plan      StagePlan
 
 	allFindings   []FindingReportedPayload
 	stageResults  []StageResult
@@ -35,35 +35,64 @@ type Runner struct {
 	decisionsUsed map[string]struct{}
 }
 
-// NewRunner constructs a Runner from validated options, parsed config, and loaded decisions.
-func NewRunner(opts *Options, cfg config.Config, ew *EventWriter, ev *ManagedEvidenceStore, decisions *Decisions) *Runner {
+// NewRunner constructs a Runner from validated options, parsed config, loaded
+// decisions, and a stage plan already derived from trusted policy.
+func NewRunner(opts *Options, cfg config.Config, ew *EventWriter, ev *ManagedEvidenceStore, decisions *Decisions, plan StagePlan) *Runner {
 	return &Runner{
 		opts:          opts,
 		cfg:           cfg,
 		ew:            ew,
 		evidence:      ev,
 		decisions:     decisions,
+		plan:          plan,
 		decisionsUsed: make(map[string]struct{}),
 	}
 }
 
-// Run executes all managed validation stages in order.
-// It returns the terminal outcome. The caller is responsible for emitting the
-// terminal event via ew.EmitTerminal.
+// Run executes every stage the plan marks StagePlanRun, in order, and emits
+// a visible stage.completed record for every not_configured or disabled
+// stage without pretending work ran. It stops at the first stage outcome
+// that is not passed, not_configured, or disabled, while every planned
+// stage - including ones never reached - remains in StageResults via the
+// plan the caller already has.
 func (r *Runner) Run(ctx context.Context) (Outcome, string, string) {
-	stages := []string{stageReview, stageTest, stageDocument, stageLint}
-	for _, stage := range stages {
-		outcome, msg, stoppedAt := r.runStage(ctx, stage)
-		if outcome != OutcomePassed {
+	planned := []StagePlanEntry{r.plan.Review, r.plan.Test, r.plan.Document, r.plan.Lint}
+	lastStage := stageLint
+	ranAnyStage := false
+	for _, entry := range planned {
+		lastStage = entry.Stage
+		outcome, msg, stoppedAt := r.runStage(ctx, entry)
+		switch outcome {
+		case OutcomePassed, OutcomeNotConfigured, OutcomeDisabled:
+			if entry.State == StagePlanRun {
+				ranAnyStage = true
+			}
+			continue
+		default:
 			return outcome, msg, stoppedAt
 		}
 	}
-	return OutcomePassed, "all managed validation stages passed", stageLint
+	if !ranAnyStage {
+		return OutcomeInfrastructureError,
+			"policy configures no effective validation work: review, test, document, and lint are all not_configured or disabled",
+			lastStage
+	}
+	return OutcomePassed, "all configured managed validation stages passed", lastStage
 }
 
-func (r *Runner) runStage(ctx context.Context, stage string) (Outcome, string, string) {
+func (r *Runner) runStage(ctx context.Context, entry StagePlanEntry) (Outcome, string, string) {
+	stage := entry.Stage
 	if err := r.ew.Emit("stage.started", StageStartedPayload{Stage: stage}); err != nil {
 		return OutcomeInfrastructureError, fmt.Sprintf("emit stage.started: %s", err), stage
+	}
+
+	if entry.State != StagePlanRun {
+		msg := entry.Reason
+		r.stageResults = append(r.stageResults, StageResult{Stage: stage, Outcome: skipOutcome(entry.State), Message: msg})
+		if emitErr := r.ew.Emit("stage.completed", StageCompletedPayload{Stage: stage, Outcome: skipOutcome(entry.State), Message: msg}); emitErr != nil {
+			return OutcomeInfrastructureError, fmt.Sprintf("emit stage.completed: %s", emitErr), stage
+		}
+		return skipOutcome(entry.State), msg, stage
 	}
 
 	// Verify HEAD == input_sha and workspace clean before stage.
@@ -77,7 +106,7 @@ func (r *Runner) runStage(ctx context.Context, stage string) (Outcome, string, s
 		return OutcomeInfrastructureError, fmt.Sprintf("capture pre-stage state for %s: %s", stage, err), stage
 	}
 
-	outcome, msg, findings, refs := r.executeStage(ctx, stage)
+	outcome, msg, findings, refs := r.executeStage(ctx, entry)
 
 	// Verify workspace unchanged regardless of outcome.
 	if mutErr := VerifyWorktreeUnchanged(ctx, r.opts.Workspace, beforeHead, beforeStatus); mutErr != nil {
@@ -112,47 +141,61 @@ func (r *Runner) runStage(ctx context.Context, stage string) (Outcome, string, s
 	return outcome, msg, stage
 }
 
-func (r *Runner) executeStage(ctx context.Context, stage string) (Outcome, string, []FindingReportedPayload, []string) {
-	switch stage {
+func (r *Runner) executeStage(ctx context.Context, entry StagePlanEntry) (Outcome, string, []FindingReportedPayload, []string) {
+	switch entry.Stage {
 	case stageReview:
-		return r.reviewStage(ctx)
+		return r.reviewStage(ctx, entry)
 	case stageTest:
-		return r.testStage(ctx)
+		return r.testStage(ctx, entry)
 	case stageDocument:
 		return r.documentStage(ctx)
 	case stageLint:
 		return r.lintStage(ctx)
 	default:
-		return OutcomeInfrastructureError, "unknown stage: " + stage, nil, nil
+		return OutcomeInfrastructureError, "unknown stage: " + entry.Stage, nil, nil
 	}
 }
 
-func (r *Runner) reviewStage(ctx context.Context) (Outcome, string, []FindingReportedPayload, []string) {
-	agentKind, err := r.cfg.AgentKind()
+func (r *Runner) reviewStage(ctx context.Context, entry StagePlanEntry) (Outcome, string, []FindingReportedPayload, []string) {
+	source, err := resolveReviewSource(entry.ReviewSource)
 	if err != nil {
-		return OutcomeInfrastructureError, fmt.Sprintf("resolve agent kind: %s", err), nil, nil
+		return OutcomeInfrastructureError, err.Error(), nil, nil
 	}
 
 	timeout := r.cfg.StageTimeout(stageReview)
 	stageCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	reviewOpts := review.Options{
-		BaseBranch:    r.opts.BaseSHA, // exact SHA used as base ref
-		ReportOnly:    true,           // managed mode: never apply auto-fixes
-		EvidenceRunID: r.opts.RunID,
-	}
-	if r.opts.ReviewAgentBinaryPath != "" {
-		reviewOpts.BinaryPath = r.opts.ReviewAgentBinaryPath
-		reviewOpts.ExtraEnv = r.opts.ReviewAgentExtraEnv
+	contractHash, hashErr := BuildReviewContract(r.opts.BaseSHA, r.opts.InputSHA, r.opts.PolicyHash).Hash()
+	if hashErr != nil {
+		return OutcomeInfrastructureError, fmt.Sprintf("review: %s", hashErr), nil, nil
 	}
 
-	result, err := review.Run(stageCtx, r.opts.Workspace, agentKind, reviewOpts)
+	req := ReviewRequest{
+		Workspace:    r.opts.Workspace,
+		BaseSHA:      r.opts.BaseSHA,
+		InputSHA:     r.opts.InputSHA,
+		PolicyHash:   r.opts.PolicyHash,
+		ContractHash: contractHash,
+		Timeout:      timeout,
+		RunID:        r.opts.RunID,
+		ResultPath:   r.opts.ReviewResult,
+	}
+	if entry.ReviewSource == ReviewSourceInternal {
+		agentKind, agentErr := r.cfg.AgentKind()
+		if agentErr != nil {
+			return OutcomeInfrastructureError, fmt.Sprintf("resolve agent kind: %s", agentErr), nil, nil
+		}
+		req.AgentKind = agentKind
+		req.AgentBinaryPath = r.opts.ReviewAgentBinaryPath
+		req.AgentExtraEnv = r.opts.ReviewAgentExtraEnv
+	}
+
+	result, err := source.Review(stageCtx, req)
 	if err != nil {
 		return OutcomeInfrastructureError, fmt.Sprintf("review: %s", err), nil, nil
 	}
 
-	// Write evidence.
 	evidenceData, marshalErr := json.Marshal(result.Findings)
 	if marshalErr != nil {
 		return OutcomeInfrastructureError, fmt.Sprintf("review: marshal findings: %s", marshalErr), nil, nil
@@ -255,19 +298,15 @@ func (r *Runner) reviewStage(ctx context.Context) (Outcome, string, []FindingRep
 	return outcome, msg, findings, refs
 }
 
-func (r *Runner) testStage(ctx context.Context) (Outcome, string, []FindingReportedPayload, []string) {
+func (r *Runner) testStage(ctx context.Context, entry StagePlanEntry) (Outcome, string, []FindingReportedPayload, []string) {
 	cmd := r.cfg.TestCommand()
-	if len(cmd) == 0 {
-		return OutcomeInfrastructureError, "no test command configured", nil, nil
-	}
 
 	timeout := r.cfg.StageTimeout(stageTest)
 	stageCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	// Use a simple evidence store shim.
 	ev := &stageEvidenceShim{store: r.evidence, stage: stageTest}
-	result, err := test.Run(stageCtx, r.opts.Workspace, r.opts.RunID, cmd, nil, ev)
+	result, err := test.Run(stageCtx, r.opts.Workspace, r.opts.RunID, cmd, entry.TestExtras, ev)
 	if err != nil {
 		return OutcomeInfrastructureError, fmt.Sprintf("test: %s", err), nil, nil
 	}
@@ -436,6 +475,13 @@ func (r *Runner) DecisionsApplied() []string {
 		applied = append(applied, fp)
 	}
 	return applied
+}
+
+func skipOutcome(state StagePlanState) Outcome {
+	if state == StagePlanDisabled {
+		return OutcomeDisabled
+	}
+	return OutcomeNotConfigured
 }
 
 // outcomeRank ranks outcomes so the most severe outcome wins when merging.

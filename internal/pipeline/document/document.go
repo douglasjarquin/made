@@ -44,20 +44,9 @@ func RunContext(ctx context.Context, worktreePath, baseBranch string, rules []Ru
 	return computeFindings(changed, rules)
 }
 
-// RunContextWithBaseSHA is like RunContext but uses an exact commit SHA for the
-// diff range instead of a mutable branch name. This is required by managed-validation
-// mode, which must use the exact base_sha from the preflight-verified CLI arguments.
-func RunContextWithBaseSHA(ctx context.Context, worktreePath, baseSHA string, rules []Rule) (Result, error) {
-	changed, err := changedFilesWithRange(ctx, worktreePath, baseSHA+"..HEAD")
-	if err != nil {
-		return Result{}, fmt.Errorf("document: %w", err)
-	}
-	return computeFindings(changed, rules)
-}
-
-// RunContextWithRange is like RunContextWithBaseSHA but uses safegit for the
-// git diff invocation and accepts an exact input SHA (instead of relying on HEAD).
-// This is the correct function for managed-validation mode.
+// RunContextWithRange uses safegit for the git diff invocation and accepts
+// an exact base and input SHA (instead of relying on a mutable branch name
+// or HEAD). This is the function managed-validation mode uses.
 func RunContextWithRange(ctx context.Context, worktreePath, baseSHA, inputSHA string, rules []Rule) (Result, error) {
 	changed, err := changedFilesWithSHAs(ctx, worktreePath, baseSHA, inputSHA)
 	if err != nil {

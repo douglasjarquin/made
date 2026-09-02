@@ -28,6 +28,8 @@ func runValidateCommand(args []string, stdout, stderr *os.File) int {
 	policyHash := fs.String("policy-hash", "", "sha256:<64-hex> of trusted-config bytes")
 	evidenceDir := fs.String("evidence-dir", "", "absolute path outside workspace for evidence output")
 	decisions := fs.String("decisions", "", "optional absolute path to Decisions JSON file")
+	reviewSource := fs.String("review-source", "", "how Review is obtained when policy enables it: internal or external (default internal)")
+	reviewResult := fs.String("review-result", "", "absolute path to a caller-supplied external review result; required when --review-source=external")
 
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -85,6 +87,8 @@ func runValidateCommand(args []string, stdout, stderr *os.File) int {
 		PolicyHash:    *policyHash,
 		EvidenceDir:   *evidenceDir,
 		DecisionsPath: *decisions,
+		ReviewSource:  *reviewSource,
+		ReviewResult:  *reviewResult,
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

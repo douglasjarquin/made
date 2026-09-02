@@ -161,9 +161,3 @@ func (d *Decisions) Lookup(fingerprint string) (DecisionRecord, bool) {
 func (d *Decisions) All() []DecisionRecord {
 	return append([]DecisionRecord(nil), d.all...)
 }
-
-// MarkUsed records that a fingerprint was matched against a finding.
-func (d *Decisions) MarkUsed(fingerprint string) {
-	// Used decisions are tracked by callers via separate set for now;
-	// this is a hook for future per-Decision usage tracking.
-}

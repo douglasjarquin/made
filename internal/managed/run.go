@@ -90,8 +90,22 @@ func Run(ctx context.Context, opts *Options, stdout, stderr *os.File) int {
 		return emitInfraError("create evidence directory: " + mkErr.Error())
 	}
 
-	// Phase 5: Run validation stages.
-	runner := NewRunner(opts, cfg, ew, ev, decs)
+	// Phase 5: Build the policy-derived stage plan. No stage runs that
+	// trusted policy does not configure and enable.
+	changedPaths, err := changedPathsForPlan(ctx, opts.Workspace, opts.BaseSHA, opts.InputSHA)
+	if err != nil {
+		return emitInfraError("compute changed paths for validation lanes: " + err.Error())
+	}
+	plan, err := BuildStagePlan(cfg, changedPaths, opts.ReviewSource)
+	if err != nil {
+		return emitInfraError("build stage plan: " + err.Error())
+	}
+
+	// Phase 6: Run validation stages. Runner.Run reports infrastructure_error
+	// itself when the plan has no effective work, after emitting a visible
+	// not_configured/disabled record for every stage - never silently.
+
+	runner := NewRunner(opts, cfg, ew, ev, decs, plan)
 	outcome, msg, stoppedAt := runner.Run(ctx)
 
 	if ctx.Err() != nil {

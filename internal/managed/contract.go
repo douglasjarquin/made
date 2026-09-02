@@ -20,6 +20,14 @@ const (
 	OutcomeFailedTerminal      Outcome = "failed_terminal"
 	OutcomeInfrastructureError Outcome = "infrastructure_error"
 	OutcomeCanceled            Outcome = "canceled"
+
+	// OutcomeNotConfigured and OutcomeDisabled report a stage's coverage
+	// state, never a run's terminal outcome: trusted policy configures no
+	// command for the stage, or explicitly disables it. Reusing Outcome's
+	// "outcome" field for these keeps one vocabulary on stage.completed
+	// events instead of a second field a caller would have to reconcile.
+	OutcomeNotConfigured Outcome = "not_configured"
+	OutcomeDisabled      Outcome = "disabled"
 )
 
 // ExitCode returns the process exit code for a given outcome.
@@ -53,6 +61,8 @@ type Options struct {
 	PolicyHash    string
 	EvidenceDir   string
 	DecisionsPath string // optional
+	ReviewSource  string // "internal" or "external"; defaults to "internal" when empty
+	ReviewResult  string // path to a caller-supplied ExternalReviewResult, required when ReviewSource is "external"
 
 	// InvocationID uniquely identifies a single Run invocation. It is generated
 	// internally by Run and used to isolate evidence paths across reruns.

@@ -54,6 +54,21 @@ func ValidateOptions(opts *Options) error {
 	if opts.DecisionsPath != "" && !filepath.IsAbs(opts.DecisionsPath) {
 		return fmt.Errorf("--decisions %q must be an absolute path", opts.DecisionsPath)
 	}
+	switch opts.ReviewSource {
+	case "", ReviewSourceInternal:
+		if opts.ReviewResult != "" {
+			return fmt.Errorf("--review-result is only valid with --review-source=%s", ReviewSourceExternal)
+		}
+	case ReviewSourceExternal:
+		if opts.ReviewResult == "" {
+			return fmt.Errorf("--review-source=%s requires --review-result", ReviewSourceExternal)
+		}
+		if !filepath.IsAbs(opts.ReviewResult) {
+			return fmt.Errorf("--review-result %q must be an absolute path", opts.ReviewResult)
+		}
+	default:
+		return fmt.Errorf("--review-source %q must be %q or %q", opts.ReviewSource, ReviewSourceInternal, ReviewSourceExternal)
+	}
 	return nil
 }
 
