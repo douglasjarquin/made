@@ -33,6 +33,8 @@ func run(args []string, stdout, stderr *os.File) int {
 		return 2
 	case "doctor":
 		return runDoctorCommand(args[1:], stdout, stderr)
+	case "plan":
+		return runPlanCommand(args[1:], stdout, stderr)
 	case "gate":
 		return runGateCommand(args[1:], stdout, stderr)
 	default:
