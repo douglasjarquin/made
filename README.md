@@ -8,9 +8,16 @@ made is an independent synthesis, not a dependency bundle or a one-to-one copy o
 
 See `plans/made-rewrite.md` for the full design and build plan.
 
+## Configuration
+
+Made reads its configuration from `.made.yaml` or `.made/config.yaml`.
+Both are equally valid first-class paths; neither is preferred, and having both present at once fails closed.
+`made config path --json` reports which one a repository uses, `made config check --json` validates it without starting a pipeline, and `made config move --to root|directory` migrates between the two layouts.
+The legacy root `.made.yml` still works during a bounded deprecation window, but conflicts with either first-class path if both are present.
+
 CI check policy
 
-The trusted `.made.yml` copy may set `ci.check_scope` to `required` or `all`; the default is `required`.
+The trusted config copy may set `ci.check_scope` to `required` or `all`; the default is `required`.
 `ci.rerun_budget` counts rerun rounds, not individual checks.
 Made polls pending checks without spending a round, reruns each unique failed GitHub Actions workflow run only, and reports bounded evidence by failed check and run.
 External checks are reported by name and link and are never rerun.

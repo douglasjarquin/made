@@ -119,7 +119,9 @@ and the run resumes.
    reports the PR as open and awaiting merge, without waiting for a human to
    merge it.
 
-The trusted ` + "`.made.yml`" + ` copy may set ` + "`ci.check_scope`" + ` to ` + "`required`" + ` or ` + "`all`" + `; the default is ` + "`required`" + `.
+Configuration lives at ` + "`.made.yaml`" + ` or ` + "`.made/config.yaml`" + ` - equally valid, never both at once. ` + "`made config path --json`" + ` reports which one is selected; ` + "`made config check --json`" + ` validates it without starting a pipeline; ` + "`made config move --to root|directory`" + ` migrates between them. The legacy ` + "`.made.yml`" + ` root file still works during a bounded deprecation window but conflicts with either first-class path.
+
+The trusted copy may set ` + "`ci.check_scope`" + ` to ` + "`required`" + ` or ` + "`all`" + `; the default is ` + "`required`" + `.
 ` + "`ci.rerun_budget`" + ` counts rerun rounds, not individual checks.
 Made polls pending checks without spending a round, reruns each unique failed GitHub Actions workflow run only, and reports bounded evidence by failed check and run.
 External checks are reported by name and link and are never rerun.
