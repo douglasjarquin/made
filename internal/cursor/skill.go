@@ -39,10 +39,12 @@ the Cloud environment build; see "Installation" below. Do not clone,
    already be committed on the current branch. Run ` + "`git status --porcelain`" + `
    and commit or discard anything unexpected - Made verifies committed
    history, not your working tree.
-2. **Run ` + "`made cursor doctor --json`" + `.** Confirm ` + "`healthy`" + ` is ` + "`true`" + ` before
-   continuing. Made never needs a daemon or gate for this flow, so a failing
-   check here means a real configuration or environment problem, not a
-   missing daemon.
+2. **Run ` + "`made cursor doctor --base-ref <trusted-ref> --json`" + `.** Confirm
+   ` + "`healthy`" + ` is ` + "`true`" + ` before continuing. Made never needs a daemon or gate
+   for this flow, so a failing check here means a real configuration or
+   environment problem, not a missing daemon. Passing ` + "`--base-ref`" + ` here (the
+   same ref you pass to ` + "`made verify prepare`" + ` below) is what makes the
+   ` + "`base_ref`" + ` check actually run instead of reporting ` + "`skipped`" + `.
 3. **Prepare the request.**
 
    ` + "```sh" + `
@@ -53,11 +55,23 @@ the Cloud environment build; see "Installation" below. Do not clone,
    ` + "`origin/main`" + `); Made resolves ` + "`base_sha`" + ` as the local merge-base with the
    current HEAD and never fetches. The JSON response's ` + "`request_path`" + ` names
    the file you hand to the reviewer subagent next.
-4. **If Review is configured for Cursor** (` + "`made cursor doctor --json`" + `'s
-   ` + "`cursor_executor`" + ` check reports status ` + "`configured`" + `), invoke the
-   ` + "`made-reviewer`" + ` subagent with the exact contents of ` + "`request_path`" + ` as
-   its only input. Do not summarize, paraphrase, or add anything to the
-   request before handing it over.
+4. **Branch on the ` + "`cursor_executor`" + ` check's ` + "`detail`" + ` field** from step 2's
+   doctor report (` + "`status`" + ` is always ` + "`ok`" + `/` + "`warn`" + `/` + "`skipped`" + ` here; the
+   ` + "`configured`" + `/` + "`not_configured`" + ` strings live in ` + "`detail`" + `):
+   - ` + "`detail`" + ` is ` + "`configured`" + `: invoke the ` + "`made-reviewer`" + ` subagent with the
+     exact contents of ` + "`request_path`" + ` as its only input. Do not summarize,
+     paraphrase, or add anything to the request before handing it over. If
+     your harness has no built-in mechanism to invoke a named custom
+     ` + "`.cursor/agents/*.md`" + ` subagent file, read ` + "`made-reviewer.md`" + `'s
+     frontmatter and body yourself, and launch a fresh subagent whose entire
+     system prompt is that body verbatim, then give it the prepared request
+     as its input. This does not license paraphrasing the request itself -
+     only the request content must stay byte-for-byte unmodified.
+   - ` + "`status`" + ` is ` + "`warn`" + ` (` + "`review.required`" + ` is true but
+     ` + "`review.executors.cursor.model`" + ` is unset): stop here and report the
+     doctor warning. Do not fall through to either the Cursor-review or
+     no-review path silently.
+   - ` + "`detail`" + ` is ` + "`not_configured`" + `: skip steps 3-6 entirely and go to step 7.
 5. **Save the reviewer's output verbatim.** The reviewer returns one strict
    JSON document (project issue #39's external Review schema). Write it,
    byte-for-byte, to a result file. Never edit, wrap, reformat it, or convert
