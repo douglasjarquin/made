@@ -15,6 +15,9 @@ func runConfigCommand(args []string, stdout, stderr *os.File) int {
 		_, _ = fmt.Fprintln(stderr, "usage: made config <path|check|move> [args]")
 		return 2
 	}
+	if isHelp(args[0]) {
+		return printHelp(stdout, "usage: made config <path|check|move> [args]")
+	}
 	switch args[0] {
 	case "path":
 		return runConfigPathCommand(args[1:], stdout, stderr)

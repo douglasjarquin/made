@@ -29,6 +29,9 @@ func runDaemonCommand(args []string, stdout, stderr *os.File) int {
 		_, _ = fmt.Fprintln(stderr, "usage: made daemon <start|stop|status>")
 		return 2
 	}
+	if isHelp(args[0]) {
+		return printHelp(stdout, "usage: made daemon <start|stop|status>")
+	}
 
 	home, err := madeHome()
 	if err != nil {

@@ -88,6 +88,9 @@ func runRunCommand(args []string, stdout, stderr *os.File) int {
 		_, _ = fmt.Fprintln(stderr, "usage: made run <submit|status|list|cancel>")
 		return 2
 	}
+	if isHelp(args[0]) {
+		return printHelp(stdout, "usage: made run <submit|status|list|cancel>")
+	}
 	switch args[0] {
 	case "submit":
 		return runSubmitCommand(args[1:], stdout, stderr)
