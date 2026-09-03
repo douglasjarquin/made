@@ -102,7 +102,15 @@ func (f *wfFixture) worktree(t *testing.T, sha string) *gitgate.Worktree {
 
 func (f *wfFixture) branchOnRealRemote(t *testing.T, branch string) bool {
 	t.Helper()
-	out, err := exec.Command("git", "ls-remote", f.realRemote, "refs/heads/"+branch).CombinedOutput()
+	cmd := exec.Command("git", "ls-remote", f.realRemote, "refs/heads/"+branch)
+	cmd.Env = append(os.Environ(),
+		"GIT_CONFIG_COUNT=2",
+		"GIT_CONFIG_KEY_0=commit.gpgsign",
+		"GIT_CONFIG_VALUE_0=false",
+		"GIT_CONFIG_KEY_1=safe.bareRepository",
+		"GIT_CONFIG_VALUE_1=all",
+	)
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("ls-remote: %v: %s", err, out)
 	}
@@ -119,6 +127,11 @@ func commitWithIntent(t *testing.T, dir, title, intentSummary string) {
 		"GIT_AUTHOR_EMAIL=orchestrator-test@example.com",
 		"GIT_COMMITTER_NAME=orchestrator-test",
 		"GIT_COMMITTER_EMAIL=orchestrator-test@example.com",
+		"GIT_CONFIG_COUNT=2",
+		"GIT_CONFIG_KEY_0=commit.gpgsign",
+		"GIT_CONFIG_VALUE_0=false",
+		"GIT_CONFIG_KEY_1=safe.bareRepository",
+		"GIT_CONFIG_VALUE_1=all",
 	)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git commit (with intent) in %s failed: %v: %s", dir, err, out)
@@ -268,7 +281,15 @@ func TestNewWorkFunc_FullPassEndsRunningWithAwaitingMergeMessage(t *testing.T) {
 	if len(contract.CandidateOutputSHA) != 40 {
 		t.Fatalf("review contract evidence omitted a full candidate output SHA: %s", metadata)
 	}
-	if err := exec.Command("git", "-C", wt.Path, "cat-file", "-e", contract.CandidateOutputSHA+"^{commit}").Run(); err != nil {
+	cmd := exec.Command("git", "-C", wt.Path, "cat-file", "-e", contract.CandidateOutputSHA+"^{commit}")
+	cmd.Env = append(os.Environ(),
+		"GIT_CONFIG_COUNT=2",
+		"GIT_CONFIG_KEY_0=commit.gpgsign",
+		"GIT_CONFIG_VALUE_0=false",
+		"GIT_CONFIG_KEY_1=safe.bareRepository",
+		"GIT_CONFIG_VALUE_1=all",
+	)
+	if err := cmd.Run(); err != nil {
 		t.Fatalf("review contract candidate output SHA %q is not a commit in the prepared worktree: %v", contract.CandidateOutputSHA, err)
 	}
 	assertAllStagesPassed(t, snap.Stages)

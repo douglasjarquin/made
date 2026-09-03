@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "run_id": "G-229",
+  "mission_id": "M-402",
+  "input_sha": "2222222222222222222222222222222222222222",
+  "base_sha": "1111111111111111111111111111111111111111",
+  "invocation_id": "0987654321fedcba",
+  "policy_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "decisions": [
+    {
+      "decision_id": "D-184",
+      "finding_fingerprint": "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+      "outcome": "approved",
+      "scope": "sha_bound",
+      "rationale": "Accepted: the dependency was reviewed in Slack thread #arch-2026-08-18"
+    }
+  ]
+}

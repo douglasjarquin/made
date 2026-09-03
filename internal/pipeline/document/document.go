@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/douglasjarquin/made/internal/agent"
+	"github.com/douglasjarquin/made/internal/safegit"
 )
 
 type Rule struct {
@@ -40,7 +41,22 @@ func RunContext(ctx context.Context, worktreePath, baseBranch string, rules []Ru
 	if err != nil {
 		return Result{}, fmt.Errorf("document: %w", err)
 	}
+	return computeFindings(changed, rules)
+}
 
+// RunContextWithRange uses safegit for the git diff invocation and accepts
+// an exact base and input SHA (instead of relying on a mutable branch name
+// or HEAD). This is the function managed-validation mode uses.
+func RunContextWithRange(ctx context.Context, worktreePath, baseSHA, inputSHA string, rules []Rule) (Result, error) {
+	changed, err := changedFilesWithSHAs(ctx, worktreePath, baseSHA, inputSHA)
+	if err != nil {
+		return Result{}, fmt.Errorf("document: %w", err)
+	}
+	return computeFindings(changed, rules)
+}
+
+// computeFindings applies document rules to the list of changed files.
+func computeFindings(changed []string, rules []Rule) (Result, error) {
 	var findings []agent.Finding
 	for _, rule := range rules {
 		sourceMatches, err := matchAny(rule.SourcePattern, changed)
@@ -50,7 +66,6 @@ func RunContext(ctx context.Context, worktreePath, baseBranch string, rules []Ru
 		if len(sourceMatches) == 0 {
 			continue
 		}
-
 		docMatches, err := matchAny(rule.DocPattern, changed)
 		if err != nil {
 			return Result{}, fmt.Errorf("document: %w", err)
@@ -58,16 +73,17 @@ func RunContext(ctx context.Context, worktreePath, baseBranch string, rules []Ru
 		if len(docMatches) > 0 {
 			continue
 		}
-
 		findings = append(findings, agent.Finding{
-			Kind: agent.FindingAskUser,
+			Kind:  agent.FindingAskUser,
+			Code:  "document.policy_violation",
+			Class: "documentation-policy",
 			Description: fmt.Sprintf(
 				"documentation policy violation: %s (matches %q) requires a change matching %q, but none was found in this diff",
 				strings.Join(sourceMatches, ", "), rule.SourcePattern, rule.DocPattern,
 			),
+			Paths: sourceMatches,
 		})
 	}
-
 	if len(findings) > 0 {
 		return Result{
 			OK:       true,
@@ -75,11 +91,27 @@ func RunContext(ctx context.Context, worktreePath, baseBranch string, rules []Ru
 			Findings: findings,
 		}, nil
 	}
-
 	return Result{
 		OK:      true,
 		Message: "document: no documentation policy violations found",
 	}, nil
+}
+
+func changedFilesWithSHAs(ctx context.Context, worktreePath, baseSHA, inputSHA string) ([]string, error) {
+	out, err := safegit.Output(ctx, safegit.Command{
+		WorktreePath: worktreePath,
+		Args:         []string{"diff", "--name-only", "--no-ext-diff", baseSHA, inputSHA, "--"},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("git diff --name-only: %w", err)
+	}
+	var files []string
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if line != "" {
+			files = append(files, line)
+		}
+	}
+	return files, nil
 }
 
 func changedFiles(ctx context.Context, worktreePath, baseBranch string) ([]string, error) {

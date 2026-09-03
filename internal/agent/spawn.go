@@ -227,4 +227,4 @@ func strictFindings(data []byte) (Findings, error) {
 	return findings, nil
 }
 
-const reviewSchema = `{"type":"object","additionalProperties":false,"required":["findings"],"properties":{"findings":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["kind","description","patch","paths"],"properties":{"kind":{"type":"string","enum":["auto-fixable","ask-user","blocking"]},"description":{"type":"string"},"patch":{"type":["string","null"]},"paths":{"type":["array","null"],"items":{"type":"string"}}}}}}}`
+const reviewSchema = `{"type":"object","additionalProperties":false,"required":["findings"],"properties":{"findings":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["kind","description","patch","paths"],"properties":{"kind":{"type":"string","enum":["auto-fixable","ask-user","blocking"]},"description":{"type":"string"},"patch":{"type":["string","null"]},"paths":{"type":["array","null"],"items":{"type":"string"}},"code":{"type":"string"},"class":{"type":"string"},"symbol":{"type":"string"}}}}}}`

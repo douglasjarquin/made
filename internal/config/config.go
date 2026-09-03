@@ -131,9 +131,29 @@ func (c Config) AgentKind() (agent.Kind, error) {
 }
 
 func (c Config) Validate() error {
+	if err := c.validateReviewRequiresAgent(); err != nil {
+		return err
+	}
+	return c.validateCommon()
+}
+
+// ValidateWithoutReviewAgentRequirement runs every check Validate does
+// except that required Review implies a configured internal agent. Made's
+// managed-validation mode can satisfy required Review with a caller-supplied
+// external result instead of an agent, so it enforces that invariant itself,
+// once it knows which Review source a run will actually use.
+func (c Config) ValidateWithoutReviewAgentRequirement() error {
+	return c.validateCommon()
+}
+
+func (c Config) validateReviewRequiresAgent() error {
 	if c.Review.Required && c.Agent == "" {
 		return fmt.Errorf("config: review requires agent %q", agent.KindCodex)
 	}
+	return nil
+}
+
+func (c Config) validateCommon() error {
 	if c.Agent != "" {
 		if _, err := c.AgentKind(); err != nil {
 			return err

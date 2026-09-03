@@ -20,8 +20,11 @@ func TestReviewSchemaRequiresEveryFindingProperty(t *testing.T) {
 	if err := json.Unmarshal([]byte(reviewSchema), &schema); err != nil {
 		t.Fatalf("review schema is not JSON: %v", err)
 	}
-	if len(schema.Properties.Findings.Items.Properties) != len(schema.Properties.Findings.Items.Required) {
-		t.Fatalf("strict output schema must require every finding property: properties=%v required=%v", schema.Properties.Findings.Items.Properties, schema.Properties.Findings.Items.Required)
+	// Required properties must all appear in properties.
+	for _, req := range schema.Properties.Findings.Items.Required {
+		if _, ok := schema.Properties.Findings.Items.Properties[req]; !ok {
+			t.Fatalf("required finding property %q is not in properties", req)
+		}
 	}
 	for _, property := range []string{"kind", "description", "patch", "paths"} {
 		if _, ok := schema.Properties.Findings.Items.Properties[property]; !ok {
@@ -29,6 +32,15 @@ func TestReviewSchemaRequiresEveryFindingProperty(t *testing.T) {
 		}
 		if !slices.Contains(schema.Properties.Findings.Items.Required, property) {
 			t.Fatalf("review schema does not require finding property %q", property)
+		}
+	}
+	// Optional fields may appear in properties but not in required.
+	for _, optional := range []string{"code", "class", "symbol"} {
+		if _, ok := schema.Properties.Findings.Items.Properties[optional]; !ok {
+			t.Fatalf("review schema missing optional finding property %q", optional)
+		}
+		if slices.Contains(schema.Properties.Findings.Items.Required, optional) {
+			t.Fatalf("review schema incorrectly requires optional finding property %q", optional)
 		}
 	}
 }

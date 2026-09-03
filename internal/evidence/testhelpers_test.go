@@ -25,6 +25,11 @@ func commitEnv() []string {
 		"GIT_AUTHOR_EMAIL=evidence-test@example.com",
 		"GIT_COMMITTER_NAME=evidence-test",
 		"GIT_COMMITTER_EMAIL=evidence-test@example.com",
+		"GIT_CONFIG_COUNT=2",
+		"GIT_CONFIG_KEY_0=commit.gpgsign",
+		"GIT_CONFIG_VALUE_0=false",
+		"GIT_CONFIG_KEY_1=safe.bareRepository",
+		"GIT_CONFIG_VALUE_1=all",
 	}
 }
 
@@ -37,9 +42,21 @@ func runEnv(t *testing.T, dir string, extraEnv []string, name string, args ...st
 	t.Helper()
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
+	env := os.Environ()
 	if extraEnv != nil {
-		cmd.Env = append(os.Environ(), extraEnv...)
+		env = append(env, extraEnv...)
 	}
+	// Ensure git config is set for all git commands in tests
+	if name == "git" {
+		env = append(env,
+			"GIT_CONFIG_COUNT=2",
+			"GIT_CONFIG_KEY_0=commit.gpgsign",
+			"GIT_CONFIG_VALUE_0=false",
+			"GIT_CONFIG_KEY_1=safe.bareRepository",
+			"GIT_CONFIG_VALUE_1=all",
+		)
+	}
+	cmd.Env = env
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("%s %v in %s failed: %v: %s", name, args, dir, err, out)
@@ -50,6 +67,13 @@ func runEnv(t *testing.T, dir string, extraEnv []string, name string, args ...st
 func runNoFatal(dir string, name string, args ...string) (string, error) {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_CONFIG_COUNT=2",
+		"GIT_CONFIG_KEY_0=commit.gpgsign",
+		"GIT_CONFIG_VALUE_0=false",
+		"GIT_CONFIG_KEY_1=safe.bareRepository",
+		"GIT_CONFIG_VALUE_1=all",
+	)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }

@@ -207,3 +207,56 @@ func (c Config) hasConfiguredValue() bool {
 		len(c.Commands.Lint) > 0 || len(c.Agent) > 0 || len(c.Agents) > 0 || c.AllowRepoCommands ||
 		len(c.Stages) > 0 || len(c.Validation.Lanes) > 0 || c.Validation.NoReuse
 }
+
+// ParseBytes parses a Config from an already-read byte slice.
+// This is used by managed-validation mode, which reads and hash-verifies the
+// config bytes exactly once before parsing, to avoid TOCTOU issues. It skips
+// Validate's "required Review implies a configured agent" check because
+// managed mode can also satisfy required Review with an external result;
+// see Config.ValidateWithoutReviewAgentRequirement.
+func ParseBytes(data []byte) (Config, error) {
+	cfg, _, err := parseConfigBytes(data, "<managed-trusted-config>")
+	if err != nil {
+		return Config{}, err
+	}
+	if err := cfg.ValidateWithoutReviewAgentRequirement(); err != nil {
+		return Config{}, fmt.Errorf("config: validate: %w", err)
+	}
+	return cfg, nil
+}
+
+// parseConfigBytes decodes a Config from raw YAML bytes.
+func parseConfigBytes(data []byte, label string) (Config, bool, error) {
+	if len(data) > maxConfigBytes {
+		return Config{}, false, fmt.Errorf("config: %s exceeds %d bytes", label, maxConfigBytes)
+	}
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	decoder.KnownFields(true)
+	var cfg Config
+	if err := decoder.Decode(&cfg); err != nil {
+		return Config{}, false, err
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return Config{}, false, fmt.Errorf("configuration must contain one YAML document")
+		}
+		return Config{}, false, err
+	}
+	if cfg.Version != 1 {
+		return Config{}, false, fmt.Errorf("versioned .made.yml requires version: 1, got %d", cfg.Version)
+	}
+	for name := range cfg.Stages {
+		if _, ok := validStageNames[name]; !ok {
+			return Config{}, false, fmt.Errorf("versioned .made.yml has unknown stage %q", name)
+		}
+		stage := cfg.Stages[name]
+		if stage.TimeoutSeconds != nil && (*stage.TimeoutSeconds <= 0 || *stage.TimeoutSeconds > maxStageTimeoutSeconds) {
+			return Config{}, false, fmt.Errorf("versioned .made.yml stage %q timeout_seconds must be between 1 and %d", name, maxStageTimeoutSeconds)
+		}
+	}
+	if retention := cfg.Test.Evidence.RetentionBytes; retention != nil && (*retention <= 0 || *retention > maxEvidenceRetention) {
+		return Config{}, false, fmt.Errorf("versioned .made.yml test.evidence.retention_bytes must be between 1 and %d", maxEvidenceRetention)
+	}
+	return cfg, true, nil
+}

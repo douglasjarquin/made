@@ -16,6 +16,8 @@ func run(args []string, stdout, stderr *os.File) int {
 	}
 
 	switch args[0] {
+	case "validate":
+		return runValidateCommand(args[1:], stdout, stderr)
 	case "capabilities":
 		return runCapabilitiesCommand(args[1:], stdout, stderr)
 	case "run":
