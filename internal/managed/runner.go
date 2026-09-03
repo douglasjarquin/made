@@ -147,7 +147,7 @@ func (r *Runner) runStage(ctx context.Context, entry StagePlanEntry, index int) 
 	}
 
 	r.allFindings = append(r.allFindings, findings...)
-	r.stageResults[index] = StageResult{Stage: stage, Outcome: outcome, Message: msg, Findings: findings}
+	r.stageResults[index] = StageResult{Stage: stage, Outcome: outcome, Message: msg, Findings: findings, ReusedCommands: entry.TestReused}
 
 	for _, ref := range refs {
 		r.evidenceRefs = append(r.evidenceRefs, ref)
@@ -332,6 +332,9 @@ func (r *Runner) reviewStage(ctx context.Context, entry StagePlanEntry) (Outcome
 
 func (r *Runner) testStage(ctx context.Context, entry StagePlanEntry) (Outcome, string, []FindingReportedPayload, []string) {
 	cmd := r.cfg.TestCommand()
+	if len(cmd) == 0 && len(entry.TestExtras) == 0 {
+		return OutcomePassed, fmt.Sprintf("%d command(s) reused, 0 executed", len(entry.TestReused)), nil, nil
+	}
 
 	timeout := r.cfg.StageTimeout(stageTest)
 	stageCtx, cancel := context.WithTimeout(ctx, timeout)

@@ -147,4 +147,10 @@ type StageResult struct {
 	Outcome  Outcome                  `json:"outcome"`
 	Message  string                   `json:"message,omitempty"`
 	Findings []FindingReportedPayload `json:"findings"`
+	// ReusedCommands is populated on the Test stage only: the lane Full
+	// commands a published receipt satisfied instead of actually running
+	// (project issue #61). It never changes Outcome - a stage with reused
+	// commands is still "passed", exactly like the daemon-backed pipeline's
+	// own PR summary treats reuse as informational, not a distinct status.
+	ReusedCommands []ReusedLaneCommand `json:"reused_commands,omitempty"`
 }
