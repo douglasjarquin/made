@@ -1,0 +1,5 @@
+Task 13 re-verification canary (issue #43).
+
+This file is a committed candidate against origin/main so a Cursor Cloud
+agent can re-verify PR #55 findings 1, 4, and 9 for real. Results belong
+in the PR comment, not here.
