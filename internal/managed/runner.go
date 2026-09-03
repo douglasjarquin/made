@@ -28,6 +28,7 @@ type Runner struct {
 	evidence  *ManagedEvidenceStore
 	decisions *Decisions
 	plan      StagePlan
+	guides    []GuideBinding
 
 	allFindings   []FindingReportedPayload
 	stageResults  []StageResult
@@ -36,8 +37,10 @@ type Runner struct {
 }
 
 // NewRunner constructs a Runner from validated options, parsed config, loaded
-// decisions, and a stage plan already derived from trusted policy.
-func NewRunner(opts *Options, cfg config.Config, ew *EventWriter, ev *ManagedEvidenceStore, decisions *Decisions, plan StagePlan) *Runner {
+// decisions, a stage plan already derived from trusted policy, and the
+// trusted base's resolved review guides (project issue #40; nil when none
+// are configured).
+func NewRunner(opts *Options, cfg config.Config, ew *EventWriter, ev *ManagedEvidenceStore, decisions *Decisions, plan StagePlan, guides []GuideBinding) *Runner {
 	return &Runner{
 		opts:          opts,
 		cfg:           cfg,
@@ -45,6 +48,7 @@ func NewRunner(opts *Options, cfg config.Config, ew *EventWriter, ev *ManagedEvi
 		evidence:      ev,
 		decisions:     decisions,
 		plan:          plan,
+		guides:        guides,
 		decisionsUsed: make(map[string]struct{}),
 	}
 }
@@ -166,7 +170,7 @@ func (r *Runner) reviewStage(ctx context.Context, entry StagePlanEntry) (Outcome
 	stageCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	contractHash, hashErr := BuildReviewContract(r.opts.BaseSHA, r.opts.InputSHA, r.opts.PolicyHash).Hash()
+	contractHash, hashErr := BuildReviewContract(r.opts.BaseSHA, r.opts.InputSHA, r.opts.PolicyHash, r.guides).Hash()
 	if hashErr != nil {
 		return OutcomeInfrastructureError, fmt.Sprintf("review: %s", hashErr), nil, nil
 	}
@@ -180,6 +184,7 @@ func (r *Runner) reviewStage(ctx context.Context, entry StagePlanEntry) (Outcome
 		Timeout:      timeout,
 		RunID:        r.opts.RunID,
 		ResultPath:   r.opts.ReviewResult,
+		Guides:       r.guides,
 	}
 	if entry.ReviewSource == ReviewSourceInternal {
 		agentKind, agentErr := r.cfg.AgentKind()
@@ -200,9 +205,18 @@ func (r *Runner) reviewStage(ctx context.Context, entry StagePlanEntry) (Outcome
 	if marshalErr != nil {
 		return OutcomeInfrastructureError, fmt.Sprintf("review: marshal findings: %s", marshalErr), nil, nil
 	}
-	refs, evErr := r.evidence.WriteStageFiles(stageReview, map[string][]byte{
-		"findings.json": evidenceData,
-	})
+	evidenceFiles := map[string][]byte{"findings.json": evidenceData}
+	if len(r.guides) > 0 {
+		guideEvidence, guideMarshalErr := json.Marshal(GuideEvidence{
+			Configured: r.guides,
+			Consulted:  result.GuidesConsulted,
+		})
+		if guideMarshalErr != nil {
+			return OutcomeInfrastructureError, fmt.Sprintf("review: marshal guide evidence: %s", guideMarshalErr), nil, nil
+		}
+		evidenceFiles["guides.json"] = guideEvidence
+	}
+	refs, evErr := r.evidence.WriteStageFiles(stageReview, evidenceFiles)
 	if evErr != nil {
 		return OutcomeInfrastructureError, fmt.Sprintf("review: write evidence: %s", evErr), nil, nil
 	}

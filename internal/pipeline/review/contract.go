@@ -32,6 +32,7 @@ func resolveReviewTask(ctx context.Context, worktreePath string, opts Options) (
 		TrustedBaseSHA:     baseSHA,
 		CandidateInputSHA:  candidateSHA,
 		CandidateOutputSHA: opts.CandidateOutputSHA,
+		Guides:             opts.Guides,
 	}
 	// Managed-validation mode requires strict structural identity for findings.
 	if opts.ReportOnly {

@@ -27,26 +27,83 @@ var reviewFindingTaxonomy = []string{
 
 var reviewFindingKinds = []string{"auto-fixable", "ask-user", "blocking"}
 
+// ReviewGuideInstruction is the exact, bounded instruction given to a
+// reviewer for selectively using configured guides (project issue #40):
+// Made never eagerly concatenates every guide into the review prompt.
+const ReviewGuideInstruction = "Read every configured top-level guide. When a guide is an index, follow only the entries relevant to the exact base-to-input change unless the change is broad enough to require a full sweep."
+
+// ReviewGuideRef is a caller-resolved guide's identity (path, exact content
+// hash, byte count) handed to NewReviewTask/NewManagedReviewTask, which turn
+// it into a ReviewGuide with a read command bound to this task's trusted
+// base SHA.
+type ReviewGuideRef struct {
+	Path        string
+	ContentHash string
+	Bytes       int
+}
+
+// ReviewGuide is one configured guide as embedded in the review contract:
+// its trusted identity plus a bounded, safe command for reading its exact
+// bytes from the trusted base.
+type ReviewGuide struct {
+	Path        string `json:"path"`
+	ContentHash string `json:"content_hash"`
+	Bytes       int    `json:"bytes"`
+	ReadCommand string `json:"read_command"`
+}
+
 type ReviewInput struct {
 	TrustedBaseBranch  string
 	TrustedBaseSHA     string
 	CandidateInputSHA  string
 	CandidateOutputSHA string
+	Guides             []ReviewGuideRef
 }
 
 type ReviewContract struct {
-	PromptVersion       string   `json:"prompt_version"`
-	OutputSchemaVersion string   `json:"output_schema_version"`
-	TrustedBaseBranch   string   `json:"trusted_base_branch"`
-	TrustedBaseSHA      string   `json:"trusted_base_sha"`
-	CandidateInputSHA   string   `json:"candidate_input_sha"`
-	CandidateOutputSHA  string   `json:"candidate_output_sha,omitempty"`
-	DiffCommand         string   `json:"diff_command"`
-	Scope               string   `json:"scope"`
-	FindingTaxonomy     []string `json:"finding_taxonomy"`
-	FindingKinds        []string `json:"finding_kinds"`
-	FindingPolicy       []string `json:"finding_policy"`
-	Exclusions          []string `json:"exclusions"`
+	PromptVersion       string        `json:"prompt_version"`
+	OutputSchemaVersion string        `json:"output_schema_version"`
+	TrustedBaseBranch   string        `json:"trusted_base_branch"`
+	TrustedBaseSHA      string        `json:"trusted_base_sha"`
+	CandidateInputSHA   string        `json:"candidate_input_sha"`
+	CandidateOutputSHA  string        `json:"candidate_output_sha,omitempty"`
+	DiffCommand         string        `json:"diff_command"`
+	Scope               string        `json:"scope"`
+	FindingTaxonomy     []string      `json:"finding_taxonomy"`
+	FindingKinds        []string      `json:"finding_kinds"`
+	FindingPolicy       []string      `json:"finding_policy"`
+	Exclusions          []string      `json:"exclusions"`
+	Guides              []ReviewGuide `json:"guides,omitempty"`
+	GuideInstructions   string        `json:"guide_instructions,omitempty"`
+}
+
+func buildContractGuides(trustedBaseSHA string, refs []ReviewGuideRef) []ReviewGuide {
+	if len(refs) == 0 {
+		return nil
+	}
+	guides := make([]ReviewGuide, 0, len(refs))
+	for _, ref := range refs {
+		guides = append(guides, ReviewGuide{
+			Path:        ref.Path,
+			ContentHash: ref.ContentHash,
+			Bytes:       ref.Bytes,
+			ReadCommand: fmt.Sprintf("git show %s:%s", trustedBaseSHA, ref.Path),
+		})
+	}
+	return guides
+}
+
+func guideTaskText(guides []ReviewGuide, instructions string) string {
+	if len(guides) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(instructions)
+	b.WriteString("\nConfigured guides (trusted, exact bytes, read via each guide's read_command):\n")
+	for _, g := range guides {
+		fmt.Fprintf(&b, "- %s (content_hash=%s, bytes=%d): %s\n", g.Path, g.ContentHash, g.Bytes, g.ReadCommand)
+	}
+	return b.String()
 }
 
 type ReviewTask struct {
@@ -96,6 +153,10 @@ func NewReviewTask(input ReviewInput) (ReviewTask, error) {
 			"broad refactoring suggestions",
 		},
 	}
+	contract.Guides = buildContractGuides(input.TrustedBaseSHA, input.Guides)
+	if len(contract.Guides) > 0 {
+		contract.GuideInstructions = ReviewGuideInstruction
+	}
 	contractJSON, err := json.Marshal(contract)
 	if err != nil {
 		return ReviewTask{}, fmt.Errorf("agent: encode review contract: %w", err)
@@ -104,7 +165,8 @@ func NewReviewTask(input ReviewInput) (ReviewTask, error) {
 		"Return only the structured object matching the supplied output schema.\n" +
 		"MADE_REVIEW_CONTRACT=" + string(contractJSON) + "\n" +
 		"Review every taxonomy category that applies, report exact affected paths for every patch, " +
-		"and do not report excluded material.\n"
+		"and do not report excluded material.\n" +
+		guideTaskText(contract.Guides, contract.GuideInstructions)
 	if len([]byte(text)) > maxReviewTaskBytes {
 		return ReviewTask{}, fmt.Errorf("agent: review task exceeds %d bytes", maxReviewTaskBytes)
 	}
@@ -161,6 +223,10 @@ func NewManagedReviewTask(input ReviewInput) (ReviewTask, error) {
 			"broad refactoring suggestions",
 		},
 	}
+	contract.Guides = buildContractGuides(input.TrustedBaseSHA, input.Guides)
+	if len(contract.Guides) > 0 {
+		contract.GuideInstructions = ReviewGuideInstruction
+	}
 	contractJSON, err := json.Marshal(contract)
 	if err != nil {
 		return ReviewTask{}, fmt.Errorf("agent: encode managed review contract: %w", err)
@@ -176,7 +242,8 @@ func NewManagedReviewTask(input ReviewInput) (ReviewTask, error) {
 		"- symbol (when multiple findings affect the same file): Stable locus or function name to disambiguate (e.g., 'validateToken', 'line 42').\n" +
 		"Review every taxonomy category that applies, report exact affected paths for every patch, " +
 		"include complete structural identity for every finding, " +
-		"and do not report excluded material.\n"
+		"and do not report excluded material.\n" +
+		guideTaskText(contract.Guides, contract.GuideInstructions)
 	if len([]byte(text)) > maxReviewTaskBytes {
 		return ReviewTask{}, fmt.Errorf("agent: managed review task exceeds %d bytes", maxReviewTaskBytes)
 	}

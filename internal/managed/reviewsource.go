@@ -28,6 +28,11 @@ type ReviewRequest struct {
 	ContractHash string
 	Timeout      time.Duration
 
+	// Guides is the trusted base's resolved guide bindings (project issue
+	// #40); nil for a project that configures none. Both InternalReviewSource
+	// and ExternalReviewSource are handed the identical list.
+	Guides []GuideBinding
+
 	// Internal-only.
 	AgentKind       agent.Kind
 	AgentBinaryPath string
@@ -46,6 +51,10 @@ type ReviewResult struct {
 	Message    string
 	Findings   []agent.Finding
 	Provenance ReviewProvenance
+	// GuidesConsulted is the reviewer's optional, bounded acknowledgment of
+	// which configured guides it read (project issue #40); nil when no
+	// guides were configured or the source never reports it.
+	GuidesConsulted []GuideConsulted
 }
 
 // ReviewProvenance is optional, informational-only metadata about how a
@@ -74,6 +83,7 @@ func (InternalReviewSource) Review(ctx context.Context, req ReviewRequest) (Revi
 		BaseBranch:    req.BaseSHA,
 		ReportOnly:    true,
 		EvidenceRunID: req.RunID,
+		Guides:        toReviewGuideRefs(req.Guides),
 	}
 	if req.AgentBinaryPath != "" {
 		reviewOpts.BinaryPath = req.AgentBinaryPath
@@ -109,6 +119,7 @@ func (ExternalReviewSource) Review(_ context.Context, req ReviewRequest) (Review
 		InputSHA:     req.InputSHA,
 		PolicyHash:   req.PolicyHash,
 		ContractHash: req.ContractHash,
+		Guides:       req.Guides,
 	})
 	if err != nil {
 		return ReviewResult{}, err
@@ -136,7 +147,19 @@ func (ExternalReviewSource) Review(_ context.Context, req ReviewRequest) (Review
 			RequestedModel: parsed.RequestedModel,
 			ActualModel:    parsed.ActualModel,
 		},
+		GuidesConsulted: parsed.GuidesConsulted,
 	}, nil
+}
+
+func toReviewGuideRefs(guides []GuideBinding) []agent.ReviewGuideRef {
+	if len(guides) == 0 {
+		return nil
+	}
+	refs := make([]agent.ReviewGuideRef, 0, len(guides))
+	for _, g := range guides {
+		refs = append(refs, agent.ReviewGuideRef{Path: g.Path, ContentHash: g.ContentHash, Bytes: g.Bytes})
+	}
+	return refs
 }
 
 func resolveReviewSource(name string) (ReviewSource, error) {

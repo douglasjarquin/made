@@ -252,6 +252,102 @@ func TestExternalReview_ActualModelSubstitutedAcceptedAsProvenanceOnly(t *testin
 	}
 }
 
+func testIdentityWithGuides() managed.ExternalReviewIdentity {
+	identity := testIdentity()
+	identity.Guides = []managed.GuideBinding{
+		{Path: ".made/features/README.md", ContentHash: "sha256:" + strings.Repeat("f", 64), Bytes: 10},
+	}
+	return identity
+}
+
+func TestExternalReview_GuidesConsulted_ValidEchoAccepted(t *testing.T) {
+	identity := testIdentityWithGuides()
+	payload := baseExternalResult(identity)
+	payload["guides_consulted"] = []map[string]any{
+		{"path": ".made/features/README.md", "content_hash": identity.Guides[0].ContentHash},
+	}
+	path := writeExternalResult(t, payload)
+	result, err := managed.ParseExternalReviewResult(path, identity)
+	if err != nil {
+		t.Fatalf("expected valid guides_consulted to parse, got: %v", err)
+	}
+	if len(result.GuidesConsulted) != 1 || result.GuidesConsulted[0].Path != ".made/features/README.md" {
+		t.Fatalf("expected guides_consulted to round-trip, got %+v", result.GuidesConsulted)
+	}
+}
+
+func TestExternalReview_GuidesConsulted_NotRequiredWhenGuidesConfigured(t *testing.T) {
+	identity := testIdentityWithGuides()
+	payload := baseExternalResult(identity)
+	path := writeExternalResult(t, payload)
+	if _, err := managed.ParseExternalReviewResult(path, identity); err != nil {
+		t.Fatalf("expected omitted guides_consulted to be accepted, got: %v", err)
+	}
+}
+
+func TestExternalReview_GuidesConsulted_InventedPathRejected(t *testing.T) {
+	identity := testIdentityWithGuides()
+	payload := baseExternalResult(identity)
+	payload["guides_consulted"] = []map[string]any{
+		{"path": "docs/never-configured.md", "content_hash": "sha256:" + strings.Repeat("9", 64)},
+	}
+	path := writeExternalResult(t, payload)
+	if _, err := managed.ParseExternalReviewResult(path, identity); err == nil {
+		t.Fatal("expected error for a guides_consulted entry referencing an unconfigured guide")
+	}
+}
+
+func TestExternalReview_GuidesConsulted_StaleContentHashRejected(t *testing.T) {
+	identity := testIdentityWithGuides()
+	payload := baseExternalResult(identity)
+	payload["guides_consulted"] = []map[string]any{
+		{"path": ".made/features/README.md", "content_hash": "sha256:" + strings.Repeat("9", 64)},
+	}
+	path := writeExternalResult(t, payload)
+	if _, err := managed.ParseExternalReviewResult(path, identity); err == nil {
+		t.Fatal("expected error for a stale guides_consulted content_hash")
+	}
+}
+
+func TestExternalReview_GuidesConsulted_DuplicatePathRejected(t *testing.T) {
+	identity := testIdentityWithGuides()
+	payload := baseExternalResult(identity)
+	entry := map[string]any{"path": ".made/features/README.md", "content_hash": identity.Guides[0].ContentHash}
+	payload["guides_consulted"] = []map[string]any{entry, entry}
+	path := writeExternalResult(t, payload)
+	if _, err := managed.ParseExternalReviewResult(path, identity); err == nil {
+		t.Fatal("expected error for duplicate guides_consulted path")
+	}
+}
+
+func TestExternalReview_GuidesConsulted_MissingContentHashRejected(t *testing.T) {
+	identity := testIdentityWithGuides()
+	payload := baseExternalResult(identity)
+	payload["guides_consulted"] = []map[string]any{
+		{"path": ".made/features/README.md", "content_hash": ""},
+	}
+	path := writeExternalResult(t, payload)
+	if _, err := managed.ParseExternalReviewResult(path, identity); err == nil {
+		t.Fatal("expected error for missing guides_consulted content_hash")
+	}
+}
+
+func TestExternalReview_GuidesConsulted_OversizedCountRejected(t *testing.T) {
+	identity := testIdentityWithGuides()
+	payload := baseExternalResult(identity)
+	consulted := make([]map[string]any, 0, 25)
+	for i := 0; i < 25; i++ {
+		consulted = append(consulted, map[string]any{
+			"path": ".made/features/README.md", "content_hash": identity.Guides[0].ContentHash,
+		})
+	}
+	payload["guides_consulted"] = consulted
+	path := writeExternalResult(t, payload)
+	if _, err := managed.ParseExternalReviewResult(path, identity); err == nil {
+		t.Fatal("expected error for oversized guides_consulted count")
+	}
+}
+
 func TestExternalReview_ActualModelEqualToRequestedAccepted(t *testing.T) {
 	identity := testIdentity()
 	payload := baseExternalResult(identity)

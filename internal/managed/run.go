@@ -78,6 +78,13 @@ func Run(ctx context.Context, opts *Options, stdout, stderr *os.File) int {
 		return emitInfraError("parse trusted config: " + err.Error())
 	}
 
+	// Phase 2b: Resolve and hash every configured guide from the trusted
+	// base (project issue #40), before Review or any other stage runs.
+	guides, err := ResolveTrustedGuides(TrustedGuideRoot(opts.TrustedConfig), cfg.Review.Guides)
+	if err != nil {
+		return emitInfraError("resolve review guides: " + err.Error())
+	}
+
 	// Phase 3: Load decisions (optional).
 	decs, err := readDecisions(opts.DecisionsPath, opts)
 	if err != nil {
@@ -105,7 +112,7 @@ func Run(ctx context.Context, opts *Options, stdout, stderr *os.File) int {
 	// itself when the plan has no effective work, after emitting a visible
 	// not_configured/disabled record for every stage - never silently.
 
-	runner := NewRunner(opts, cfg, ew, ev, decs, plan)
+	runner := NewRunner(opts, cfg, ew, ev, decs, plan, guides)
 	outcome, msg, stoppedAt := runner.Run(ctx)
 
 	if ctx.Err() != nil {
