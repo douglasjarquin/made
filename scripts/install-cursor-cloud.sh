@@ -41,5 +41,15 @@ echo "made: installed pinned build $sha to $INSTALL_DIR/made"
 curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "$INSTALL_DIR" "$GOLANGCI_LINT_VERSION"
 echo "made: installed golangci-lint $GOLANGCI_LINT_VERSION to $INSTALL_DIR/golangci-lint"
 
+if [ "$(uname -s)" = "Linux" ] && ! command -v bwrap >/dev/null 2>&1; then
+  if command -v apt-get >/dev/null 2>&1; then
+    (sudo apt-get update -qq && sudo apt-get install -y -qq bubblewrap) >/dev/null 2>&1 \
+      && echo "made: installed bubblewrap (required by internal/agent's reviewer containment on Linux)" \
+      || echo "made: WARNING - could not install bubblewrap; this repo's own go test ./... needs it on Linux for reviewer containment" >&2
+  else
+    echo "made: WARNING - bubblewrap not found and no apt-get available; this repo's own go test ./... needs it on Linux for reviewer containment" >&2
+  fi
+fi
+
 echo
 echo "Add $INSTALL_DIR to PATH if it is not already there."
