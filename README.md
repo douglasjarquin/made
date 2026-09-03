@@ -25,7 +25,7 @@ The opt-in disposable-repository smoke contract is `MADE_GITHUB_SMOKE_REPO` plus
 
 ## Daemonless verification
 
-`made verify` validates one committed SHA without a daemon, gate, push, PR, or CI polling. `made cursor init` / `sync` / `check` / `doctor` project a Cursor reviewer and `verify-with-made` skill from trusted config so a Cloud agent can drive that path. See `cmd/made/verify.go` and `cmd/made/cursor.go`.
+`made verify` validates one committed SHA without a daemon, gate, push, PR, or CI polling. `made cursor init` / `sync` / `check` / `doctor` project a Cursor reviewer and `verify-with-made` skill from trusted config so a Cloud agent can drive that path. This repository's Cursor Cloud machine is `.cursor/environment.json`. See `cmd/made/verify.go` and `cmd/made/cursor.go`.
 
 ## Versioned daemon contract
 
