@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 
 	"github.com/douglasjarquin/made/internal/config"
 	"github.com/douglasjarquin/made/internal/managed"
@@ -155,7 +154,7 @@ func RunEngine(ctx context.Context, p EngineParams) (EngineResult, error) {
 		Findings:         runner.AllFindings(),
 		EvidenceRefs:     runner.EvidenceRefs(),
 		DecisionsApplied: runner.DecisionsApplied(),
-		EvidenceDir:      filepath.Join(evidenceDir),
+		EvidenceDir:      ev.InvocationDir(),
 		Guides:           guides,
 	}, nil
 }
