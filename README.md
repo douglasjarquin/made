@@ -15,13 +15,17 @@ Both are equally valid first-class paths; neither is preferred, and having both 
 `made config path --json` reports which one a repository uses, `made config check --json` validates it without starting a pipeline, and `made config move --to root|directory` migrates between the two layouts.
 The legacy root `.made.yml` still works during a bounded deprecation window, but conflicts with either first-class path if both are present.
 
-CI check policy
+### CI check policy
 
 The trusted config copy may set `ci.check_scope` to `required` or `all`; the default is `required`.
 `ci.rerun_budget` counts rerun rounds, not individual checks.
 Made polls pending checks without spending a round, reruns each unique failed GitHub Actions workflow run only, and reports bounded evidence by failed check and run.
 External checks are reported by name and link and are never rerun.
 The opt-in disposable-repository smoke contract is `MADE_GITHUB_SMOKE_REPO` plus `MADE_GITHUB_SMOKE_PR_URL`, and `make release-validation` runs it when both are set.
+
+## Daemonless verification
+
+`made verify` validates one committed SHA without a daemon, gate, push, PR, or CI polling. `made cursor init` / `sync` / `check` / `doctor` project a Cursor reviewer and `verify-with-made` skill from trusted config so a Cloud agent can drive that path. See `cmd/made/verify.go` and `cmd/made/cursor.go`.
 
 ## Versioned daemon contract
 
