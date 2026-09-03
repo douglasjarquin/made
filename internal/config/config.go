@@ -5,6 +5,7 @@ import (
 	"path"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/douglasjarquin/made/internal/agent"
 	"github.com/douglasjarquin/made/internal/github"
@@ -19,6 +20,9 @@ const (
 	// knowledge, not a bulk document store (project issue #40).
 	MaxReviewGuides         = 20
 	MaxReviewGuidePathBytes = 512
+	// MaxCursorModelBytes bounds review.executors.cursor.model, a preference
+	// only - never a substitution-enforcement boundary (project issue #42).
+	MaxCursorModelBytes = 512
 )
 
 type Config struct {
@@ -89,11 +93,23 @@ type DocumentRule struct {
 }
 
 type Review struct {
-	Required bool     `yaml:"required"`
-	Guides   []string `yaml:"guides"`
+	Required  bool            `yaml:"required"`
+	Guides    []string        `yaml:"guides"`
+	Executors ReviewExecutors `yaml:"executors"`
+}
+
+type ReviewExecutors struct {
+	Cursor CursorExecutor `yaml:"cursor"`
+}
+
+type CursorExecutor struct {
+	Model string `yaml:"model"`
 }
 
 func (r Review) validate() error {
+	if err := validateCursorModel(r.Executors.Cursor.Model); err != nil {
+		return err
+	}
 	if len(r.Guides) > MaxReviewGuides {
 		return fmt.Errorf("config: review.guides has %d entries, exceeding the maximum of %d", len(r.Guides), MaxReviewGuides)
 	}
@@ -116,6 +132,24 @@ func (r Review) validate() error {
 			return fmt.Errorf("config: review.guides[%d] %q duplicates an earlier configured guide (normalized: %q)", i, raw, cleaned)
 		}
 		seen[cleaned] = struct{}{}
+	}
+	return nil
+}
+
+func validateCursorModel(model string) error {
+	if model == "" {
+		return nil
+	}
+	if len(model) > MaxCursorModelBytes {
+		return fmt.Errorf("config: review.executors.cursor.model exceeds %d bytes", MaxCursorModelBytes)
+	}
+	if strings.ContainsAny(model, "\r\n") {
+		return fmt.Errorf("config: review.executors.cursor.model must be a single line")
+	}
+	for _, r := range model {
+		if unicode.IsControl(r) {
+			return fmt.Errorf("config: review.executors.cursor.model must not contain control characters")
+		}
 	}
 	return nil
 }

@@ -45,6 +45,8 @@ func run(args []string, stdout, stderr *os.File) int {
 		return runConfigCommand(args[1:], stdout, stderr)
 	case "verify":
 		return runVerifyCommand(args[1:], stdout, stderr)
+	case "cursor":
+		return runCursorCommand(args[1:], stdout, stderr)
 	default:
 		_, _ = fmt.Fprintf(stderr, "made: unknown command %q\n", args[0])
 		return 2

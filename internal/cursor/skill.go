@@ -1,0 +1,121 @@
+package cursor
+
+import "strings"
+
+const (
+	SkillName        = "verify-with-made"
+	SkillDescription = "Complete Made's exact-SHA verification (made verify) for the current committed change, using an external Cursor reviewer subagent when Made Review is configured for Cursor."
+)
+
+func SkillMarkdown() string {
+	var b strings.Builder
+	b.WriteString("---\n")
+	b.WriteString("name: " + SkillName + "\n")
+	b.WriteString("description: " + SkillDescription + "\n")
+	b.WriteString("---\n")
+	b.WriteString(skillBody)
+	return b.String()
+}
+
+const skillBody = `
+# verify-with-made
+
+This skill is an operating adapter over Made's existing ` + "`made verify`" + `
+command surface (project issue #41). It never re-implements validation
+itself: ` + "`made verify prepare`" + `/` + "`made verify complete`" + ` do the actual work; this
+skill only sequences them correctly from inside a Cursor Cloud coding agent
+turn. No daemon, gate, push, pull request, or CI polling is ever involved.
+
+## Before you start
+
+Made must already be installed and on PATH before this skill runs - prefer a
+pinned Made release (` + "`made capabilities --json`" + ` should succeed) installed during
+the Cloud environment build; see "Installation" below. Do not clone,
+` + "`go install`" + `, or rebuild Made from source on every skill invocation.
+
+## Steps
+
+1. **Confirm the worktree is clean.** Every change you intend to verify must
+   already be committed on the current branch. Run ` + "`git status --porcelain`" + `
+   and commit or discard anything unexpected - Made verifies committed
+   history, not your working tree.
+2. **Run ` + "`made cursor doctor --json`" + `.** Confirm ` + "`healthy`" + ` is ` + "`true`" + ` before
+   continuing. Made never needs a daemon or gate for this flow, so a failing
+   check here means a real configuration or environment problem, not a
+   missing daemon.
+3. **Prepare the request.**
+
+   ` + "```sh" + `
+   made verify prepare --executor cursor --base-ref <trusted-ref> --json
+   ` + "```" + `
+
+   ` + "`<trusted-ref>`" + ` is the branch this candidate is measured against (e.g.
+   ` + "`origin/main`" + `); Made resolves ` + "`base_sha`" + ` as the local merge-base with the
+   current HEAD and never fetches. The JSON response's ` + "`request_path`" + ` names
+   the file you hand to the reviewer subagent next.
+4. **If Review is configured for Cursor** (` + "`made cursor doctor --json`" + `'s
+   ` + "`cursor_executor`" + ` check reports status ` + "`configured`" + `), invoke the
+   ` + "`made-reviewer`" + ` subagent with the exact contents of ` + "`request_path`" + ` as
+   its only input. Do not summarize, paraphrase, or add anything to the
+   request before handing it over.
+5. **Save the reviewer's output verbatim.** The reviewer returns one strict
+   JSON document (project issue #39's external Review schema). Write it,
+   byte-for-byte, to a result file. Never edit, wrap, reformat it, or convert
+   its prose into findings yourself - Made's own parser is the only thing
+   that interprets it.
+6. **Complete verification.**
+
+   ` + "```sh" + `
+   made verify complete --request <request_path> --review-result <result_path> --json
+   ` + "```" + `
+
+   Made re-validates the reviewer's result against the exact prepared
+   contract, runs the remaining configured Test/Document/Lint stages, and
+   writes an exact-HEAD receipt.
+7. **If Review is not configured for Cursor**, skip steps 3-6 entirely and
+   run:
+
+   ` + "```sh" + `
+   made verify run --base-ref <trusted-ref> --json
+   ` + "```" + `
+
+   This truthfully runs whatever Test/Document/Lint stages the trusted
+   configuration defines. Do not invent a Review result, and do not invoke
+   ` + "`made-reviewer`" + ` when it was never requested.
+8. **On ` + "`failed_retryable`" + `:** fix only the findings the receipt actually
+   reports, commit the fix as a new SHA, and start a fresh cycle at step 1.
+   Never reuse a request, result, or receipt from the prior SHA - each
+   ` + "`made verify prepare`" + ` binds to exactly one ` + "`input_sha`" + `.
+9. **On ` + "`needs_decision`" + `:** stop. Surface the exact decision required; this
+   skill has no authority to record a Decision on your behalf.
+10. **On ` + "`failed_terminal`" + `, ` + "`infrastructure_error`" + `, or ` + "`canceled`" + `:** report the
+    receipt's exact ` + "`message`" + `, ` + "`stopped_at`" + ` stage, and evidence references.
+    Do not retry blindly or guess at a fix the evidence doesn't support.
+11. **On ` + "`passed`" + `:** report the exact ` + "`input_sha`" + `, Review provenance (` + "`source`" + `,
+    ` + "`executor`" + `, ` + "`requested_model`" + `, ` + "`actual_model`" + `), the guides supplied, per-stage
+    coverage, and the receipt's location.
+12. **Never**, at any point in this flow: start the Made daemon, run
+    ` + "`made gate init`" + `, push a branch, open a pull request, poll CI, or merge
+    anything. This flow has no such command in it precisely so it can't.
+13. **Never reuse** a request, result, or receipt bound to an earlier SHA,
+    even if the change looks trivial - always run ` + "`made verify prepare`" + `
+    again for the current HEAD.
+
+## Retry loop
+
+Every ` + "`made verify prepare`" + ` binds one exact ` + "`input_sha`" + ` to one request; every
+` + "`made verify complete`" + ` re-validates that exact binding before running
+anything. A new commit always means: retire the old request/result, run
+` + "`made verify prepare`" + ` again for the new SHA, and get a fresh ` + "`made-reviewer`" + `
+subagent context - never patch an old request or reuse an old reviewer
+result against a new commit.
+
+## Installation
+
+Until Made ships pinned release automation, install a pinned development
+build of Made during the Cloud environment build step, before any agent turn
+starts. Once release automation exists, the intended flow is: the Cloud
+Build downloads and verifies a pinned Made binary, places it on PATH before
+the agent turn begins, and ` + "`made capabilities --json`" + ` proves the required
+interfaces are present.
+` + "\n<!-- " + GeneratedMarker + " -->\n"

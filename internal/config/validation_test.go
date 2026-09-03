@@ -211,6 +211,99 @@ func TestConfig_Validate_RejectsTooManyGuides(t *testing.T) {
 	}
 }
 
+func TestConfig_Validate_NoCursorModelIsValid(t *testing.T) {
+	if err := (config.Config{}).Validate(); err != nil {
+		t.Fatalf("expected no cursor executor to be valid, got %v", err)
+	}
+}
+
+func TestConfig_Validate_AcceptsSimpleCursorModel(t *testing.T) {
+	cfg := config.Config{Review: config.Review{Executors: config.ReviewExecutors{
+		Cursor: config.CursorExecutor{Model: "claude-opus-5"},
+	}}}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected a simple cursor model to validate, got %v", err)
+	}
+}
+
+func TestConfig_Validate_AcceptsParameterizedCursorModel(t *testing.T) {
+	cfg := config.Config{Review: config.Review{Executors: config.ReviewExecutors{
+		Cursor: config.CursorExecutor{Model: "claude-opus-5[effort=high,context=300k]"},
+	}}}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected a parameterized cursor model to validate, got %v", err)
+	}
+}
+
+func TestConfig_Validate_RejectsEmptyStringCursorModelAsAbsent(t *testing.T) {
+	cfg := config.Config{Review: config.Review{Executors: config.ReviewExecutors{
+		Cursor: config.CursorExecutor{Model: ""},
+	}}}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected an empty cursor model to be treated as unconfigured, got %v", err)
+	}
+}
+
+func TestConfig_Validate_RejectsMultilineCursorModel(t *testing.T) {
+	cfg := config.Config{Review: config.Review{Executors: config.ReviewExecutors{
+		Cursor: config.CursorExecutor{Model: "claude-opus-5\nrm -rf /"},
+	}}}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected an error for a multiline cursor model")
+	}
+	if !strings.Contains(err.Error(), "single line") {
+		t.Fatalf("expected error to mention single line, got %v", err)
+	}
+}
+
+func TestConfig_Validate_RejectsControlCharacterCursorModel(t *testing.T) {
+	cfg := config.Config{Review: config.Review{Executors: config.ReviewExecutors{
+		Cursor: config.CursorExecutor{Model: "claude-opus-5\x00"},
+	}}}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected an error for a control character in cursor model")
+	}
+	if !strings.Contains(err.Error(), "control characters") {
+		t.Fatalf("expected error to mention control characters, got %v", err)
+	}
+}
+
+func TestConfig_Validate_RejectsOversizedCursorModel(t *testing.T) {
+	cfg := config.Config{Review: config.Review{Executors: config.ReviewExecutors{
+		Cursor: config.CursorExecutor{Model: strings.Repeat("a", config.MaxCursorModelBytes+1)},
+	}}}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected an error for an oversized cursor model")
+	}
+	if !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("expected error to mention the size bound, got %v", err)
+	}
+}
+
+func TestConfig_Validate_TopLevelAgentAndCursorModelCoexist(t *testing.T) {
+	cfg := config.Config{
+		Agent: "codex",
+		Review: config.Review{
+			Required: true,
+			Executors: config.ReviewExecutors{
+				Cursor: config.CursorExecutor{Model: "claude-opus-5[effort=high,context=300k]"},
+			},
+		},
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected top-level agent and cursor model to coexist, got %v", err)
+	}
+	if cfg.Agent != "codex" {
+		t.Fatalf("expected top-level agent to be unaffected by cursor model, got %q", cfg.Agent)
+	}
+	if cfg.Review.Executors.Cursor.Model == cfg.Agent {
+		t.Fatalf("cursor model must be independent of top-level agent")
+	}
+}
+
 func TestLoadEffectiveConfig_RoundTripsValidationLanesFromTrusted(t *testing.T) {
 	dir := t.TempDir()
 	trustedPath := filepath.Join(dir, ".made.yml")
