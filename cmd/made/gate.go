@@ -34,6 +34,9 @@ func runGateCommand(args []string, stdout, stderr *os.File) int {
 		_, _ = fmt.Fprintln(stderr, "usage: made gate init <target-repo-path> <real-remote-url>")
 		return 2
 	}
+	if isHelp(args[0]) {
+		return printHelp(stdout, "usage: made gate <init|admit-push|notify-push> [args]")
+	}
 
 	switch args[0] {
 	case "init":

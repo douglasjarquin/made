@@ -14,6 +14,9 @@ func run(args []string, stdout, stderr *os.File) int {
 		_, _ = fmt.Fprintln(stderr, "usage: made <command> [args]")
 		return 2
 	}
+	if isHelp(args[0]) {
+		return printHelp(stdout, "usage: made <command> [args]")
+	}
 
 	switch args[0] {
 	case "validate":
@@ -30,6 +33,9 @@ func run(args []string, stdout, stderr *os.File) int {
 	case "review":
 		if len(args) > 1 && args[1] == "decide" {
 			return runReviewDecideCommand(args[2:], stdout, stderr)
+		}
+		if len(args) > 1 && isHelp(args[1]) {
+			return printHelp(stdout, "usage: made review <decide> [args]")
 		}
 		_, _ = fmt.Fprintln(stderr, "made review: use the versioned decide subcommand")
 		return 2
@@ -51,4 +57,13 @@ func run(args []string, stdout, stderr *os.File) int {
 		_, _ = fmt.Fprintf(stderr, "made: unknown command %q\n", args[0])
 		return 2
 	}
+}
+
+func isHelp(arg string) bool {
+	return arg == "--help" || arg == "-h"
+}
+
+func printHelp(stdout *os.File, usage string) int {
+	_, _ = fmt.Fprintln(stdout, usage)
+	return 0
 }

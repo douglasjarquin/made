@@ -20,6 +20,9 @@ func runCursorCommand(args []string, stdout, stderr *os.File) int {
 		_, _ = fmt.Fprintln(stderr, "usage: made cursor <init|sync|check|doctor> [args]")
 		return 2
 	}
+	if isHelp(args[0]) {
+		return printHelp(stdout, "usage: made cursor <init|sync|check|doctor> [args]")
+	}
 	switch args[0] {
 	case "init":
 		return runCursorInitCommand(args[1:], stdout, stderr)
