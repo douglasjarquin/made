@@ -8,7 +8,9 @@ import (
 )
 
 func TestSkillMarkdown_IsDeterministic(t *testing.T) {
-	if cursor.SkillMarkdown() != cursor.SkillMarkdown() {
+	first := cursor.SkillMarkdown()
+	second := cursor.SkillMarkdown()
+	if first != second {
 		t.Fatal("expected identical output across calls")
 	}
 }
