@@ -83,7 +83,10 @@ func Doctor(ctx context.Context, p DoctorParams) DoctorReport {
 	}
 
 	if model != "" {
-		if err := cfg.Validate(); err != nil {
+		// The relaxed check: made verify/managed mode satisfies required
+		// Review through this external Cursor executor, never Config.Validate's
+		// stricter "review.required implies an internal agent" rule.
+		if err := cfg.ValidateWithoutReviewAgentRequirement(); err != nil {
 			record(DoctorCheck{Name: "cursor_model", Status: StatusFail, Detail: err.Error()})
 		} else {
 			record(DoctorCheck{Name: "cursor_model", Status: StatusOK, Detail: model})

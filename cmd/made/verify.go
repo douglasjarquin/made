@@ -60,8 +60,7 @@ func runVerifyRunCommand(args []string, stdout, stderr *os.File) int {
 
 	out, err := verify.Run(ctx, verify.RunParams{WorkDir: *repoPath, BaseRef: *baseRef})
 	if err != nil {
-		_, _ = fmt.Fprintln(stderr, "made verify:", err)
-		return 1
+		return failVerify(stdout, stderr, *asJSON, "made verify", err)
 	}
 
 	if *asJSON {
@@ -101,8 +100,7 @@ func runVerifyPrepareCommand(args []string, stdout, stderr *os.File) int {
 		TaskFile:       *taskFile,
 	})
 	if err != nil {
-		_, _ = fmt.Fprintln(stderr, "made verify prepare:", err)
-		return 1
+		return failVerify(stdout, stderr, *asJSON, "made verify prepare", err)
 	}
 
 	if *asJSON {
@@ -164,8 +162,7 @@ func runVerifyCompleteCommand(args []string, stdout, stderr *os.File) int {
 		ReviewResultPath: *reviewResult,
 	})
 	if err != nil {
-		_, _ = fmt.Fprintln(stderr, "made verify complete:", err)
-		return 1
+		return failVerify(stdout, stderr, *asJSON, "made verify complete", err)
 	}
 
 	if *asJSON {
@@ -284,6 +281,31 @@ func runVerifyCleanCommand(args []string, stdout, stderr *os.File) int {
 	}
 	_, _ = fmt.Fprintf(stdout, "Removed %s\n", dir)
 	return 0
+}
+
+// jsonErrorEnvelope is the bounded JSON document written to stdout when
+// made verify [run]/prepare/complete --json fails before it can build its
+// normal success payload (an Outcome doesn't exist yet at that point), so a
+// caller parsing --json output always gets valid JSON on stdout, never a
+// bare stderr line.
+type jsonErrorEnvelope struct {
+	Error    string `json:"error"`
+	ExitCode int    `json:"exit_code"`
+}
+
+// failVerify reports a pre-Outcome failure (config-locate, guide resolution,
+// HEAD/worktree/contract drift, etc.). Human-mode stderr output is unchanged;
+// --json additionally gets a parseable error envelope on stdout, mapped to
+// infrastructure_error's exit code since these failures are exactly that
+// class in internal/managed's own classification.
+func failVerify(stdout, stderr *os.File, asJSON bool, prefix string, err error) int {
+	message := fmt.Sprintf("%s: %s", prefix, err)
+	_, _ = fmt.Fprintln(stderr, message)
+	exitCode := managed.OutcomeInfrastructureError.ExitCode()
+	if asJSON {
+		_ = json.NewEncoder(stdout).Encode(jsonErrorEnvelope{Error: message, ExitCode: exitCode})
+	}
+	return exitCode
 }
 
 func emitJSON(stdout, stderr *os.File, v any, exitCode int) int {

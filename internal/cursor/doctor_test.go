@@ -54,6 +54,27 @@ func TestDoctor_HealthyWithCursorConfigured(t *testing.T) {
 	assertCheck(t, report, "projections", cursor.StatusOK)
 }
 
+func TestDoctor_HealthyWithCursorExternalOnlyAndReviewRequired(t *testing.T) {
+	dir := newDoctorRepo(t, "version: 1\nreview:\n  required: true\n  executors:\n    cursor:\n      model: \"claude-opus-5[effort=high]\"\n")
+	if _, err := cursor.Sync(dir, mustConfig(t, dir), false); err != nil {
+		t.Fatal(err)
+	}
+	report := cursor.Doctor(context.Background(), cursor.DoctorParams{Root: dir})
+	if !report.Healthy {
+		t.Fatalf("expected a healthy report for a Cursor-external-only config with no top-level agent, got %+v", report)
+	}
+	assertCheck(t, report, "cursor_model", cursor.StatusOK)
+}
+
+func TestDoctor_UnhealthyWithoutWorkingAgentOrCursorExecutor(t *testing.T) {
+	dir := newDoctorRepo(t, "version: 1\nagent: nonexistent\nreview:\n  required: true\n")
+	report := cursor.Doctor(context.Background(), cursor.DoctorParams{Root: dir})
+	if report.Healthy {
+		t.Fatalf("expected an unhealthy report when neither a working internal agent nor a configured Cursor executor is present, got %+v", report)
+	}
+	assertCheck(t, report, "config", cursor.StatusFail)
+}
+
 func TestDoctor_UnhealthyWithoutConfig(t *testing.T) {
 	dir := t.TempDir()
 	gitAt(t, dir, "init", "-b", "main")
