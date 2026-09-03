@@ -1,6 +1,7 @@
 #!/bin/sh
 # Interim pinned installer for Cursor Cloud environments (project issue #43).
-# Not release automation - see issue #27 for the real, checksummed,
+# This repository's .cursor/environment.json runs it as the Cloud Build install
+# step. Not release automation - see issue #27 for the real, checksummed,
 # code-signed release path this replaces once it exists.
 set -eu
 

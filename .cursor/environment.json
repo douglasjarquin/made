@@ -1,0 +1,7 @@
+{
+  "build": {
+    "dockerfile": "../docker/dev/Dockerfile",
+    "context": ".."
+  },
+  "install": "./scripts/install-cursor-cloud.sh && go mod download && go build ./..."
+}
