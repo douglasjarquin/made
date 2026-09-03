@@ -50,7 +50,9 @@ func TestBuildLaneFingerprint_MatchedPathOrderDoesNotAffectHash(t *testing.T) {
 }
 
 func TestToolchainFingerprint_IsDeterministicWithinAProcess(t *testing.T) {
-	if receipt.ToolchainFingerprint() != receipt.ToolchainFingerprint() {
+	first := receipt.ToolchainFingerprint()
+	second := receipt.ToolchainFingerprint()
+	if first != second {
 		t.Fatal("expected ToolchainFingerprint to be stable within one process")
 	}
 }
