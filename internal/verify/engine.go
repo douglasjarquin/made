@@ -127,6 +127,7 @@ func RunEngine(ctx context.Context, p EngineParams) (EngineResult, error) {
 	}
 
 	manifest := &managed.TerminalManifest{
+		SchemaVersion:    managed.TerminalManifestSchemaVersion,
 		RunID:            opts.RunID,
 		MissionID:        opts.MissionID,
 		InvocationID:     invocationID,

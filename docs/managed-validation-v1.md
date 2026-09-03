@@ -141,7 +141,8 @@ A run whose plan has no stage in the `run` state fails with
 
 Managed V1 stops after the first `run` stage that produces a non-pass
 outcome. All findings from that stage are reported before stopping. Later
-stages do not run. A `not_configured` or `disabled` stage never stops the
+stages do not run, but remain visible in `stage_results` at `pending` rather
+than being omitted. A `not_configured` or `disabled` stage never stops the
 run.
 
 ### Review (report-only)
@@ -302,7 +303,10 @@ The terminal event `run.completed` carries:
 
 `not_configured` and `disabled` are stage-level coverage states reported on
 `stage.completed` events (section 9); they never appear as a run's terminal
-outcome.
+outcome. `pending` is a stage-level coverage state reported only in
+`stage_results` (terminal.json, section 13): a stage planned to `run` that
+Run stopped before reaching. It is never emitted as a `stage.completed`
+event and never appears as a run's terminal outcome.
 
 ### Exit codes
 
@@ -586,20 +590,31 @@ Summarizes the complete run:
 
 ```json
 {
+  "schema_version": 2,
   "run_id": "G-229",
   "mission_id": "M-402",
   "base_sha": "1111111111111111111111111111111111111111",
   "input_sha": "2222222222222222222222222222222222222222",
   "policy_hash": "sha256:...",
-  "stage_results": [],
+  "stage_results": [
+    {"stage": "review", "outcome": "failed_terminal", "message": "blocking finding: ..."},
+    {"stage": "test", "outcome": "pending"},
+    {"stage": "document", "outcome": "not_configured", "message": "no document.rules configured"},
+    {"stage": "lint", "outcome": "pending"}
+  ],
   "findings": [],
   "decisions_applied": [],
-  "outcome": "passed",
+  "outcome": "failed_terminal",
   "event_count": 12,
   "evidence_refs": [],
   "made_version": "..."
 }
 ```
+
+`schema_version` versions `terminal.json`'s own shape (currently 2), independent
+of the JSON-Lines event envelope's `schema_version` (section 9, currently 1).
+It was bumped from an unversioned baseline when `stage_results` started
+reporting unreached `run` stages at `pending` instead of omitting them.
 
 - No evidence commit is created
 - No evidence branch is pushed

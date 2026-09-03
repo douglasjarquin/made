@@ -56,16 +56,18 @@ func NewRunner(opts *Options, cfg config.Config, ew *EventWriter, ev *ManagedEvi
 // Run executes every stage the plan marks StagePlanRun, in order, and emits
 // a visible stage.completed record for every not_configured or disabled
 // stage without pretending work ran. It stops at the first stage outcome
-// that is not passed, not_configured, or disabled, while every planned
-// stage - including ones never reached - remains in StageResults via the
-// plan the caller already has.
+// that is not passed, not_configured, or disabled. Every planned stage is
+// seeded into StageResults before execution starts, so a stage never
+// reached because of that early stop stays visible at pending instead of
+// being silently omitted.
 func (r *Runner) Run(ctx context.Context) (Outcome, string, string) {
 	planned := []StagePlanEntry{r.plan.Review, r.plan.Test, r.plan.Document, r.plan.Lint}
+	r.stageResults = initialStageResults(planned)
 	lastStage := stageLint
 	ranAnyStage := false
-	for _, entry := range planned {
+	for i, entry := range planned {
 		lastStage = entry.Stage
-		outcome, msg, stoppedAt := r.runStage(ctx, entry)
+		outcome, msg, stoppedAt := r.runStage(ctx, entry, i)
 		switch outcome {
 		case OutcomePassed, OutcomeNotConfigured, OutcomeDisabled:
 			if entry.State == StagePlanRun {
@@ -84,7 +86,23 @@ func (r *Runner) Run(ctx context.Context) (Outcome, string, string) {
 	return OutcomePassed, "all configured managed validation stages passed", lastStage
 }
 
-func (r *Runner) runStage(ctx context.Context, entry StagePlanEntry) (Outcome, string, string) {
+// initialStageResults seeds one StageResult per planned stage before any
+// stage executes: a stage the plan already knows won't run starts at its
+// known coverage outcome, and a stage planned to run starts at pending so
+// Run's early stop leaves it visibly pending rather than absent.
+func initialStageResults(planned []StagePlanEntry) []StageResult {
+	results := make([]StageResult, len(planned))
+	for i, entry := range planned {
+		if entry.State == StagePlanRun {
+			results[i] = StageResult{Stage: entry.Stage, Outcome: OutcomePending}
+			continue
+		}
+		results[i] = StageResult{Stage: entry.Stage, Outcome: skipOutcome(entry.State), Message: entry.Reason}
+	}
+	return results
+}
+
+func (r *Runner) runStage(ctx context.Context, entry StagePlanEntry, index int) (Outcome, string, string) {
 	stage := entry.Stage
 	if err := r.ew.Emit("stage.started", StageStartedPayload{Stage: stage}); err != nil {
 		return OutcomeInfrastructureError, fmt.Sprintf("emit stage.started: %s", err), stage
@@ -92,7 +110,7 @@ func (r *Runner) runStage(ctx context.Context, entry StagePlanEntry) (Outcome, s
 
 	if entry.State != StagePlanRun {
 		msg := entry.Reason
-		r.stageResults = append(r.stageResults, StageResult{Stage: stage, Outcome: skipOutcome(entry.State), Message: msg})
+		r.stageResults[index] = StageResult{Stage: stage, Outcome: skipOutcome(entry.State), Message: msg}
 		if emitErr := r.ew.Emit("stage.completed", StageCompletedPayload{Stage: stage, Outcome: skipOutcome(entry.State), Message: msg}); emitErr != nil {
 			return OutcomeInfrastructureError, fmt.Sprintf("emit stage.completed: %s", emitErr), stage
 		}
@@ -119,7 +137,7 @@ func (r *Runner) runStage(ctx context.Context, entry StagePlanEntry) (Outcome, s
 			Outcome: OutcomeInfrastructureError,
 			Message: "stage mutated workspace: " + mutErr.Error(),
 		})
-		r.stageResults = append(r.stageResults, StageResult{Stage: stage, Outcome: OutcomeInfrastructureError, Message: mutErr.Error()})
+		r.stageResults[index] = StageResult{Stage: stage, Outcome: OutcomeInfrastructureError, Message: mutErr.Error()}
 		return OutcomeInfrastructureError, "stage " + stage + " mutated workspace: " + mutErr.Error(), stage
 	}
 
@@ -129,7 +147,7 @@ func (r *Runner) runStage(ctx context.Context, entry StagePlanEntry) (Outcome, s
 	}
 
 	r.allFindings = append(r.allFindings, findings...)
-	r.stageResults = append(r.stageResults, StageResult{Stage: stage, Outcome: outcome, Message: msg, Findings: findings})
+	r.stageResults[index] = StageResult{Stage: stage, Outcome: outcome, Message: msg, Findings: findings}
 
 	for _, ref := range refs {
 		r.evidenceRefs = append(r.evidenceRefs, ref)
