@@ -37,7 +37,7 @@ func TestSpawn_CodexUsesStructuredExecContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read invocation log: %v", err)
 	}
-	for _, token := range []string{"exec", "--cd", "--json", "--output-schema", "--sandbox", "read-only", "--ephemeral", "-"} {
+	for _, token := range []string{"exec", "--cd", "--json", "--output-schema", "--sandbox", "read-only", "--ephemeral", "-", "--ignore-user-config"} {
 		if !strings.Contains(string(data), token) {
 			t.Fatalf("expected Codex structured invocation token %q, got %s", token, data)
 		}
