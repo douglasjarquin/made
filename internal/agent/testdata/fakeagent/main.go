@@ -34,7 +34,11 @@ func main() {
 		logInvocation(logPath)
 	}
 
+	scenarioPath := os.Getenv("FAKE_AGENT_SCENARIO")
 	if code := os.Getenv("FAKE_AGENT_EXIT_CODE"); code != "" && code != "0" {
+		if scenarioPath != "" {
+			writeOutputFile(scenarioPath, os.Stdout)
+		}
 		fmt.Fprintf(os.Stderr, "fakeagent: scripted non-zero exit %s\n", code)
 		os.Exit(1)
 	}
@@ -47,7 +51,6 @@ func main() {
 		}
 	}
 
-	scenarioPath := os.Getenv("FAKE_AGENT_SCENARIO")
 	if scenarioPath == "" {
 		fmt.Fprintln(os.Stderr, "fakeagent: FAKE_AGENT_SCENARIO env var is required")
 		os.Exit(1)
@@ -68,11 +71,17 @@ func main() {
 const agentKindCodex = "codex"
 
 func validateInvocation(args []string) error {
-	if len(args) != 10 {
-		return fmt.Errorf("want 10 arguments, got %d", len(args))
+	if len(args) != 10 && len(args) != 11 {
+		return fmt.Errorf("want 10 or 11 arguments, got %d", len(args))
 	}
-	if args[0] != "exec" || args[1] != "--cd" || args[3] != "--json" || args[4] != "--output-schema" || args[6] != "--sandbox" || args[7] != "read-only" || args[8] != "--ephemeral" || args[9] != "-" {
+	if args[0] != "exec" || args[1] != "--cd" || args[3] != "--json" || args[4] != "--output-schema" || args[6] != "--sandbox" || args[7] != "read-only" || args[8] != "--ephemeral" {
 		return fmt.Errorf("expected codex exec structured flags, got %v", args)
+	}
+	if len(args) == 10 && args[9] != "-" {
+		return fmt.Errorf("expected stdin prompt sentinel, got %v", args)
+	}
+	if len(args) == 11 && (args[9] != "--ignore-user-config" || args[10] != "-") {
+		return fmt.Errorf("expected Codex user-config override, got %v", args)
 	}
 	if filepath.IsAbs(args[2]) == false || filepath.IsAbs(args[5]) == false {
 		return fmt.Errorf("review and schema paths must be absolute")
@@ -81,6 +90,18 @@ func validateInvocation(args []string) error {
 		return fmt.Errorf("review worktree is required")
 	}
 	return nil
+}
+
+func writeOutputFile(path string, output *os.File) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fakeagent: read scripted output %s: %v\n", path, err)
+		os.Exit(1)
+	}
+	if _, err := output.Write(data); err != nil {
+		fmt.Fprintf(os.Stderr, "fakeagent: write scripted output: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 func logInvocation(logPath string) {

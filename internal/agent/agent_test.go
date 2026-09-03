@@ -82,17 +82,39 @@ func TestSpawn_ParsesFindingsFromFakeAgent(t *testing.T) {
 
 func TestSpawn_NonZeroExitReturnsError(t *testing.T) {
 	bin := agenttest.Build(t)
+	stdoutPath := filepath.Join(t.TempDir(), "stdout.txt")
+	stdout := "api_key=super-secret\n" + strings.Repeat("x", 2<<20)
+	if err := os.WriteFile(stdoutPath, []byte(stdout), 0o600); err != nil {
+		t.Fatalf("write fake stdout: %v", err)
+	}
 
 	_, err := agent.Spawn(context.Background(), agent.KindCodex, agent.SpawnParams{
 		WorktreePath: agentWorktree(t),
 		BinaryPath:   bin,
-		ExtraEnv:     []string{"FAKE_AGENT_KIND=codex", "FAKE_AGENT_EXIT_CODE=1"},
+		ExtraEnv: []string{
+			"FAKE_AGENT_KIND=codex",
+			"FAKE_AGENT_EXIT_CODE=1",
+			"FAKE_AGENT_SCENARIO=" + stdoutPath,
+		},
 	})
 	if err == nil {
 		t.Fatal("expected an error for a non-zero fakeagent exit")
 	}
 	if !strings.Contains(err.Error(), "codex") {
 		t.Fatalf("expected error to name the agent kind, got %v", err)
+	}
+	message := err.Error()
+	if !strings.Contains(message, "stdout=") || !strings.Contains(message, "[REDACTED]") {
+		t.Fatalf("expected bounded redacted stdout evidence, got %v", err)
+	}
+	if strings.Contains(message, "super-secret") {
+		t.Fatalf("expected stdout secret to be redacted, got %v", err)
+	}
+	if !strings.Contains(message, "stderr=fakeagent: scripted non-zero exit 1") {
+		t.Fatalf("expected stderr evidence, got %v", err)
+	}
+	if !strings.Contains(message, "[output truncated]") || len(message) > (1<<20)+1024 {
+		t.Fatalf("expected bounded stdout evidence, got len=%d", len(message))
 	}
 }
 

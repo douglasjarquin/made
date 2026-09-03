@@ -91,7 +91,7 @@ func SpawnWithEvidence(ctx context.Context, kind Kind, params SpawnParams) (Spaw
 		return SpawnResult{}, fmt.Errorf("agent: spawn %s (%s): %w", kind, binary, err)
 	}
 	if result.ExitCode != 0 {
-		return SpawnResult{}, fmt.Errorf("agent: %s (%s) exited %d: %s", kind, binary, result.ExitCode, evidence.RedactString(string(result.Stderr)))
+		return SpawnResult{}, fmt.Errorf("agent: %s (%s) exited %d: stdout=%s stderr=%s", kind, binary, result.ExitCode, evidence.RedactString(string(result.Stdout)), evidence.RedactString(string(result.Stderr)))
 	}
 
 	response, err := extractStructuredResponse(result.Stdout)
@@ -144,7 +144,7 @@ func invocation(kind Kind, worktree string) ([]string, func(), error) {
 		_ = os.RemoveAll(dir)
 		return nil, nil, fmt.Errorf("agent: write Codex output schema: %w", err)
 	}
-	return []string{"exec", "--cd", worktree, "--json", "--output-schema", schemaPath, "--sandbox", "read-only", "--ephemeral", "-"}, func() { _ = os.RemoveAll(dir) }, nil
+	return []string{"exec", "--cd", worktree, "--json", "--output-schema", schemaPath, "--sandbox", "read-only", "--ephemeral", "--ignore-user-config", "-"}, func() { _ = os.RemoveAll(dir) }, nil
 }
 
 func extractStructuredResponse(data []byte) ([]byte, error) {
