@@ -30,7 +30,7 @@ func TestCapabilitiesJSONExposesStructuredRunContract(t *testing.T) {
 	if payload.SchemaVersion == 0 || payload.ProtocolVersion == 0 {
 		t.Fatalf("capabilities versions missing: %+v", payload)
 	}
-	for _, want := range []string{"run.submit", "run.status", "run.list", "run.cancel", "review.decide", "doctor"} {
+	for _, want := range []string{"run.submit", "run.status", "run.list", "run.cancel", "review.decide", "doctor", "verify", "cursor"} {
 		found := false
 		for _, got := range payload.Commands {
 			if got == want {

@@ -637,7 +637,7 @@ Managed mode does not modify:
 - The standalone pipeline's `parkForApproval` wait
 - Any daemon persistence
 
-`made capabilities --json` is extended additively: `"validate.managed.v1"` is added to the `commands` list, and a `managed_validation` object reports `review_sources` (`["internal", "external"]`) and `optional_stages` (`["review", "test", "document", "lint"]`).
+`made capabilities --json` is extended additively: `"validate.managed.v1"` is added to the `commands` list, and a `managed_validation` object reports `review_sources` (`["internal", "external"]`) and `optional_stages` (`["review", "test", "document", "lint"]`). `"verify"` and `"cursor"` are likewise added to `commands` (project issues #41/#42), advertising the `made verify` and `made cursor` command surfaces; neither bumps `schema_version`.
 
 ---
 
