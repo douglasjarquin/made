@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -23,7 +24,7 @@ func runPlanCommand(args []string, stdout, stderr *os.File) int {
 	base := fs.String("base", "", "base branch/ref to diff against (defaults to origin/HEAD, then main)")
 	candidate := fs.String("candidate", "HEAD", "candidate ref to diff (defaults to HEAD)")
 	repoPath := fs.String("repo", ".", "path to the repository to plan")
-	configPath := fs.String("config", "", "path to a .made.yml to use as the effective config (defaults to <repo>/.made.yml)")
+	configPath := fs.String("config", "", "explicit config path, overriding discovery of .made.yaml/.made/config.yaml/.made.yml under --repo")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -47,7 +48,17 @@ func runPlanCommand(args []string, stdout, stderr *os.File) int {
 
 	path := *configPath
 	if path == "" {
-		path = *repoPath + "/.made.yml"
+		absRepo, err := filepath.Abs(*repoPath)
+		if err != nil {
+			_, _ = fmt.Fprintln(stderr, "made plan: resolve repo path:", err)
+			return 1
+		}
+		loc, err := config.Locate(absRepo)
+		if err != nil {
+			_, _ = fmt.Fprintln(stderr, "made plan: locate config:", err)
+			return 1
+		}
+		path = loc.Path
 	}
 	cfg, err := config.LoadEffectiveConfig(path, path)
 	if err != nil {

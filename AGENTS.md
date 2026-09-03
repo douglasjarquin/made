@@ -5,7 +5,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - Add durable project-specific notes here as they are discovered through real work.
 
 - The versioned runtime contract is implemented at `cmd/made/runcommands.go` and `internal/daemon`; validate it through `made capabilities --json` and the `made run ... --json` commands.
-- `.made.yml` is decoded strictly with `version: 1`; the authoritative loader is `internal/config/config.go`.
+- Config lives at `.made.yaml` or `.made/config.yaml` (equally valid, conflict if both present); legacy root `.made.yml` still works during a bounded deprecation window. All three are decoded strictly with `version: 1`. The sole discovery entry point is `config.Locate` in `internal/config/locate.go`; the loader is `internal/config/file.go`.
 - Local git fixtures can inherit SSH commit signing from the host; use process-local `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false` when running the Go test suite.
 
 ## Maintaining this file

@@ -119,20 +119,20 @@ func resolveConfig(ctx context.Context, gatePath, defaultBranch, worktreePath st
 	if err := refreshDefaultBranch(ctx, gatePath, defaultBranch); err != nil {
 		return config.Config{}, err
 	}
-	trustedPath, cleanup, err := extractTrustedConfig(ctx, gatePath, defaultBranch)
+	trustedPath, _, cleanup, err := extractTrustedConfig(ctx, gatePath, defaultBranch)
 	if err != nil {
-		return config.Config{}, err
+		return config.Config{}, fmt.Errorf("orchestrator: resolve trusted config: %w", err)
 	}
 	if cleanup != nil {
 		defer cleanup()
 	}
 
-	pushedPath := filepath.Join(worktreePath, pushedConfigFileName)
-	if _, statErr := os.Stat(pushedPath); statErr != nil {
-		pushedPath = ""
+	pushedLoc, err := config.Locate(worktreePath)
+	if err != nil {
+		return config.Config{}, fmt.Errorf("orchestrator: resolve candidate config: %w", err)
 	}
 
-	cfg, err := config.LoadEffectiveConfig(trustedPath, pushedPath)
+	cfg, err := config.LoadEffectiveConfig(trustedPath, pushedLoc.Path)
 	if err != nil {
 		return config.Config{}, fmt.Errorf("orchestrator: load effective config: %w", err)
 	}
@@ -172,37 +172,84 @@ func refreshDefaultBranch(ctx context.Context, gatePath, defaultBranch string) e
 	return nil
 }
 
-func extractTrustedConfig(ctx context.Context, gatePath, defaultBranch string) (path string, cleanup func(), err error) {
+type trustedConfigCandidate struct {
+	gitPath string
+	layout  config.Layout
+}
+
+var trustedConfigCandidates = []trustedConfigCandidate{
+	{config.RootConfigFileName, config.LayoutRoot},
+	{config.DirectoryConfigRelPath, config.LayoutDirectory},
+	{pushedConfigFileName, config.LayoutLegacy},
+}
+
+// Mirrors config.Locate's conflict rules but reads the git tree directly, since the trusted copy must never be affected by anything the pushed branch controls.
+func locateTrustedConfig(ctx context.Context, gatePath, ref string) (gitPath string, layout config.Layout, exists bool, err error) {
+	var present []trustedConfigCandidate
+	for _, candidate := range trustedConfigCandidates {
+		res, runErr := execpkg.Run(ctx, execpkg.Command{
+			Name: "git",
+			Args: []string{"cat-file", "-e", fmt.Sprintf("%s:%s", ref, candidate.gitPath)},
+			Dir:  gatePath,
+		})
+		if runErr != nil {
+			return "", "", false, fmt.Errorf("orchestrator: check trusted config path %q: %w", candidate.gitPath, runErr)
+		}
+		if res.ExitCode == 0 {
+			present = append(present, candidate)
+		}
+	}
+	switch len(present) {
+	case 0:
+		return "", "", false, nil
+	case 1:
+		return present[0].gitPath, present[0].layout, true, nil
+	default:
+		paths := make([]string, len(present))
+		for i, candidate := range present {
+			paths[i] = candidate.gitPath
+		}
+		return "", config.LayoutConflict, false, &config.ConflictError{Root: ref, Paths: paths}
+	}
+}
+
+func extractTrustedConfig(ctx context.Context, gatePath, defaultBranch string) (path string, layout config.Layout, cleanup func(), err error) {
+	ref := fmt.Sprintf("refs/heads/%s", defaultBranch)
+	gitPath, foundLayout, exists, err := locateTrustedConfig(ctx, gatePath, ref)
+	if err != nil {
+		return "", "", nil, err
+	}
+	if !exists {
+		return "", "", nil, nil
+	}
+
 	res, err := execpkg.Run(ctx, execpkg.Command{
 		Name: "git",
-		Args: []string{"show", fmt.Sprintf("refs/heads/%s:%s", defaultBranch, pushedConfigFileName)},
+		Args: []string{"show", fmt.Sprintf("%s:%s", ref, gitPath)},
 		Dir:  gatePath,
 	})
 	if err != nil {
-		return "", nil, fmt.Errorf("orchestrator: run git show for trusted config: %w", err)
+		return "", "", nil, fmt.Errorf("orchestrator: run git show for trusted config: %w", err)
 	}
-	// Non-zero exit means the ref or path doesn't exist - a fresh gate with
-	// nothing fetched to its default branch yet, or no .made.yml on it. That
-	// is a normal state, not an error: it must resolve to an empty trusted
-	// path, not block the run.
 	if res.ExitCode != 0 {
-		return "", nil, nil
+		return "", "", nil, fmt.Errorf("orchestrator: trusted config %q disappeared between check and extraction", gitPath)
 	}
 
-	f, err := os.CreateTemp("", "made-trusted-config-*.made.yml")
+	tmpDir, err := os.MkdirTemp("", "made-trusted-config-")
 	if err != nil {
-		return "", nil, fmt.Errorf("orchestrator: create temp file for trusted config: %w", err)
+		return "", "", nil, fmt.Errorf("orchestrator: create temp dir for trusted config: %w", err)
 	}
-	if _, err := f.Write(res.Stdout); err != nil {
-		_ = f.Close()
-		_ = os.Remove(f.Name())
-		return "", nil, fmt.Errorf("orchestrator: write trusted config temp file: %w", err)
+	cleanup = func() { _ = os.RemoveAll(tmpDir) }
+
+	destPath := filepath.Join(tmpDir, filepath.FromSlash(gitPath))
+	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+		cleanup()
+		return "", "", nil, fmt.Errorf("orchestrator: create trusted config temp dir tree: %w", err)
 	}
-	if err := f.Close(); err != nil {
-		_ = os.Remove(f.Name())
-		return "", nil, fmt.Errorf("orchestrator: close trusted config temp file: %w", err)
+	if err := os.WriteFile(destPath, res.Stdout, 0o600); err != nil {
+		cleanup()
+		return "", "", nil, fmt.Errorf("orchestrator: write trusted config temp file: %w", err)
 	}
 
-	name := f.Name()
-	return name, func() { _ = os.Remove(name) }, nil
+	return destPath, foundLayout, cleanup, nil
 }

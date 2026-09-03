@@ -111,34 +111,63 @@ func loadConfigFile(path string) (cfg Config, exists bool, err error) {
 		}
 		return Config{}, true, err
 	}
-	if filepath.Base(path) == ".made.yml" || strings.HasSuffix(filepath.Base(path), ".made.yml") {
+	if isFirstClassOrLegacyConfigPath(path) {
 		if cfg.Version != 1 {
-			return Config{}, true, fmt.Errorf("versioned .made.yml requires version: 1, got %d", cfg.Version)
+			return Config{}, true, fmt.Errorf("versioned made configuration at %s requires version: 1, got %d", path, cfg.Version)
 		}
 		for name := range cfg.Stages {
 			if _, ok := validStageNames[name]; !ok {
-				return Config{}, true, fmt.Errorf("versioned .made.yml has unknown stage %q", name)
+				return Config{}, true, fmt.Errorf("versioned made configuration at %s has unknown stage %q", path, name)
 			}
 			stage := cfg.Stages[name]
 			if stage.TimeoutSeconds != nil && (*stage.TimeoutSeconds <= 0 || *stage.TimeoutSeconds > maxStageTimeoutSeconds) {
-				return Config{}, true, fmt.Errorf("versioned .made.yml stage %q timeout_seconds must be between 1 and %d", name, maxStageTimeoutSeconds)
+				return Config{}, true, fmt.Errorf("versioned made configuration at %s stage %q timeout_seconds must be between 1 and %d", path, name, maxStageTimeoutSeconds)
 			}
 		}
 		if retention := cfg.Test.Evidence.RetentionBytes; retention != nil && (*retention <= 0 || *retention > maxEvidenceRetention) {
-			return Config{}, true, fmt.Errorf("versioned .made.yml test.evidence.retention_bytes must be between 1 and %d", maxEvidenceRetention)
+			return Config{}, true, fmt.Errorf("versioned made configuration at %s test.evidence.retention_bytes must be between 1 and %d", path, maxEvidenceRetention)
 		}
 		if cfg.CI.CheckScope != "" && !cfg.CI.CheckScope.Valid() {
-			return Config{}, true, fmt.Errorf("versioned .made.yml ci.check_scope must be %q or %q, got %q", github.CheckScopeRequired, github.CheckScopeAll, cfg.CI.CheckScope)
+			return Config{}, true, fmt.Errorf("versioned made configuration at %s ci.check_scope must be %q or %q, got %q", path, github.CheckScopeRequired, github.CheckScopeAll, cfg.CI.CheckScope)
 		}
 		if !cfg.hasConfiguredValue() {
-			return Config{}, true, fmt.Errorf("versioned .made.yml must configure at least one non-version field")
+			return Config{}, true, fmt.Errorf("versioned made configuration at %s must configure at least one non-version field", path)
 		}
 		return cfg, true, nil
 	}
 	return cfg, true, nil
 }
 
+// Matches only the three real made config filenames, so tests can use arbitrary fixture names to skip the strict versioned schema.
+func isFirstClassOrLegacyConfigPath(path string) bool {
+	base := filepath.Base(path)
+	if base == RootConfigFileName {
+		return true
+	}
+	if base == LegacyConfigFileName || strings.HasSuffix(base, LegacyConfigFileName) {
+		return true
+	}
+	if base == DirectoryConfigFileName && filepath.Base(filepath.Dir(path)) == DirectoryName {
+		return true
+	}
+	return false
+}
+
 func readConfigBytes(path string, beforeRead func()) ([]byte, bool, error) {
+	lstatInfo, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	if lstatInfo.Mode()&os.ModeSymlink != 0 {
+		return nil, true, fmt.Errorf("config: %s must not be a symlink", path)
+	}
+	if !lstatInfo.Mode().IsRegular() {
+		return nil, true, fmt.Errorf("config: %s is not a regular file", path)
+	}
+
 	file, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, false, nil
