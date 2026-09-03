@@ -126,10 +126,14 @@ result against a new commit.
 
 ## Installation
 
-Until Made ships pinned release automation, install a pinned development
-build of Made during the Cloud environment build step, before any agent turn
-starts. Once release automation exists, the intended flow is: the Cloud
-Build downloads and verifies a pinned Made binary, places it on PATH before
-the agent turn begins, and ` + "`made capabilities --json`" + ` proves the required
+Until Made ships pinned release automation (project issue #27), run
+` + "`scripts/install-cursor-cloud.sh`" + ` during the Cloud environment build
+step, before any agent turn starts. It builds a pinned Made binary at an
+exact commit SHA (so receipts report that real SHA as ` + "`made_version`" + `,
+never ` + "`dev`" + `) and installs the exact ` + "`golangci-lint`" + ` version this
+project's CI uses, both onto PATH. Do not run it on every skill invocation.
+Once release automation exists, the intended flow is: the Cloud Build
+downloads and verifies a pinned Made binary, places it on PATH before the
+agent turn begins, and ` + "`made capabilities --json`" + ` proves the required
 interfaces are present.
 ` + "\n<!-- " + GeneratedMarker + " -->\n"

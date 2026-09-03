@@ -101,6 +101,13 @@ func TestSkillMarkdown_DoctorInvocationIncludesBaseRef(t *testing.T) {
 	}
 }
 
+func TestSkillMarkdown_InstallationReferencesPinnedInstallScript(t *testing.T) {
+	md := cursor.SkillMarkdown()
+	if !strings.Contains(md, "scripts/install-cursor-cloud.sh") {
+		t.Fatalf("expected the Installation section to name scripts/install-cursor-cloud.sh, got:\n%s", md)
+	}
+}
+
 func TestSkillMarkdown_DocumentsNoNativeSubagentFallback(t *testing.T) {
 	md := cursor.SkillMarkdown()
 	for _, want := range []string{
