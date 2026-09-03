@@ -10,7 +10,7 @@ import (
 	"github.com/douglasjarquin/made/internal/managed"
 )
 
-const ReceiptSchemaVersion = 1
+const ReceiptSchemaVersion = 2
 
 type StageReceipt struct {
 	Name    string `json:"name"`
@@ -29,17 +29,21 @@ type ReviewReceipt struct {
 }
 
 type Receipt struct {
-	SchemaVersion int             `json:"schema_version"`
-	Outcome       managed.Outcome `json:"outcome"`
-	Repository    string          `json:"repository"`
-	BaseSHA       string          `json:"base_sha"`
-	InputSHA      string          `json:"input_sha"`
-	Config        ConfigIdentity  `json:"config"`
-	Review        *ReviewReceipt  `json:"review,omitempty"`
-	Stages        []StageReceipt  `json:"stages"`
-	EvidenceRefs  []string        `json:"evidence_refs"`
-	Message       string          `json:"message,omitempty"`
-	CreatedAt     time.Time       `json:"created_at"`
+	SchemaVersion   int             `json:"schema_version"`
+	MadeVersion     string          `json:"made_version"`
+	ProtocolVersion int             `json:"protocol_version"`
+	Outcome         managed.Outcome `json:"outcome"`
+	Repository      string          `json:"repository"`
+	BaseSHA         string          `json:"base_sha"`
+	InputSHA        string          `json:"input_sha"`
+	Config          ConfigIdentity  `json:"config"`
+	Review          *ReviewReceipt  `json:"review,omitempty"`
+	Stages          []StageReceipt  `json:"stages"`
+	EvidenceRefs    []string        `json:"evidence_refs"`
+	ReceiptPath     string          `json:"receipt_path"`
+	EvidenceDir     string          `json:"evidence_dir"`
+	Message         string          `json:"message,omitempty"`
+	CreatedAt       time.Time       `json:"created_at"`
 }
 
 func BuildReceipt(repository, baseSHA, inputSHA string, cfg ConfigIdentity, review *ReviewReceipt, res EngineResult) Receipt {
@@ -48,17 +52,21 @@ func BuildReceipt(repository, baseSHA, inputSHA string, cfg ConfigIdentity, revi
 		stages = append(stages, StageReceipt{Name: s.Stage, Status: string(s.Outcome), Message: s.Message})
 	}
 	return Receipt{
-		SchemaVersion: ReceiptSchemaVersion,
-		Outcome:       res.Outcome,
-		Repository:    repository,
-		BaseSHA:       baseSHA,
-		InputSHA:      inputSHA,
-		Config:        cfg,
-		Review:        review,
-		Stages:        stages,
-		EvidenceRefs:  res.EvidenceRefs,
-		Message:       res.Message,
-		CreatedAt:     time.Now().UTC(),
+		SchemaVersion:   ReceiptSchemaVersion,
+		MadeVersion:     managed.MadeVersion,
+		ProtocolVersion: managed.ProtocolVersion,
+		Outcome:         res.Outcome,
+		Repository:      repository,
+		BaseSHA:         baseSHA,
+		InputSHA:        inputSHA,
+		Config:          cfg,
+		Review:          review,
+		Stages:          stages,
+		EvidenceRefs:    res.EvidenceRefs,
+		ReceiptPath:     ReceiptStore{Dir: ReceiptsDir(StateRoot(repository))}.path(inputSHA),
+		EvidenceDir:     res.EvidenceDir,
+		Message:         res.Message,
+		CreatedAt:       time.Now().UTC(),
 	}
 }
 

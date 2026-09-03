@@ -28,6 +28,12 @@ const (
 	// events instead of a second field a caller would have to reconcile.
 	OutcomeNotConfigured Outcome = "not_configured"
 	OutcomeDisabled      Outcome = "disabled"
+
+	// OutcomePending marks a stage the plan set to run but that Run never
+	// reached because an earlier stage already produced a non-pass outcome.
+	// It keeps the stage visible in StageResults instead of silently
+	// omitting it.
+	OutcomePending Outcome = "pending"
 )
 
 // ExitCode returns the process exit code for a given outcome.

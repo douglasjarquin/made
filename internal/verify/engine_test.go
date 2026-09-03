@@ -2,6 +2,8 @@ package verify_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/douglasjarquin/made/internal/managed"
@@ -54,6 +56,38 @@ func TestRunEngine_TestAndLintOnly(t *testing.T) {
 	}
 	if got := stageStatus(t, res, "lint"); got != managed.OutcomePassed {
 		t.Errorf("lint stage = %q, want passed", got)
+	}
+}
+
+func TestRunEngine_EvidenceDirIsPerInvocationNotRoot(t *testing.T) {
+	dir, baseSHA, inputSHA := newTestRepo(t, ".made.yaml", testConfigNoAgent)
+	rc, err := verify.ResolveContext(context.Background(), dir, "origin/main")
+	if err != nil {
+		t.Fatalf("ResolveContext: %v", err)
+	}
+
+	stateDir := verify.StateRoot(rc.Repository.Root)
+	res, err := verify.RunEngine(context.Background(), verify.EngineParams{
+		Workspace:    rc.Repository.Root,
+		BaseSHA:      baseSHA,
+		InputSHA:     inputSHA,
+		ConfigPath:   rc.Config.Path,
+		PolicyHash:   rc.Config.Hash,
+		ReviewSource: managed.ReviewSourceInternal,
+		RunID:        "verify-test",
+		MissionID:    "made-verify",
+		StateDir:     stateDir,
+	})
+	if err != nil {
+		t.Fatalf("RunEngine: %v", err)
+	}
+
+	if res.EvidenceDir == verify.EvidenceRoot(stateDir) {
+		t.Fatalf("EvidenceDir = %q, want the per-invocation directory, not the shared evidence root", res.EvidenceDir)
+	}
+	terminalPath := filepath.Join(res.EvidenceDir, "terminal.json")
+	if _, err := os.Stat(terminalPath); err != nil {
+		t.Errorf("expected terminal.json under EvidenceDir %q: %v", res.EvidenceDir, err)
 	}
 }
 

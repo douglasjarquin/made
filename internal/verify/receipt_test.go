@@ -44,6 +44,41 @@ func TestReceiptStore_PutGetList(t *testing.T) {
 	}
 }
 
+func TestBuildReceipt_IncludesVersionAndLocationIdentity(t *testing.T) {
+	repository := t.TempDir()
+	res := verify.EngineResult{
+		Outcome:     managed.OutcomePassed,
+		EvidenceDir: "/evidence/root/deadbeef/1234567890abcdef",
+	}
+	r := verify.BuildReceipt(repository, "base123", "input456", verify.ConfigIdentity{}, nil, res)
+
+	if r.MadeVersion != managed.MadeVersion {
+		t.Errorf("MadeVersion = %q, want %q", r.MadeVersion, managed.MadeVersion)
+	}
+	if r.ProtocolVersion != managed.ProtocolVersion {
+		t.Errorf("ProtocolVersion = %d, want %d", r.ProtocolVersion, managed.ProtocolVersion)
+	}
+	if r.EvidenceDir != res.EvidenceDir {
+		t.Errorf("EvidenceDir = %q, want %q", r.EvidenceDir, res.EvidenceDir)
+	}
+	wantPath := filepath.Join(verify.ReceiptsDir(verify.StateRoot(repository)), "input456.json")
+	if r.ReceiptPath != wantPath {
+		t.Errorf("ReceiptPath = %q, want %q", r.ReceiptPath, wantPath)
+	}
+}
+
+func TestReceiptStore_RejectsPreBumpSchemaVersion(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "sha1.json"), []byte(`{"schema_version":1,"input_sha":"sha1"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store := verify.ReceiptStore{Dir: dir}
+	_, ok, err := store.Get("sha1")
+	if err == nil || ok {
+		t.Fatalf("expected the pre-bump schema_version to be rejected, got ok=%v err=%v", ok, err)
+	}
+}
+
 func TestReceiptStore_RejectsUnsupportedSchemaVersion(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "sha1.json"), []byte(`{"schema_version":99,"input_sha":"sha1"}`), 0o600); err != nil {

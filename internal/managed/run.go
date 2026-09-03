@@ -165,6 +165,7 @@ func generateInvocationID() (string, error) {
 // buildTerminalManifest constructs the run terminal evidence summary.
 func buildTerminalManifest(opts *Options, runner *Runner, invID string, outcome Outcome, eventCount int) *TerminalManifest {
 	return &TerminalManifest{
+		SchemaVersion:    TerminalManifestSchemaVersion,
 		RunID:            opts.RunID,
 		MissionID:        opts.MissionID,
 		InvocationID:     invID,
