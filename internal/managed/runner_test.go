@@ -23,7 +23,7 @@ func TestRunner_UnreachedRunStagesStayPending(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse config: %v", err)
 	}
-	plan, err := managed.BuildStagePlan(cfg, nil, managed.ReviewSourceInternal)
+	plan, err := managed.BuildStagePlan(context.Background(), cfg, nil, managed.ReviewSourceInternal, managed.LaneReuseContext{})
 	if err != nil {
 		t.Fatalf("build stage plan: %v", err)
 	}

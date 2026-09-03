@@ -94,8 +94,9 @@ func (s *ManagedEvidenceStore) writeJSON(path string, v any) error {
 // TerminalManifestSchemaVersion versions TerminalManifest's own shape,
 // independent of the JSONL event envelope's SchemaVersion: bumped to 2
 // because StageResults can now include a stage at pending when Run stopped
-// before reaching it, instead of omitting the stage entirely.
-const TerminalManifestSchemaVersion = 2
+// before reaching it, instead of omitting the stage entirely; bumped to 3
+// because a StageResult can now carry ReusedCommands (project issue #61).
+const TerminalManifestSchemaVersion = 3
 
 // TerminalManifest is written to terminal.json at run completion.
 type TerminalManifest struct {

@@ -10,12 +10,16 @@ import (
 	"github.com/douglasjarquin/made/internal/managed"
 )
 
-const ReceiptSchemaVersion = 2
+const ReceiptSchemaVersion = 3
 
 type StageReceipt struct {
 	Name    string `json:"name"`
 	Status  string `json:"status"`
 	Message string `json:"message,omitempty"`
+	// Reused lists the Test stage's lane Full commands an existing receipt
+	// satisfied instead of actually running (project issue #61); nil for
+	// every other stage and for a Test stage with nothing reused.
+	Reused []managed.ReusedLaneCommand `json:"reused,omitempty"`
 }
 
 type ReviewReceipt struct {
@@ -49,7 +53,7 @@ type Receipt struct {
 func BuildReceipt(repository, baseSHA, inputSHA string, cfg ConfigIdentity, review *ReviewReceipt, res EngineResult) Receipt {
 	stages := make([]StageReceipt, 0, len(res.StageResults))
 	for _, s := range res.StageResults {
-		stages = append(stages, StageReceipt{Name: s.Stage, Status: string(s.Outcome), Message: s.Message})
+		stages = append(stages, StageReceipt{Name: s.Stage, Status: string(s.Outcome), Message: s.Message, Reused: s.ReusedCommands})
 	}
 	return Receipt{
 		SchemaVersion:   ReceiptSchemaVersion,

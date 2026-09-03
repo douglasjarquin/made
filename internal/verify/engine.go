@@ -111,7 +111,11 @@ func RunEngine(ctx context.Context, p EngineParams) (EngineResult, error) {
 	if err != nil {
 		return fail("preflight", "compute changed paths: "+err.Error())
 	}
-	plan, err := managed.BuildStagePlan(cfg, changedPaths, opts.ReviewSource)
+	plan, err := managed.BuildStagePlan(ctx, cfg, changedPaths, opts.ReviewSource, managed.LaneReuseContext{
+		Workspace:    opts.Workspace,
+		BaseSHA:      opts.BaseSHA,
+		CandidateSHA: opts.InputSHA,
+	})
 	if err != nil {
 		return fail("preflight", "build stage plan: "+err.Error())
 	}

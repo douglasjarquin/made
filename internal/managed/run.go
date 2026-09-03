@@ -103,7 +103,11 @@ func Run(ctx context.Context, opts *Options, stdout, stderr *os.File) int {
 	if err != nil {
 		return emitInfraError("compute changed paths for validation lanes: " + err.Error())
 	}
-	plan, err := BuildStagePlan(cfg, changedPaths, opts.ReviewSource)
+	plan, err := BuildStagePlan(ctx, cfg, changedPaths, opts.ReviewSource, LaneReuseContext{
+		Workspace:    opts.Workspace,
+		BaseSHA:      opts.BaseSHA,
+		CandidateSHA: opts.InputSHA,
+	})
 	if err != nil {
 		return emitInfraError("build stage plan: " + err.Error())
 	}

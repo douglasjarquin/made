@@ -7,6 +7,7 @@ import (
 	"github.com/douglasjarquin/made/internal/config"
 	"github.com/douglasjarquin/made/internal/pipeline/test"
 	"github.com/douglasjarquin/made/internal/planner"
+	"github.com/douglasjarquin/made/internal/receipt"
 )
 
 // StagePlanState is a stage's coverage state before it executes: whether
@@ -31,8 +32,39 @@ type StagePlanEntry struct {
 	Stage        string
 	State        StagePlanState
 	Reason       string
-	TestExtras   []test.ExtraCommand // stageTest only
+	TestExtras   []test.ExtraCommand // stageTest only: lane Full commands that must actually run
+	TestReused   []ReusedLaneCommand // stageTest only: lane Full commands satisfied by an existing receipt
 	ReviewSource string              // stageReview only: resolved "internal" or "external"
+}
+
+// LaneReuseContext carries the exact-SHA identity managed mode has already
+// verified before any stage runs: the workspace being validated and the
+// pinned base/candidate commits. laneExtraCommands uses it, together with
+// trusted config, to build the same Fingerprint the daemon-backed pipeline
+// builds (internal/receipt.BuildLaneFingerprint) and consult the read-only
+// receipt store - internal/managed never calls receipt.Store.Put itself;
+// publishing remains the daemon-backed pipeline's job alone.
+type LaneReuseContext struct {
+	Workspace    string
+	BaseSHA      string
+	CandidateSHA string
+}
+
+// ReusedLaneCommand records enough about a receipt hit to identify the
+// source run and fingerprint, mirroring internal/orchestrator's
+// reusedLaneCommand shape for the same project issue #33 requirement.
+type ReusedLaneCommand struct {
+	Name            string `json:"name"`
+	FingerprintHash string `json:"fingerprint_hash"`
+	SourceRunID     string `json:"source_run_id"`
+}
+
+// laneTestPlan is laneExtraCommands' result: Extras are the lane Full
+// commands the Test stage must actually run, Reused are the ones an
+// existing receipt already covers.
+type laneTestPlan struct {
+	Extras []test.ExtraCommand
+	Reused []ReusedLaneCommand
 }
 
 // StagePlan is the full, policy-derived plan for one managed-validation run.
@@ -60,17 +92,19 @@ func reviewEnabledByPolicy(cfg config.Config) bool {
 // changedPaths drives validation-lane selection (project issue #33 Phase 2)
 // for the Test stage; reviewSource is the caller's --review-source choice,
 // defaulting to "internal" when empty so existing internal-agent behavior
-// is unchanged for callers that never pass the flag.
-func BuildStagePlan(cfg config.Config, changedPaths []string, reviewSource string) (StagePlan, error) {
+// is unchanged for callers that never pass the flag; laneReuse identifies
+// the exact run being planned, for the read-only receipt-reuse check
+// (project issue #61).
+func BuildStagePlan(ctx context.Context, cfg config.Config, changedPaths []string, reviewSource string, laneReuse LaneReuseContext) (StagePlan, error) {
 	var plan StagePlan
 
 	plan.Review = buildReviewPlan(cfg, reviewSource)
 
-	testExtras, err := laneExtraCommands(cfg, changedPaths)
+	testPlan, err := laneExtraCommands(ctx, cfg, changedPaths, laneReuse)
 	if err != nil {
 		return StagePlan{}, err
 	}
-	plan.Test = buildTestPlan(cfg, testExtras)
+	plan.Test = buildTestPlan(cfg, testPlan)
 
 	plan.Document = buildDocumentPlan(cfg)
 	plan.Lint = buildLintPlan(cfg)
@@ -92,15 +126,15 @@ func buildReviewPlan(cfg config.Config, reviewSource string) StagePlanEntry {
 	return StagePlanEntry{Stage: stageReview, State: StagePlanRun, Reason: "policy enables review", ReviewSource: source}
 }
 
-func buildTestPlan(cfg config.Config, extras []test.ExtraCommand) StagePlanEntry {
+func buildTestPlan(cfg config.Config, plan laneTestPlan) StagePlanEntry {
 	if explicitlyDisabled(cfg, stageTest) {
 		return StagePlanEntry{Stage: stageTest, State: StagePlanDisabled, Reason: "stages.test.enabled is false"}
 	}
 	cmd := cfg.TestCommand()
-	if len(cmd) == 0 && len(extras) == 0 {
+	if len(cmd) == 0 && len(plan.Extras) == 0 && len(plan.Reused) == 0 {
 		return StagePlanEntry{Stage: stageTest, State: StagePlanNotConfigured, Reason: "no commands.test and no selected validation-lane command"}
 	}
-	return StagePlanEntry{Stage: stageTest, State: StagePlanRun, Reason: "test command(s) configured", TestExtras: extras}
+	return StagePlanEntry{Stage: stageTest, State: StagePlanRun, Reason: "test command(s) configured", TestExtras: plan.Extras, TestReused: plan.Reused}
 }
 
 func buildDocumentPlan(cfg config.Config) StagePlanEntry {
@@ -124,18 +158,34 @@ func buildLintPlan(cfg config.Config) StagePlanEntry {
 }
 
 // laneExtraCommands resolves issue #33's validation.lanes selection for the
-// Test stage's Full commands. With no lanes configured it returns nil,
-// exactly preserving pre-lane behavior (commands.test alone).
-func laneExtraCommands(cfg config.Config, changedPaths []string) ([]test.ExtraCommand, error) {
+// Test stage's Full commands, splitting them into commands that must
+// actually run versus commands an existing receipt already covers (project
+// issue #61, read-only: this only calls receipt.Store.Get, never Put). With
+// no lanes configured it returns a zero-value laneTestPlan, exactly
+// preserving pre-lane behavior (commands.test alone).
+func laneExtraCommands(ctx context.Context, cfg config.Config, changedPaths []string, reuse LaneReuseContext) (laneTestPlan, error) {
 	lanes := cfg.Validation.Lanes
 	if len(lanes) == 0 {
-		return nil, nil
+		return laneTestPlan{}, nil
 	}
 	decisions, err := planner.SelectLanes(lanes, changedPaths)
 	if err != nil {
-		return nil, fmt.Errorf("managed: select validation lanes: %w", err)
+		return laneTestPlan{}, fmt.Errorf("managed: select validation lanes: %w", err)
 	}
-	var extras []test.ExtraCommand
+
+	configHash, err := planner.HashConfig(cfg)
+	if err != nil {
+		return laneTestPlan{}, fmt.Errorf("managed: hash effective config for validation lanes: %w", err)
+	}
+	maxAge, err := cfg.Validation.EffectiveReceiptMaxAge()
+	if err != nil {
+		return laneTestPlan{}, fmt.Errorf("managed: resolve receipt retention window: %w", err)
+	}
+	repoIdentity := receipt.RepoIdentity(ctx, reuse.Workspace)
+	store := &receipt.Store{RepoPath: reuse.Workspace, MaxAge: maxAge}
+	repoNoReuse := cfg.Validation.NoReuse
+
+	var plan laneTestPlan
 	for _, decision := range decisions {
 		if decision.Action != "run" {
 			continue
@@ -150,10 +200,30 @@ func laneExtraCommands(cfg config.Config, changedPaths []string) ([]test.ExtraCo
 			if len(commands) > 1 {
 				name = fmt.Sprintf("%s-%d", decision.Name, i+1)
 			}
-			extras = append(extras, test.ExtraCommand{Name: name, Args: cmd})
+			fp := receipt.BuildLaneFingerprint(receipt.LaneFingerprintInputs{
+				RepoIdentity: repoIdentity,
+				BaseSHA:      reuse.BaseSHA,
+				CandidateSHA: reuse.CandidateSHA,
+				ConfigHash:   configHash,
+				LaneName:     decision.Name,
+				MatchedPaths: decision.MatchedPaths,
+				Command:      cmd,
+				MadeVersion:  MadeVersion,
+			})
+			if !repoNoReuse && !lane.NoReuse {
+				if existing, found, _ := store.Get(ctx, fp.Hash()); found {
+					plan.Reused = append(plan.Reused, ReusedLaneCommand{
+						Name:            name,
+						FingerprintHash: fp.Hash(),
+						SourceRunID:     existing.SourceRunID,
+					})
+					continue
+				}
+			}
+			plan.Extras = append(plan.Extras, test.ExtraCommand{Name: name, Args: cmd})
 		}
 	}
-	return extras, nil
+	return plan, nil
 }
 
 // changedPathsForPlan resolves the exact base_sha..input_sha diff paths used

@@ -77,3 +77,12 @@ const testConfigFailingTest = `version: 1
 commands:
   test: "false"
 `
+
+const testConfigLaneGo = `version: 1
+validation:
+  lanes:
+    go:
+      paths: ["**/*.go"]
+      full: ["echo go-full"]
+      required_before_push: true
+`
