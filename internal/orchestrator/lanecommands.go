@@ -2,17 +2,10 @@ package orchestrator
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"os/exec"
-	"runtime"
-	"sort"
 	"strings"
 	"time"
 
-	"github.com/douglasjarquin/made/internal/api"
 	execpkg "github.com/douglasjarquin/made/internal/exec"
 	"github.com/douglasjarquin/made/internal/pipeline/test"
 	"github.com/douglasjarquin/made/internal/planner"
@@ -103,14 +96,15 @@ func (c *chain) laneFullCommandsForTest() (laneTestPlan, error) {
 			if len(commands) > 1 {
 				name = fmt.Sprintf("%s-%d", decision.Name, i+1)
 			}
-			fp := buildLaneFingerprint(laneFingerprintInputs{
-				repoIdentity: repoIdentity,
-				baseSHA:      baseSHA,
-				candidateSHA: candidateSHA,
-				configHash:   configHash,
-				laneName:     decision.Name,
-				matchedPaths: decision.MatchedPaths,
-				command:      cmd,
+			fp := receipt.BuildLaneFingerprint(receipt.LaneFingerprintInputs{
+				RepoIdentity: repoIdentity,
+				BaseSHA:      baseSHA,
+				CandidateSHA: candidateSHA,
+				ConfigHash:   configHash,
+				LaneName:     decision.Name,
+				MatchedPaths: decision.MatchedPaths,
+				Command:      cmd,
+				MadeVersion:  madeVersion,
 			})
 			if !repoNoReuse && !lane.NoReuse {
 				if existing, found, _ := receiptStore.Get(c.ctx, fp.Hash()); found {
@@ -159,65 +153,6 @@ func (c *chain) publishLaneReceipts(plan laneTestPlan) {
 // build-time version string exists; it only affects fingerprints, never
 // program behavior.
 const madeVersion = "dev"
-
-type laneFingerprintInputs struct {
-	repoIdentity string
-	baseSHA      string
-	candidateSHA string
-	configHash   string
-	laneName     string
-	matchedPaths []string
-	command      []string
-}
-
-func buildLaneFingerprint(in laneFingerprintInputs) receipt.Fingerprint {
-	return receipt.Fingerprint{
-		SchemaVersion:    receipt.FingerprintSchemaVersion,
-		Lane:             in.laneName,
-		ValidationLevel:  "full",
-		RepoIdentity:     in.repoIdentity,
-		BaseSHA:          in.baseSHA,
-		CandidateSHA:     in.candidateSHA,
-		ConfigHash:       in.configHash,
-		Command:          in.command,
-		WorkingDirectory: ".",
-		InputSetHash:     hashPathSet(in.matchedPaths),
-		ToolchainHash:    toolchainFingerprint(),
-		OS:               runtime.GOOS,
-		Arch:             runtime.GOARCH,
-		MadeVersion:      madeVersion,
-		ProtocolVersion:  api.Version,
-	}
-}
-
-func hashPathSet(paths []string) string {
-	sorted := append([]string(nil), paths...)
-	sort.Strings(sorted)
-	data, err := json.Marshal(sorted)
-	if err != nil {
-		// paths is always a []string; Marshal cannot fail for that shape.
-		panic("orchestrator: path set is not JSON-marshalable: " + err.Error())
-	}
-	sum := sha256.Sum256(data)
-	return "sha256:" + hex.EncodeToString(sum[:])
-}
-
-// toolchainFingerprint is a coarse, best-effort proxy for "the Go toolchain
-// that would build/test this candidate": the exact output of `go version`.
-// It says nothing about installed system libraries, other language
-// toolchains, or transitive tool versions - refining it is left to a later
-// iteration once basic reuse is proven safe. Any failure to even run `go
-// version` yields a fixed sentinel, so a fingerprint is still well-defined
-// (and simply never matches a receipt from an environment where it did
-// succeed).
-func toolchainFingerprint() string {
-	out, err := exec.Command("go", "version").Output()
-	if err != nil {
-		return "unknown"
-	}
-	sum := sha256.Sum256(out)
-	return "sha256:" + hex.EncodeToString(sum[:])
-}
 
 func resolveWorktreeRef(ctx context.Context, repoPath, ref string) (string, error) {
 	res, err := execpkg.Run(ctx, execpkg.Command{
