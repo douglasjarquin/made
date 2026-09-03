@@ -403,3 +403,130 @@ func TestVerifyPrepare_MissingExecutorFails(t *testing.T) {
 		t.Error("expected a diagnostic on stderr")
 	}
 }
+
+func TestVerifyPrepare_ConfigConflictHumanModeIsUnchanged(t *testing.T) {
+	dir := newVerifyTestRepo(t)
+	if err := os.MkdirAll(filepath.Join(dir, ".made"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".made", "config.yaml"), []byte("version: 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitVerifyAt(t, dir, "add", ".")
+	gitVerifyAt(t, dir, "commit", "-m", "add conflicting config")
+
+	stdout, stderr, code := runCapture(t, []string{"verify", "prepare", "--repo", dir, "--executor", "cursor", "--base-ref", "origin/main"})
+	if code == 0 {
+		t.Fatal("expected a config conflict to fail")
+	}
+	if len(stdout) != 0 {
+		t.Fatalf("expected human mode stdout to stay empty on a config conflict, got %q", stdout)
+	}
+	if len(stderr) == 0 {
+		t.Error("expected a diagnostic on stderr")
+	}
+}
+
+func TestVerifyPrepare_JSONConfigConflictEmitsJSONError(t *testing.T) {
+	dir := newVerifyTestRepo(t)
+	if err := os.MkdirAll(filepath.Join(dir, ".made"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".made", "config.yaml"), []byte("version: 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitVerifyAt(t, dir, "add", ".")
+	gitVerifyAt(t, dir, "commit", "-m", "add conflicting config")
+
+	stdout, stderr, code := runCapture(t, []string{"verify", "prepare", "--repo", dir, "--executor", "cursor", "--base-ref", "origin/main", "--json"})
+	if code == 0 {
+		t.Fatal("expected a config conflict to fail")
+	}
+	var envelope struct {
+		Error    string `json:"error"`
+		ExitCode int    `json:"exit_code"`
+	}
+	if err := json.Unmarshal(stdout, &envelope); err != nil {
+		t.Fatalf("expected a valid JSON error envelope on stdout, got err=%v stdout=%q stderr=%s", err, stdout, stderr)
+	}
+	if envelope.Error == "" {
+		t.Error("expected a non-empty error message in the JSON envelope")
+	}
+	if envelope.ExitCode != code {
+		t.Errorf("envelope exit_code = %d, want %d (process exit code)", envelope.ExitCode, code)
+	}
+	if envelope.ExitCode != managed.OutcomeInfrastructureError.ExitCode() {
+		t.Errorf("envelope exit_code = %d, want %d (infrastructure_error)", envelope.ExitCode, managed.OutcomeInfrastructureError.ExitCode())
+	}
+}
+
+func TestVerifyComplete_JSONHeadMovedEmitsJSONError(t *testing.T) {
+	dir := newVerifyTestRepo(t)
+	requestPath := filepath.Join(shortTempDir(t), "request.json")
+
+	stdout, stderr, code := runCapture(t, []string{
+		"verify", "prepare",
+		"--repo", dir,
+		"--base-ref", "origin/main",
+		"--executor", "cursor",
+		"--output", requestPath,
+		"--json",
+	})
+	if code != 0 {
+		t.Fatalf("prepare exit code = %d, want 0; stderr=%s", code, stderr)
+	}
+	var prep prepareReport
+	if err := json.Unmarshal(stdout, &prep); err != nil {
+		t.Fatalf("parse prepare JSON: %v (stdout=%s)", err, stdout)
+	}
+
+	resultPath := filepath.Join(shortTempDir(t), "result.json")
+	result := managed.ExternalReviewResult{
+		SchemaVersion:         managed.ExternalReviewSchemaVersion,
+		ReviewContractVersion: managed.ReviewContractVersion,
+		Executor:              "cursor-agent",
+		Reviewer:              "claude",
+		BaseSHA:               prep.BaseSHA,
+		InputSHA:              prep.InputSHA,
+		PolicyHash:            prep.ConfigHash,
+		ReviewContractHash:    prep.ContractHash,
+		Findings:              []managed.ExternalFinding{},
+	}
+	data, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(resultPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "hello.go"), []byte("package main\n\nfunc x() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitVerifyAt(t, dir, "add", ".")
+	gitVerifyAt(t, dir, "commit", "-m", "move HEAD after prepare")
+
+	stdout, stderr, code = runCapture(t, []string{
+		"verify", "complete",
+		"--repo", dir,
+		"--request", requestPath,
+		"--review-result", resultPath,
+		"--json",
+	})
+	if code == 0 {
+		t.Fatal("expected complete to fail after HEAD moved since prepare")
+	}
+	var envelope struct {
+		Error    string `json:"error"`
+		ExitCode int    `json:"exit_code"`
+	}
+	if err := json.Unmarshal(stdout, &envelope); err != nil {
+		t.Fatalf("expected a valid JSON error envelope on stdout, got err=%v stdout=%q stderr=%s", err, stdout, stderr)
+	}
+	if envelope.Error == "" {
+		t.Error("expected a non-empty error message in the JSON envelope")
+	}
+	if envelope.ExitCode != code {
+		t.Errorf("envelope exit_code = %d, want %d (process exit code)", envelope.ExitCode, code)
+	}
+}
