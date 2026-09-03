@@ -17,6 +17,6 @@ func StateRoot(canonicalRoot string) string {
 	return filepath.Join(base, "made", "verify", id)
 }
 
-func RequestsDir(stateRoot string) string { return filepath.Join(stateRoot, "requests") }
+func RequestsDir(stateRoot string) string  { return filepath.Join(stateRoot, "requests") }
 func EvidenceRoot(stateRoot string) string { return filepath.Join(stateRoot, "evidence") }
-func ReceiptsDir(stateRoot string) string { return filepath.Join(stateRoot, "receipts") }
+func ReceiptsDir(stateRoot string) string  { return filepath.Join(stateRoot, "receipts") }
