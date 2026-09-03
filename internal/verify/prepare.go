@@ -42,7 +42,12 @@ func Prepare(ctx context.Context, p PrepareParams) (PrepareOutcome, error) {
 		return PrepareOutcome{}, fmt.Errorf("verify: generate invocation id: %w", err)
 	}
 
-	req, err := BuildRequest(rc, runID, invocationID, p.Executor, p.RequestedModel, task)
+	requestedModel := p.RequestedModel
+	if requestedModel == "" && p.Executor == "cursor" {
+		requestedModel = rc.ParsedConfig.Review.Executors.Cursor.Model
+	}
+
+	req, err := BuildRequest(rc, runID, invocationID, p.Executor, requestedModel, task)
 	if err != nil {
 		return PrepareOutcome{}, err
 	}

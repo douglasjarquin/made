@@ -2,6 +2,11 @@ version: 1
 agent: codex
 review:
   required: true
+  executors:
+    cursor:
+      model: "claude-opus-5[effort=high,context=300k]"
+  guides:
+    - ".made/features/README.md"
 ci:
   required: true
 validation:

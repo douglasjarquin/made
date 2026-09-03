@@ -203,6 +203,196 @@ func TestVerifyClean_CLI(t *testing.T) {
 	}
 }
 
+func newVerifyReviewRequiredRepo(t *testing.T) string {
+	t.Helper()
+	dir := shortTempDir(t)
+
+	gitVerifyAt(t, dir, "init", "-b", "main")
+	gitVerifyAt(t, dir, "config", "user.email", "test@test.local")
+	gitVerifyAt(t, dir, "config", "user.name", "test")
+
+	if err := os.WriteFile(filepath.Join(dir, ".made.yaml"), []byte("version: 1\nreview:\n  required: true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitVerifyAt(t, dir, "add", ".")
+	gitVerifyAt(t, dir, "commit", "-m", "initial")
+	baseSHA := gitVerifyAt(t, dir, "rev-parse", "HEAD")
+	gitVerifyAt(t, dir, "update-ref", "refs/remotes/origin/main", baseSHA)
+
+	if err := os.WriteFile(filepath.Join(dir, "hello.go"), []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitVerifyAt(t, dir, "add", ".")
+	gitVerifyAt(t, dir, "commit", "-m", "add hello.go")
+
+	return dir
+}
+
+func TestVerifyComplete_JSONExitCodeMatchesFailedTerminalOutcome(t *testing.T) {
+	dir := newVerifyReviewRequiredRepo(t)
+	requestPath := filepath.Join(shortTempDir(t), "request.json")
+
+	stdout, stderr, code := runCapture(t, []string{
+		"verify", "prepare",
+		"--repo", dir,
+		"--base-ref", "origin/main",
+		"--executor", "cursor",
+		"--output", requestPath,
+		"--json",
+	})
+	if code != 0 {
+		t.Fatalf("prepare exit code = %d, want 0; stderr=%s", code, stderr)
+	}
+	var prep prepareReport
+	if err := json.Unmarshal(stdout, &prep); err != nil {
+		t.Fatalf("parse prepare JSON: %v (stdout=%s)", err, stdout)
+	}
+
+	resultPath := filepath.Join(shortTempDir(t), "result.json")
+	result := managed.ExternalReviewResult{
+		SchemaVersion:         managed.ExternalReviewSchemaVersion,
+		ReviewContractVersion: managed.ReviewContractVersion,
+		Executor:              "cursor-agent",
+		Reviewer:              "claude",
+		BaseSHA:               prep.BaseSHA,
+		InputSHA:              prep.InputSHA,
+		PolicyHash:            prep.ConfigHash,
+		ReviewContractHash:    prep.ContractHash,
+		Findings: []managed.ExternalFinding{{
+			Kind:        "blocking",
+			Description: "sql injection",
+			Code:        "SEC001",
+			Class:       "security",
+			Paths:       []string{"hello.go"},
+		}},
+	}
+	data, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(resultPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, code = runCapture(t, []string{
+		"verify", "complete",
+		"--repo", dir,
+		"--request", requestPath,
+		"--review-result", resultPath,
+		"--json",
+	})
+	if code != managed.OutcomeFailedTerminal.ExitCode() {
+		t.Fatalf("exit code = %d, want %d (failed_terminal); stderr=%s", code, managed.OutcomeFailedTerminal.ExitCode(), stderr)
+	}
+	var receipt struct {
+		Outcome     string `json:"outcome"`
+		ReceiptPath string `json:"receipt_path"`
+		EvidenceDir string `json:"evidence_dir"`
+	}
+	if err := json.Unmarshal(stdout, &receipt); err != nil {
+		t.Fatalf("expected valid JSON on stdout even on a non-zero exit: %v (stdout=%s)", err, stdout)
+	}
+	if receipt.Outcome != string(managed.OutcomeFailedTerminal) {
+		t.Fatalf("outcome = %q, want failed_terminal", receipt.Outcome)
+	}
+	if receipt.ReceiptPath == "" || receipt.EvidenceDir == "" {
+		t.Fatalf("expected receipt_path and evidence_dir in JSON output, got %+v", receipt)
+	}
+}
+
+func TestVerifyRun_JSONExitCodeMatchesFailedOutcome(t *testing.T) {
+	dir := shortTempDir(t)
+
+	gitVerifyAt(t, dir, "init", "-b", "main")
+	gitVerifyAt(t, dir, "config", "user.email", "test@test.local")
+	gitVerifyAt(t, dir, "config", "user.name", "test")
+
+	if err := os.WriteFile(filepath.Join(dir, ".made.yaml"), []byte("version: 1\ncommands:\n  test: \"false\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitVerifyAt(t, dir, "add", ".")
+	gitVerifyAt(t, dir, "commit", "-m", "initial")
+	baseSHA := gitVerifyAt(t, dir, "rev-parse", "HEAD")
+	gitVerifyAt(t, dir, "update-ref", "refs/remotes/origin/main", baseSHA)
+	if err := os.WriteFile(filepath.Join(dir, "hello.go"), []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitVerifyAt(t, dir, "add", ".")
+	gitVerifyAt(t, dir, "commit", "-m", "add hello.go")
+
+	stdout, stderr, code := runCapture(t, []string{"verify", "run", "--repo", dir, "--base-ref", "origin/main", "--json"})
+	if code != managed.OutcomeFailedRetryable.ExitCode() {
+		t.Fatalf("exit code = %d, want %d (failed_retryable); stderr=%s", code, managed.OutcomeFailedRetryable.ExitCode(), stderr)
+	}
+	var receipt struct {
+		Outcome string `json:"outcome"`
+	}
+	if err := json.Unmarshal(stdout, &receipt); err != nil {
+		t.Fatalf("expected valid JSON on stdout even on a non-zero exit: %v (stdout=%s)", err, stdout)
+	}
+	if receipt.Outcome != string(managed.OutcomeFailedRetryable) {
+		t.Fatalf("outcome = %q, want failed_retryable", receipt.Outcome)
+	}
+}
+
+func TestVerifyStatusAndReceipt_ExitZeroEvenOnFailedReceipt(t *testing.T) {
+	dir := shortTempDir(t)
+
+	gitVerifyAt(t, dir, "init", "-b", "main")
+	gitVerifyAt(t, dir, "config", "user.email", "test@test.local")
+	gitVerifyAt(t, dir, "config", "user.name", "test")
+	if err := os.WriteFile(filepath.Join(dir, ".made.yaml"), []byte("version: 1\ncommands:\n  test: \"false\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitVerifyAt(t, dir, "add", ".")
+	gitVerifyAt(t, dir, "commit", "-m", "initial")
+	baseSHA := gitVerifyAt(t, dir, "rev-parse", "HEAD")
+	gitVerifyAt(t, dir, "update-ref", "refs/remotes/origin/main", baseSHA)
+	if err := os.WriteFile(filepath.Join(dir, "hello.go"), []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitVerifyAt(t, dir, "add", ".")
+	gitVerifyAt(t, dir, "commit", "-m", "add hello.go")
+	inputSHA := gitVerifyAt(t, dir, "rev-parse", "HEAD")
+
+	if _, _, code := runCapture(t, []string{"verify", "run", "--repo", dir, "--base-ref", "origin/main", "--json"}); code != managed.OutcomeFailedRetryable.ExitCode() {
+		t.Fatalf("verify run exit = %d, want %d", code, managed.OutcomeFailedRetryable.ExitCode())
+	}
+
+	stdout, stderr, code := runCapture(t, []string{"verify", "status", "--repo", dir, "--json"})
+	if code != 0 {
+		t.Fatalf("verify status on a failed receipt: exit %d, want 0; stderr=%s", code, stderr)
+	}
+	var status statusReport
+	if err := json.Unmarshal(stdout, &status); err != nil {
+		t.Fatalf("parse status JSON: %v (stdout=%s)", err, stdout)
+	}
+	if status.Receipt == nil || status.Receipt.Outcome != managed.OutcomeFailedRetryable {
+		t.Fatalf("status = %+v, want a found failed_retryable receipt", status)
+	}
+
+	stdout, stderr, code = runCapture(t, []string{"verify", "receipt", "--repo", dir, "--json", inputSHA})
+	if code != 0 {
+		t.Fatalf("verify receipt on a failed receipt: exit %d, want 0; stderr=%s", code, stderr)
+	}
+	var receipt statusReport
+	if err := json.Unmarshal(stdout, &receipt); err != nil {
+		t.Fatalf("parse receipt JSON: %v (stdout=%s)", err, stdout)
+	}
+	if !receipt.Found || receipt.Receipt.Outcome != managed.OutcomeFailedRetryable {
+		t.Fatalf("receipt = %+v, want a found failed_retryable receipt", receipt)
+	}
+}
+
 func TestVerifyPrepare_MissingExecutorFails(t *testing.T) {
 	dir := newVerifyTestRepo(t)
 	_, stderr, code := runCapture(t, []string{"verify", "prepare", "--repo", dir, "--base-ref", "origin/main"})

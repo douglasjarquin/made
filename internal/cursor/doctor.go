@@ -133,7 +133,10 @@ func Doctor(ctx context.Context, p DoctorParams) DoctorReport {
 	if p.BaseRef == "" {
 		record(DoctorCheck{Name: "base_ref", Status: StatusSkipped, Detail: "no --base-ref given"})
 	} else if _, err := safegit.Output(ctx, safegit.Command{WorktreePath: p.Root, Args: []string{"rev-parse", "--verify", p.BaseRef + "^{commit}"}}); err != nil {
-		record(DoctorCheck{Name: "base_ref", Status: StatusFail, Detail: fmt.Sprintf("%q was not found locally; made never fetches automatically", p.BaseRef)})
+		// A shallow or limited Cloud VM clone may not have every ref
+		// available locally; that is a real, survivable condition, so this
+		// check never gates Doctor's overall healthy.
+		record(DoctorCheck{Name: "base_ref", Status: StatusWarn, Detail: fmt.Sprintf("%q was not found locally; made never fetches automatically", p.BaseRef)})
 	} else {
 		record(DoctorCheck{Name: "base_ref", Status: StatusOK})
 	}

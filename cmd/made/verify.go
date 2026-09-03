@@ -65,7 +65,7 @@ func runVerifyRunCommand(args []string, stdout, stderr *os.File) int {
 	}
 
 	if *asJSON {
-		return emitJSON(stdout, stderr, out.Receipt)
+		return emitJSON(stdout, stderr, out.Receipt, out.Receipt.Outcome.ExitCode())
 	}
 	printHumanReceipt(stdout, out.Receipt, out.Engine.EvidenceDir)
 	return out.Receipt.Outcome.ExitCode()
@@ -113,7 +113,7 @@ func runVerifyPrepareCommand(args []string, stdout, stderr *os.File) int {
 			InputSHA:     out.Request.Contract.InputSHA,
 			ConfigPath:   out.Request.Config.Path,
 			ConfigHash:   out.Request.Config.Hash,
-		})
+		}, 0)
 	}
 	_, _ = fmt.Fprintf(stdout, "Review request written to %s\n", out.RequestPath)
 	_, _ = fmt.Fprintf(stdout, "Input SHA:      %s\n", out.Request.Contract.InputSHA)
@@ -169,7 +169,7 @@ func runVerifyCompleteCommand(args []string, stdout, stderr *os.File) int {
 	}
 
 	if *asJSON {
-		return emitJSON(stdout, stderr, out.Receipt)
+		return emitJSON(stdout, stderr, out.Receipt, out.Receipt.Outcome.ExitCode())
 	}
 	printHumanReceipt(stdout, out.Receipt, out.Engine.EvidenceDir)
 	return out.Receipt.Outcome.ExitCode()
@@ -204,7 +204,7 @@ func runVerifyStatusCommand(args []string, stdout, stderr *os.File) int {
 			InputSHA:   res.InputSHA,
 			Found:      res.Receipt != nil,
 			Receipt:    res.Receipt,
-		})
+		}, 0)
 	}
 	if res.Receipt == nil {
 		_, _ = fmt.Fprintf(stdout, "No receipt found for current HEAD (%s).\n", res.InputSHA)
@@ -245,7 +245,7 @@ func runVerifyReceiptCommand(args []string, stdout, stderr *os.File) int {
 	}
 
 	if *asJSON {
-		return emitJSON(stdout, stderr, statusReport{InputSHA: inputSHA, Found: ok, Receipt: receiptOrNil(r, ok)})
+		return emitJSON(stdout, stderr, statusReport{InputSHA: inputSHA, Found: ok, Receipt: receiptOrNil(r, ok)}, 0)
 	}
 	if !ok {
 		_, _ = fmt.Fprintf(stdout, "No receipt found for %s.\n", inputSHA)
@@ -286,13 +286,13 @@ func runVerifyCleanCommand(args []string, stdout, stderr *os.File) int {
 	return 0
 }
 
-func emitJSON(stdout, stderr *os.File, v any) int {
+func emitJSON(stdout, stderr *os.File, v any, exitCode int) int {
 	encoder := json.NewEncoder(stdout)
 	if err := encoder.Encode(v); err != nil {
 		_, _ = fmt.Fprintln(stderr, "made verify:", err)
 		return 1
 	}
-	return 0
+	return exitCode
 }
 
 func printHumanReceipt(stdout *os.File, r verify.Receipt, evidenceDir string) {

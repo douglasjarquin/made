@@ -23,14 +23,15 @@ type ConfigIdentity struct {
 }
 
 type ResolvedContext struct {
-	Repository  RepoIdentity
-	InputSHA    string
-	BaseRef     string
-	BaseSHA     string
-	Config      ConfigIdentity
-	ConfigBytes []byte
-	Guides      []managed.GuideBinding
-	Warning     string
+	Repository   RepoIdentity
+	InputSHA     string
+	BaseRef      string
+	BaseSHA      string
+	Config       ConfigIdentity
+	ConfigBytes  []byte
+	ParsedConfig config.Config
+	Guides       []managed.GuideBinding
+	Warning      string
 }
 
 func ResolveContext(ctx context.Context, workDir, baseRef string) (ResolvedContext, error) {
@@ -85,14 +86,15 @@ func ResolveContext(ctx context.Context, workDir, baseRef string) (ResolvedConte
 	}
 
 	return ResolvedContext{
-		Repository:  RepoIdentity{Root: canonicalRoot, OriginURL: remoteOriginURL(ctx, canonicalRoot)},
-		InputSHA:    inputSHA,
-		BaseRef:     baseRef,
-		BaseSHA:     baseSHA,
-		Config:      ConfigIdentity{Path: configPath, Hash: policyHash},
-		ConfigBytes: configBytes,
-		Guides:      guides,
-		Warning:     warning,
+		Repository:   RepoIdentity{Root: canonicalRoot, OriginURL: remoteOriginURL(ctx, canonicalRoot)},
+		InputSHA:     inputSHA,
+		BaseRef:      baseRef,
+		BaseSHA:      baseSHA,
+		Config:       ConfigIdentity{Path: configPath, Hash: policyHash},
+		ConfigBytes:  configBytes,
+		ParsedConfig: cfg,
+		Guides:       guides,
+		Warning:      warning,
 	}, nil
 }
 

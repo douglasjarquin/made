@@ -30,7 +30,7 @@ func TestRun_CapabilitiesJSONIsVersionedAndListsStructuredCommands(t *testing.T)
 	if payload.SchemaVersion != 1 || payload.ProtocolVersion != 1 {
 		t.Fatalf("capability versions = schema %d protocol %d, want 1/1", payload.SchemaVersion, payload.ProtocolVersion)
 	}
-	for _, want := range []string{"run.submit", "run.status", "run.list", "run.cancel", "review.decide", "doctor"} {
+	for _, want := range []string{"run.submit", "run.status", "run.list", "run.cancel", "review.decide", "doctor", "verify", "cursor"} {
 		if !containsString(payload.Commands, want) {
 			t.Fatalf("capabilities missing structured command %q: %v", want, payload.Commands)
 		}

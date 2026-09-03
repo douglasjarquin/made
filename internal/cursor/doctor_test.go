@@ -87,10 +87,16 @@ func TestDoctor_BaseRefResolvesLocally(t *testing.T) {
 	assertCheck(t, report, "base_ref", cursor.StatusOK)
 }
 
-func TestDoctor_BaseRefMissingFailsWithoutFetching(t *testing.T) {
-	dir := newDoctorRepo(t, "version: 1\n")
+func TestDoctor_BaseRefMissingIsWarnOnlyAndNeverFetches(t *testing.T) {
+	dir := newDoctorRepo(t, "version: 1\nreview:\n  executors:\n    cursor:\n      model: gpt-5\n")
+	if _, err := cursor.Sync(dir, mustConfig(t, dir), false); err != nil {
+		t.Fatal(err)
+	}
 	report := cursor.Doctor(context.Background(), cursor.DoctorParams{Root: dir, BaseRef: "origin/does-not-exist"})
-	assertCheck(t, report, "base_ref", cursor.StatusFail)
+	if !report.Healthy {
+		t.Fatalf("expected an unresolvable --base-ref to stay non-fatal on a shallow/limited clone, got %+v", report)
+	}
+	assertCheck(t, report, "base_ref", cursor.StatusWarn)
 }
 
 func TestDoctor_TempPathsWritable(t *testing.T) {
