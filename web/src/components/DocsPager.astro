@@ -1,0 +1,33 @@
+---
+import { pagerFor } from "../lib/nav.mjs";
+
+const { current } = Astro.props;
+const { prev, next } = pagerFor(current);
+---
+
+{
+  prev || next ? (
+    <nav class="pager" aria-label="Docs pager">
+      {
+        prev ? (
+          <a href={prev.href} rel="prev">
+            <span class="pager__dir">← previous</span>
+            <span>{prev.label}</span>
+          </a>
+        ) : (
+          <span></span>
+        )
+      }
+      {
+        next ? (
+          <a href={next.href} rel="next">
+            <span class="pager__dir">next →</span>
+            <span>{next.label}</span>
+          </a>
+        ) : (
+          <span></span>
+        )
+      }
+    </nav>
+  ) : null
+}

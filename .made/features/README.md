@@ -54,3 +54,11 @@ carry `cursor.GeneratedMarker`; unmarked files are not overwritten without
 `--adopt`.
 
 Entry points: `cmd/made/cursor.go`, `internal/cursor`.
+
+## Docs site
+
+A static Astro site in `web/`, same stack as sf2-themes: Node 24, Aube 2.2.4,
+Playwright, GitHub Pages at `/made`. Internal URLs go through `sitePath()`.
+Drive it with `mise run web:*` from the repo root.
+
+Entry points: `web/`, `mise.toml`, `web/AGENTS.md`.

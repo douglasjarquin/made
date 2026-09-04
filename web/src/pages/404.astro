@@ -1,0 +1,31 @@
+---
+import DocsLayout from "../layouts/DocsLayout.astro";
+import { sitePath } from "../lib/site-path.mjs";
+---
+
+<DocsLayout
+  current=""
+  noindex
+  showCrumb={false}
+  title="Page not found"
+  description="No run, page, or gate by that name. Start from one of these."
+>
+  <div data-testid="project-404">
+    <h1>Not found.</h1>
+    <p class="lead">No run, page, or gate by that name. Start from one of these.</p>
+    <div class="kv" style="--kv-key: 140px">
+      <div class="kv__row">
+        <span class="kv__key">Quick start</span>
+        <span class="kv__val"><a href={sitePath("start")}>Install, configure, verify →</a></span>
+      </div>
+      <div class="kv__row">
+        <span class="kv__key">Pipeline</span>
+        <span class="kv__val"><a href={sitePath("pipeline")}>Run states and gates →</a></span>
+      </div>
+      <div class="kv__row">
+        <span class="kv__key">CLI</span>
+        <span class="kv__val"><a href={sitePath("cli")}>Every command →</a></span>
+      </div>
+    </div>
+  </div>
+</DocsLayout>

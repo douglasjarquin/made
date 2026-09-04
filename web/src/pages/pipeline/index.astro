@@ -1,0 +1,62 @@
+---
+import DocsLayout from "../../layouts/DocsLayout.astro";
+import { sitePath } from "../../lib/site-path.mjs";
+
+const states = [
+  "queued",
+  "running",
+  "awaiting_review",
+  "awaiting_merge",
+  "succeeded",
+  "failed",
+  "canceled",
+  "superseded",
+];
+---
+
+<DocsLayout
+  current="pipeline"
+  title="Pipeline and gates"
+  description="A gate is the ordered set of checks a commit must pass before made pushes, opens a PR, and watches CI. A run is one commit walking one gate."
+>
+  <h1>Pipeline and gates</h1>
+  <p class="lead">A gate is the ordered set of checks a commit must pass before made pushes, opens a PR, and watches CI. A run is one commit walking one gate.</p>
+  <div class="note">Detail below is drawn from the README and the versioned daemon contract. Expand from plans/made-rewrite.md and docs/.</div>
+
+  <h2>Run states</h2>
+  <div class="chips">
+    {
+      states.map((state) => (
+        <span class:list={["chip", state === "succeeded" && "chip--active"]}>{state}</span>
+      ))
+    }
+  </div>
+  <div class="kv">
+    <div class="kv__row"><span class="kv__key">queued</span><span class="kv__val">Accepted into the spool. Idempotent on gate, ref, and input SHA: resubmitting the same triple returns the same run.</span></div>
+    <div class="kv__row"><span class="kv__key">running</span><span class="kv__val">Gate stages executing: review, tests, docs, lint, push.</span></div>
+    <div class="kv__row"><span class="kv__key">awaiting_review</span><span class="kv__val">A stage needs an explicit decision. Resolve with <code>made review decide</code> using the exact run id.</span></div>
+    <div class="kv__row"><span class="kv__key">awaiting_merge</span><span class="kv__val">Pushed, PR open, CI being polled under the check policy.</span></div>
+    <div class="kv__row"><span class="kv__key">succeeded</span><span class="kv__val">Green. The PR is ready for a human to land.</span></div>
+    <div class="kv__row"><span class="kv__key">failed</span><span class="kv__val">A stage failed or the rerun budget ran out. Evidence is reported by failed check and run.</span></div>
+    <div class="kv__row"><span class="kv__key">canceled</span><span class="kv__val">Idempotent; cancelling twice is fine.</span></div>
+    <div class="kv__row"><span class="kv__key">superseded</span><span class="kv__val">A newer SHA on the same ref replaced this run.</span></div>
+  </div>
+
+  <h2>Durability</h2>
+  <p>Run state is persisted in a fsync-backed local WAL. Gate submissions use an idempotent fsync-backed spool keyed by gate, ref, and input SHA. The daemon acquires its singleton before touching the Unix socket path, removes only stale sockets, and refuses regular files, symlinks, and directories.</p>
+
+  <h2>CI check policy</h2>
+  <p>The trusted config copy may set <code>ci.check_scope</code> to <code>required</code> or <code>all</code>; the default is <code>required</code>. <code>ci.rerun_budget</code> counts rerun rounds, not individual checks.</p>
+  <p>made polls pending checks without spending a round, reruns each unique failed GitHub Actions workflow run only, and reports bounded evidence by failed check and run. External checks are reported by name and link and are never rerun.</p>
+
+  <h2>Daemonless path</h2>
+  <p><code>made verify</code> validates one committed SHA without a daemon, gate, push, PR, or CI polling. <code>made cursor init</code> / <code>sync</code> / <code>check</code> / <code>doctor</code> project a Cursor reviewer and a <code>verify-with-made</code> skill from trusted config so a Cloud agent can drive that path.</p>
+
+  <h2>Smoke contract</h2>
+  <p>Opt in with <code>MADE_GITHUB_SMOKE_REPO</code> plus <code>MADE_GITHUB_SMOKE_PR_URL</code>; <code>make release-validation</code> runs the disposable-repository smoke when both are set.</p>
+
+  <div class="related">
+    <a class="pill" href={sitePath("cli")}>CLI →</a>
+    <a class="pill" href={sitePath("config")}>Configuration →</a>
+  </div>
+</DocsLayout>

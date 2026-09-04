@@ -1,0 +1,73 @@
+---
+import DocsLayout from "../../layouts/DocsLayout.astro";
+import { sitePath } from "../../lib/site-path.mjs";
+---
+
+<DocsLayout
+  current="start"
+  title="Quick start"
+  description="Install the binary, add a config, verify one commit. Wire it to consigliere once that feels boring."
+>
+  <h1>Quick start</h1>
+  <p class="lead">Install the binary, add a config, verify one commit. Wire it to consigliere once that feels boring.</p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step__num">1</div>
+      <div>
+        <h3>Build from source</h3>
+        <p>made is a Go module. Clone and build with the Makefile.</p>
+        <pre>git clone https://github.com/douglasjarquin/made.git
+cd made && make</pre>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step__num">2</div>
+      <div>
+        <h3>Add a config</h3>
+        <p>Either <code>.made.yaml</code> at the root or <code>.made/config.yaml</code>. Both are first-class; having both fails closed.</p>
+        <pre>made config path --json     <span class="comment"># which layout this repo uses</span>
+made config check --json    <span class="comment"># validate without starting a pipeline</span></pre>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step__num">3</div>
+      <div>
+        <h3>Check health</h3>
+        <pre>made doctor --json          <span class="comment"># fixed health schema</span>
+made capabilities --json    <span class="comment"># protocol and command schema</span></pre>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step__num">4</div>
+      <div>
+        <h3>Verify one commit, no daemon</h3>
+        <p><code>made verify</code> validates a committed SHA with no daemon, gate, push, PR, or CI polling.</p>
+        <pre>made verify --json $(git rev-parse HEAD)</pre>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step__num">5</div>
+      <div>
+        <h3>Submit a gated run</h3>
+        <p>With the daemon up, submit a ref and SHA to a gate. The spool is idempotent on gate, ref, and input SHA.</p>
+        <pre>made run submit --json --gate &lt;bare-gate-path&gt; \
+  --ref refs/heads/&lt;branch&gt; --old-sha &lt;previous-head-sha&gt; --input-sha &lt;sha&gt;
+made run list --json --active</pre>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step__num">6</div>
+      <div>
+        <h3>Optional: project a Cursor reviewer</h3>
+        <p>Generate a Cursor reviewer and a <code>verify-with-made</code> skill from trusted config so a Cloud agent can drive verification.</p>
+        <pre>made cursor init && made cursor check</pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="related">
+    <a class="pill" href={sitePath("pipeline")}>Pipeline and gates →</a>
+    <a class="pill" href={sitePath("cli")}>CLI →</a>
+  </div>
+</DocsLayout>

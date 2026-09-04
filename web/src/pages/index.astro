@@ -1,0 +1,112 @@
+---
+import SiteLayout from "../layouts/SiteLayout.astro";
+import { CONSIGLIERE_URL, PRODUCT_DESCRIPTION } from "../lib/seo.mjs";
+import { sitePath } from "../lib/site-path.mjs";
+
+const states = [
+  "queued",
+  "running",
+  "awaiting_review",
+  "awaiting_merge",
+  "succeeded",
+  "failed",
+  "canceled",
+  "superseded",
+];
+
+const handoff = `<span class="comment">$</span> made run submit --json \\
+    --gate .made/gates/default \\
+    --ref refs/heads/rate-limiter \\
+    --old-sha 3f9c1e2 --input-sha a81d0f4
+{ "run_id": "run_01J9…", "state": "queued" }
+
+<span class="comment">$</span> made run status --json run_01J9…
+{ "state": "awaiting_review", "stage": "review" }
+
+<span class="comment">$</span> made review decide --json --stage review \\
+    --decision approved run_01J9…
+{ "state": "awaiting_merge" }
+
+<span class="comment">$</span> made run status --json run_01J9…
+{ "state": <span class="ok">"succeeded"</span>, "pr": "#42", "ci": "green" }`;
+---
+
+<SiteLayout showHerdr title="Turn code into green PRs" description={PRODUCT_DESCRIPTION}>
+  <header class="site-frame home-hero">
+    <div class="badge"><span class="status-dot" aria-hidden="true"></span>the no-mistakes button for shipping software</div>
+    <h1>Turn code into <em>green PRs.</em></h1>
+    <p class="lead">
+      Automated review, tests, docs, lint, push, and CI. A Go rewrite of no-mistakes' validation-gate
+      pipeline, built to pair with consigliere and herdr.
+    </p>
+    <div class="home-actions">
+      <a class="btn btn-primary" href={sitePath("start")}>Get started</a>
+      <a class="btn btn-secondary" href={sitePath("pipeline")}>How the gate works</a>
+    </div>
+  </header>
+
+  <section class="site-frame home-states" aria-labelledby="states-heading">
+    <div class="card">
+      <div>
+        <div class="eyebrow">one run, eight states</div>
+        <h2 id="states-heading">Submit a SHA. Get a decision.</h2>
+        <p>
+          Every run walks a fixed state machine and persists each step in a fsync-backed WAL. Gate
+          submissions land in an idempotent spool keyed by gate, ref, and input SHA, so a retried
+          submit is the same run, never a second one.
+        </p>
+      </div>
+      <div class="chips">
+        {
+          states.map((state) => (
+            <span class:list={["chip", state === "succeeded" && "chip--active"]}>{state}</span>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="site-frame home-features" aria-label="Highlights">
+    <div>
+      <div class="rule"></div>
+      <h3>Daemonless verification</h3>
+      <p>
+        <code>made verify</code> validates one committed SHA with no daemon, gate, push, PR, or CI
+        polling. A Cursor Cloud agent can drive it through the projected <code>verify-with-made</code> skill.
+      </p>
+    </div>
+    <div>
+      <div class="rule"></div>
+      <h3>Versioned daemon contract</h3>
+      <p>
+        <code>made capabilities --json</code> reports the public protocol and command schema. Every
+        command has a <code>--json</code> form with a fixed shape, so consigliere never parses prose.
+      </p>
+    </div>
+    <div>
+      <div class="rule"></div>
+      <h3>Bounded CI reruns</h3>
+      <p>
+        Polls pending checks without spending a round, reruns each unique failed Actions workflow run
+        once per round, and reports evidence by failed check and run. External checks are named and
+        linked, never rerun.
+      </p>
+    </div>
+  </section>
+
+  <section class="home-handoff" aria-labelledby="handoff-heading">
+    <div class="site-frame home-handoff__inner">
+      <div>
+        <div class="eyebrow">with consigliere</div>
+        <h2 id="handoff-heading">The soldier writes. made checks. The boss lands.</h2>
+        <p>
+          Consigliere dispatches a soldier into a herdr worktree; when the soldier commits, made runs
+          the gate on that SHA and only then opens the PR. Review decisions come back through one
+          command with an exact run id.
+        </p>
+        <a href={CONSIGLIERE_URL} rel="noreferrer" target="_blank" style="font-family: var(--font-mono); font-size: 13px; color: var(--accent)">consigliere ↗</a>
+      </div>
+      <pre set:html={handoff} />
+    </div>
+  </section>
+</SiteLayout>

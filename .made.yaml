@@ -22,5 +22,14 @@ validation:
         - "go test -race -shuffle=on -count=1 ./..."
         - "go vet ./..."
       required_before_push: true
+    web:
+      paths:
+        - "web/**"
+        - "mise.toml"
+        - "mise.lock"
+      full:
+        - "mise run web:check"
+        - "mise run web:test:unit"
+      required_before_push: true
 commands:
   lint: golangci-lint run ./...

@@ -1,0 +1,68 @@
+---
+import SiteFooter from "../components/SiteFooter.astro";
+import SiteHeader from "../components/SiteHeader.astro";
+import {
+  PRODUCT_DESCRIPTION,
+  PRODUCT_NAME,
+  canonicalUrl,
+  productJsonLd,
+} from "../lib/seo.mjs";
+import "../styles/global.css";
+
+const {
+  description = PRODUCT_DESCRIPTION,
+  footerRuled = false,
+  noindex = false,
+  showHerdr = false,
+  title,
+} = Astro.props;
+const pageTitle = `${title} | ${PRODUCT_NAME}`;
+const pageUrl = canonicalUrl(Astro.url.pathname);
+const jsonLd = noindex ? "" : JSON.stringify(productJsonLd());
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="description" content={description} />
+    {noindex ? <meta name="robots" content="noindex" /> : null}
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="canonical" href={pageUrl} />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={pageUrl} />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={pageTitle} />
+    <meta name="twitter:description" content={description} />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&family=Red+Hat+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <script is:inline>
+      (() => {
+        const key = "made-theme";
+        let theme = "light";
+        try {
+          const saved = localStorage.getItem(key);
+          if (saved === "dark" || saved === "light") theme = saved;
+        } catch {}
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+      })();
+    </script>
+    <title>{pageTitle}</title>
+    {noindex ? null : <script is:inline type="application/ld+json" set:html={jsonLd} />}
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+    <div class="site-shell">
+      <SiteHeader currentPath={Astro.url.pathname} />
+      <main id="main-content" tabindex="-1"><slot /></main>
+      <SiteFooter ruled={footerRuled} showHerdr={showHerdr} />
+    </div>
+  </body>
+</html>

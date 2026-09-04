@@ -1,4 +1,4 @@
-.PHONY: build test lint skill release-validation
+.PHONY: build test lint skill release-validation web-install web-dev web-check web-build web-test
 
 build:
 	go build ./...
@@ -11,6 +11,21 @@ lint:
 
 skill:
 	go run ./cmd/genskill
+
+web-install:
+	mise run web:install
+
+web-dev:
+	mise run web:dev
+
+web-check:
+	mise run web:check
+
+web-build:
+	mise run web:build
+
+web-test:
+	mise run web:test
 
 release-validation:
 	GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false go test -race -shuffle=on -count=1 ./...

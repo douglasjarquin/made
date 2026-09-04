@@ -1,0 +1,30 @@
+---
+import DocsLayout from "../../layouts/DocsLayout.astro";
+import { sitePath } from "../../lib/site-path.mjs";
+---
+
+<DocsLayout
+  current="cursor"
+  title="Cursor Cloud"
+  description="Project a reviewer and a skill from trusted config, so a Cloud agent can verify commits with made and no daemon."
+>
+  <h1>Cursor Cloud</h1>
+  <p class="lead">Project a reviewer and a skill from trusted config, so a Cloud agent can verify commits with made and no daemon.</p>
+
+  <h2>Commands</h2>
+  <pre>made cursor init      <span class="comment"># project the reviewer and verify-with-made skill</span>
+made cursor sync      <span class="comment"># re-project after config changes</span>
+made cursor check     <span class="comment"># verify the projection matches trusted config</span>
+made cursor doctor    <span class="comment"># environment health for the Cloud machine</span></pre>
+
+  <h2>The path</h2>
+  <p>The Cloud agent calls <code>made verify</code> on a committed SHA. No daemon, gate, push, PR, or CI polling is involved. The reviewer and skill are derived from the trusted config copy, so the agent cannot be steered by an untrusted file in the working tree.</p>
+
+  <h2>This repository</h2>
+  <p>made's own Cursor Cloud machine is defined in <code>.cursor/environment.json</code>. Source: <code>cmd/made/verify.go</code> and <code>cmd/made/cursor.go</code>.</p>
+
+  <div class="related">
+    <a class="pill" href={sitePath("daemon")}>Daemon →</a>
+    <a class="pill" href={sitePath("cli")}>CLI →</a>
+  </div>
+</DocsLayout>
