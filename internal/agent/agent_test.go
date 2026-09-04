@@ -80,6 +80,45 @@ func TestSpawn_ParsesFindingsFromFakeAgent(t *testing.T) {
 	}
 }
 
+func TestSpawn_ParsesFindingsFromEveryHarness(t *testing.T) {
+	binary := agenttest.Build(t)
+	worktree := agentWorktree(t)
+	scenarioPath := writeScenario(t, agent.Findings{
+		Findings: []agent.Finding{{Kind: agent.FindingBlocking, Description: "needs a human", Code: "MADE-1"}},
+	})
+	for _, kind := range agent.SupportedKinds() {
+		t.Run(string(kind), func(t *testing.T) {
+			logPath := filepath.Join(t.TempDir(), "invocation.log")
+			findings, err := agent.Spawn(context.Background(), kind, agent.SpawnParams{
+				WorktreePath: worktree,
+				BinaryPath:   binary,
+				Task:         "review the candidate diff",
+				ExtraEnv:     []string{"FAKE_AGENT_KIND=" + string(kind), "FAKE_AGENT_SCENARIO=" + scenarioPath, "FAKE_AGENT_LOG_FILE=" + logPath},
+			})
+			if err != nil {
+				t.Fatalf("Spawn(%s): %v", kind, err)
+			}
+			if len(findings.Findings) != 1 || findings.Findings[0].Description != "needs a human" || findings.Findings[0].Code != "MADE-1" {
+				t.Fatalf("Spawn(%s) findings = %+v", kind, findings)
+			}
+			logData, err := os.ReadFile(logPath)
+			if err != nil {
+				t.Fatalf("read invocation log: %v", err)
+			}
+			if kind != agent.KindGrok && !strings.Contains(string(logData), "task=review the candidate diff") {
+				t.Fatalf("%s did not receive the task on stdin: %s", kind, logData)
+			}
+		})
+	}
+}
+
+func TestSpawn_RejectsUnknownKind(t *testing.T) {
+	_, err := agent.Spawn(context.Background(), agent.Kind("copilot"), agent.SpawnParams{WorktreePath: agentWorktree(t), BinaryPath: agenttest.Build(t)})
+	if err == nil || !strings.Contains(err.Error(), "supported agents") {
+		t.Fatalf("Spawn(copilot) error = %v, want unsupported-agent error", err)
+	}
+}
+
 func TestSpawn_NonZeroExitReturnsError(t *testing.T) {
 	bin := agenttest.Build(t)
 	stdoutPath := filepath.Join(t.TempDir(), "stdout.txt")

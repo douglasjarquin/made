@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,7 +13,37 @@ import (
 	"github.com/douglasjarquin/made/internal/gitgate"
 )
 
-func startTestDaemon(t *testing.T, home string) (*daemon.RunManager, *api.Client) {
+// testDaemonClient dials the daemon socket for every call. The server closes a
+// connection that stays idle for api's request read timeout (one second), and
+// tests routinely spend longer than that on git fixtures between Dial and the
+// first Call, which made a long-lived client flake with "broken pipe" under
+// full-suite load. Real callers dial and call back to back, so this mirrors
+// them rather than holding one connection open across fixture setup.
+type testDaemonClient struct {
+	socketPath string
+}
+
+func (c testDaemonClient) Call(method string, params any) (json.RawMessage, error) {
+	client, err := api.Dial(c.socketPath)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = client.Close() }()
+	return client.Call(method, params)
+}
+
+func (c testDaemonClient) CallInto(method string, params, out any) error {
+	client, err := api.Dial(c.socketPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+	return client.CallInto(method, params, out)
+}
+
+func (c testDaemonClient) Close() error { return nil }
+
+func startTestDaemon(t *testing.T, home string) (*daemon.RunManager, testDaemonClient) {
 	t.Helper()
 	lockPath := filepath.Join(home, "daemon.lock")
 
@@ -36,11 +67,12 @@ func startTestDaemon(t *testing.T, home string) (*daemon.RunManager, *api.Client
 		}
 	})
 
-	client, err := api.Dial(api.SocketPath(home))
+	client := testDaemonClient{socketPath: api.SocketPath(home)}
+	probe, err := api.Dial(client.socketPath)
 	if err != nil {
 		t.Fatalf("dial daemon socket: %v", err)
 	}
-	t.Cleanup(func() { _ = client.Close() })
+	_ = probe.Close()
 	return rm, client
 }
 

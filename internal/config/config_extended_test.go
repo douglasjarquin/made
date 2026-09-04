@@ -152,12 +152,16 @@ func TestConfig_LintCommandReturnsNilWhenEmpty(t *testing.T) {
 	}
 }
 
-func TestConfig_AgentKindRejectsClaude(t *testing.T) {
-	cfg := Config{Agent: "claude"}
-
-	_, err := cfg.AgentKind()
-	if err == nil || !strings.Contains(err.Error(), "supported agents") || !strings.Contains(err.Error(), "codex") {
-		t.Fatalf("AgentKind() error = %v, want actionable unsupported-agent error", err)
+func TestConfig_AgentKindMapsEverySupportedHarness(t *testing.T) {
+	for _, want := range agent.SupportedKinds() {
+		cfg := Config{Agent: string(want)}
+		kind, err := cfg.AgentKind()
+		if err != nil {
+			t.Fatalf("AgentKind(%q) returned unexpected error: %v", want, err)
+		}
+		if kind != want {
+			t.Errorf("AgentKind(%q) = %v", want, kind)
+		}
 	}
 }
 
@@ -195,7 +199,7 @@ func TestConfig_AgentKindFailsClosedOnUnrecognizedValue(t *testing.T) {
 }
 
 func TestLoadEffectiveConfig_RejectsUnsupportedAgentBeforePipelineStages(t *testing.T) {
-	for _, unsupported := range []string{"claude", "gpt4"} {
+	for _, unsupported := range []string{"copilot", "gpt4"} {
 		t.Run(unsupported, func(t *testing.T) {
 			path := writeConfigFile(t, t.TempDir(), ".made.yml", "version: 1\nreview:\n  required: true\nagent: "+unsupported+"\n")
 			_, err := LoadEffectiveConfig(path, "")

@@ -26,6 +26,13 @@ Both are equally valid first-class paths; neither is preferred, and having both 
 `made config path --json` reports which one a repository uses, `made config check --json` validates it without starting a pipeline, and `made config move --to root|directory` migrates between the two layouts.
 The legacy root `.made.yml` still works during a bounded deprecation window, but conflicts with either first-class path if both are present.
 
+### Reviewer harness
+
+`agent:` names the coding-agent CLI Made spawns for Review, in report-only mode, on a detached read-only copy of the candidate.
+Supported values are `codex`, `claude`, `cursor`, and `grok`; `made capabilities --json` lists the same set.
+Each maps to the corresponding CLI on `PATH` (`codex`, `claude`, `cursor-agent`, `grok`), already installed and authenticated by you.
+Every harness receives the same task and must return one JSON object matching Made's findings schema; the adapters live in `internal/agent/spawn.go`.
+
 ### CI check policy
 
 The trusted config copy may set `ci.check_scope` to `required` or `all`; the default is `required`.

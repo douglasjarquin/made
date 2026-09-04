@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -41,8 +42,8 @@ func TestCapabilitiesJSONExposesStructuredRunContract(t *testing.T) {
 			t.Fatalf("capabilities missing command %q: %+v", want, payload.Commands)
 		}
 	}
-	if len(payload.Agents) != 1 || payload.Agents[0] != "codex" {
-		t.Fatalf("capabilities agents = %v, want only codex", payload.Agents)
+	if want := supportedAgentNames(); !slices.Equal(payload.Agents, want) || !slices.Contains(want, "codex") {
+		t.Fatalf("capabilities agents = %v, want %v", payload.Agents, want)
 	}
 	_ = stdout
 	_ = stderr

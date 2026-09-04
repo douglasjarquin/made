@@ -34,13 +34,24 @@ func TestReviewSchemaRequiresEveryFindingProperty(t *testing.T) {
 			t.Fatalf("review schema does not require finding property %q", property)
 		}
 	}
-	// Optional fields may appear in properties but not in required.
+	// Strict structured-output modes (Codex, Claude) reject any property that
+	// is not also listed in required, so every property must be required and
+	// the semantically optional ones must accept null instead.
+	for name := range schema.Properties.Findings.Items.Properties {
+		if !slices.Contains(schema.Properties.Findings.Items.Required, name) {
+			t.Fatalf("review schema property %q is not required; strict schema modes reject that", name)
+		}
+	}
 	for _, optional := range []string{"code", "class", "symbol"} {
-		if _, ok := schema.Properties.Findings.Items.Properties[optional]; !ok {
+		raw, ok := schema.Properties.Findings.Items.Properties[optional]
+		if !ok {
 			t.Fatalf("review schema missing optional finding property %q", optional)
 		}
-		if slices.Contains(schema.Properties.Findings.Items.Required, optional) {
-			t.Fatalf("review schema incorrectly requires optional finding property %q", optional)
+		var prop struct {
+			Type []string `json:"type"`
+		}
+		if err := json.Unmarshal(raw, &prop); err != nil || !slices.Contains(prop.Type, "null") {
+			t.Fatalf("optional finding property %q must be nullable, got %s", optional, raw)
 		}
 	}
 }
