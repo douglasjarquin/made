@@ -1,4 +1,5 @@
-// Command fakeagent is a deterministic test double for the Codex CLI:
+// Command fakeagent is a deterministic test double for every reviewer CLI
+// Made can spawn (codex, claude, cursor-agent, grok; selected by FAKE_AGENT_KIND):
 // it never calls a real model, it just replays a scripted findings payload so
 // internal/agent and internal/pipeline/review can be tested without network
 // access or API keys. Scenario selection and invocation logging are both
@@ -8,6 +9,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -15,11 +17,11 @@ import (
 )
 
 func main() {
-	if kind := os.Getenv("FAKE_AGENT_KIND"); kind != "" && kind != string(agentKindCodex) {
-		fmt.Fprintln(os.Stderr, "fakeagent: only the codex structured exec contract is supported")
-		os.Exit(2)
+	kind := os.Getenv("FAKE_AGENT_KIND")
+	if kind == "" {
+		kind = agentKindCodex
 	}
-	if err := validateInvocation(os.Args[1:]); err != nil {
+	if err := validateInvocation(kind, os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "fakeagent: invalid invocation: %v\n", err)
 		os.Exit(2)
 	}
@@ -62,15 +64,143 @@ func main() {
 		os.Exit(1)
 	}
 
-	if _, err := os.Stdout.Write(data); err != nil {
+	if _, err := os.Stdout.Write(envelope(kind, data)); err != nil {
 		fmt.Fprintf(os.Stderr, "fakeagent: write structured output: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-const agentKindCodex = "codex"
+const (
+	agentKindCodex  = "codex"
+	agentKindClaude = "claude"
+	agentKindCursor = "cursor"
+	agentKindGrok   = "grok"
+)
 
-func validateInvocation(args []string) error {
+func validateInvocation(kind string, args []string) error {
+	switch kind {
+	case agentKindCodex:
+		return validateCodexInvocation(args)
+	case agentKindClaude:
+		return validateClaudeInvocation(args)
+	case agentKindCursor:
+		return validateCursorInvocation(args)
+	case agentKindGrok:
+		return validateGrokInvocation(args)
+	default:
+		return fmt.Errorf("unknown FAKE_AGENT_KIND %q", kind)
+	}
+}
+
+// flagValue returns the value following flag, or "" when absent.
+func flagValue(args []string, flag string) string {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == flag {
+			return args[i+1]
+		}
+	}
+	return ""
+}
+
+func hasFlag(args []string, flag string) bool {
+	for _, arg := range args {
+		if arg == flag {
+			return true
+		}
+	}
+	return false
+}
+
+func validateClaudeInvocation(args []string) error {
+	for _, want := range []string{"-p", "--strict-mcp-config", "--no-session-persistence"} {
+		if !hasFlag(args, want) {
+			return fmt.Errorf("claude invocation missing %s: %v", want, args)
+		}
+	}
+	if flagValue(args, "--output-format") != "json" || flagValue(args, "--permission-mode") != "plan" {
+		return fmt.Errorf("claude invocation must be json output in plan mode: %v", args)
+	}
+	if !isFindingsSchema(flagValue(args, "--json-schema")) {
+		return fmt.Errorf("claude invocation must pass the findings schema inline: %v", args)
+	}
+	if hasFlag(args, "Edit") || hasFlag(args, "Write") || flagValue(args, "--tools") == "default" {
+		return fmt.Errorf("claude invocation must not enable write tools: %v", args)
+	}
+	return nil
+}
+
+func validateCursorInvocation(args []string) error {
+	if !hasFlag(args, "-p") || flagValue(args, "--output-format") != "json" {
+		return fmt.Errorf("cursor-agent invocation must print json: %v", args)
+	}
+	if mode := flagValue(args, "--mode"); mode != "ask" && mode != "plan" {
+		return fmt.Errorf("cursor-agent invocation must use a read-only mode, got %q", mode)
+	}
+	if hasFlag(args, "--force") || hasFlag(args, "--yolo") || hasFlag(args, "-f") {
+		return fmt.Errorf("cursor-agent invocation must not force-allow commands: %v", args)
+	}
+	if !filepath.IsAbs(flagValue(args, "--workspace")) {
+		return fmt.Errorf("cursor-agent workspace must be absolute: %v", args)
+	}
+	return nil
+}
+
+func validateGrokInvocation(args []string) error {
+	promptPath := flagValue(args, "--prompt-file")
+	if !filepath.IsAbs(promptPath) {
+		return fmt.Errorf("grok prompt file must be absolute: %v", args)
+	}
+	if _, err := os.Stat(promptPath); err != nil {
+		return fmt.Errorf("grok prompt file unreadable: %w", err)
+	}
+	if !isFindingsSchema(flagValue(args, "--json-schema")) {
+		return fmt.Errorf("grok invocation must pass the findings schema inline: %v", args)
+	}
+	if flagValue(args, "--permission-mode") != "plan" || !filepath.IsAbs(flagValue(args, "--cwd")) {
+		return fmt.Errorf("grok invocation must run plan mode in an absolute cwd: %v", args)
+	}
+	if hasFlag(args, "--always-approve") {
+		return fmt.Errorf("grok invocation must not auto-approve tools: %v", args)
+	}
+	return nil
+}
+
+func isFindingsSchema(schema string) bool {
+	var parsed struct {
+		Properties map[string]any `json:"properties"`
+	}
+	if err := json.Unmarshal([]byte(schema), &parsed); err != nil {
+		return false
+	}
+	_, ok := parsed.Properties["findings"]
+	return ok
+}
+
+// envelope wraps the scripted findings the way each real CLI prints its
+// non-interactive result, so tests exercise the same extraction path the
+// production adapter uses.
+func envelope(kind string, findings []byte) []byte {
+	text := string(findings)
+	var out any
+	switch kind {
+	case agentKindClaude:
+		out = map[string]any{"type": "result", "subtype": "success", "is_error": false, "result": text, "structured_output": json.RawMessage(findings)}
+	case agentKindCursor:
+		out = map[string]any{"type": "result", "subtype": "success", "is_error": false, "result": "```json\n" + text + "\n```"}
+	case agentKindGrok:
+		out = map[string]any{"text": text, "stopReason": "end_turn", "structuredOutput": json.RawMessage(findings)}
+	default:
+		return findings
+	}
+	data, err := json.Marshal(out)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fakeagent: marshal %s envelope: %v\n", kind, err)
+		os.Exit(1)
+	}
+	return data
+}
+
+func validateCodexInvocation(args []string) error {
 	if len(args) != 10 && len(args) != 11 {
 		return fmt.Errorf("want 10 or 11 arguments, got %d", len(args))
 	}

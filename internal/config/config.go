@@ -192,12 +192,11 @@ func shellCommand(cmd string) []string {
 }
 
 func (c Config) AgentKind() (agent.Kind, error) {
-	switch c.Agent {
-	case string(agent.KindCodex):
-		return agent.KindCodex, nil
-	default:
-		return "", fmt.Errorf("config: unsupported agent %q; supported agents: %q", c.Agent, agent.KindCodex)
+	kind, err := agent.ParseKind(c.Agent)
+	if err != nil {
+		return "", fmt.Errorf("config: %w", err)
 	}
+	return kind, nil
 }
 
 func (c Config) Validate() error {
@@ -218,7 +217,7 @@ func (c Config) ValidateWithoutReviewAgentRequirement() error {
 
 func (c Config) validateReviewRequiresAgent() error {
 	if c.Review.Required && c.Agent == "" {
-		return fmt.Errorf("config: review requires agent %q", agent.KindCodex)
+		return fmt.Errorf("config: review requires agent (one of %s)", agent.SupportedKindNames())
 	}
 	return nil
 }
@@ -230,8 +229,8 @@ func (c Config) validateCommon() error {
 		}
 	}
 	for index, configured := range c.Agents {
-		if configured != string(agent.KindCodex) {
-			return fmt.Errorf("config: unsupported agent %q at agents[%d]; supported agents: %q", configured, index, agent.KindCodex)
+		if _, err := agent.ParseKind(configured); err != nil {
+			return fmt.Errorf("config: %w at agents[%d]", err, index)
 		}
 	}
 	if err := c.Validation.validate(); err != nil {
