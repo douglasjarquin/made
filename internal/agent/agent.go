@@ -51,3 +51,22 @@ func (k Kind) binaryName() string {
 		return string(k)
 	}
 }
+
+// stateDirs lists the HOME-relative directories each CLI writes while running a
+// single non-interactive turn (auth cache, session logs, telemetry). They stay
+// writable inside the Linux containment because the CLIs fail closed without
+// them; the candidate's source is still masked read-only.
+func (k Kind) stateDirs() []string {
+	switch k {
+	case KindCodex:
+		return []string{".codex"}
+	case KindClaude:
+		return []string{".claude", ".claude.json", ".config/claude"}
+	case KindCursor:
+		return []string{".cursor", ".config/cursor-agent", ".local/share/cursor-agent", ".cache/cursor-agent"}
+	case KindGrok:
+		return []string{".grok"}
+	default:
+		return nil
+	}
+}

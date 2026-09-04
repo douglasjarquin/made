@@ -70,7 +70,7 @@ func SpawnWithEvidence(ctx context.Context, kind Kind, params SpawnParams) (Spaw
 		return SpawnResult{}, err
 	}
 	defer cleanup()
-	commandName, commandArgs, err := containedInvocation(binary, args, reviewPath, protectedPaths, maskPaths)
+	commandName, commandArgs, err := containedInvocation(binary, args, reviewPath, protectedPaths, maskPaths, existingStatePaths(kind))
 	if err != nil {
 		return SpawnResult{}, fmt.Errorf("agent: contain review process: %w", err)
 	}
@@ -103,6 +103,23 @@ func SpawnWithEvidence(ctx context.Context, kind Kind, params SpawnParams) (Spaw
 		return SpawnResult{}, fmt.Errorf("agent: parse findings from %s: %w: stdout=%s", kind, err, evidence.RedactString(string(result.Stdout)))
 	}
 	return SpawnResult{Findings: findings, Task: task, Response: response}, nil
+}
+
+// existingStatePaths resolves kind.stateDirs against HOME, keeping only the
+// entries that exist: bubblewrap refuses to bind a missing source.
+func existingStatePaths(kind Kind) []string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	var paths []string
+	for _, rel := range kind.stateDirs() {
+		path := filepath.Join(home, rel)
+		if _, err := os.Stat(path); err == nil {
+			paths = append(paths, path)
+		}
+	}
+	return paths
 }
 
 func reviewEnvironmentForDir(extra []string, dir string) []string {

@@ -35,6 +35,7 @@ func main() {
 	if logPath := os.Getenv("FAKE_AGENT_LOG_FILE"); logPath != "" {
 		logInvocation(logPath)
 	}
+	touchStateDir(kind)
 
 	scenarioPath := os.Getenv("FAKE_AGENT_SCENARIO")
 	if code := os.Getenv("FAKE_AGENT_EXIT_CODE"); code != "" && code != "0" {
@@ -244,4 +245,25 @@ func logInvocation(logPath string) {
 	fmt.Fprintf(f, "invoked: args=%v cwd=%s\n", os.Args, cwd)
 	task, _ := io.ReadAll(io.LimitReader(os.Stdin, 1<<20))
 	fmt.Fprintf(f, "task=%s\n", task)
+}
+
+// touchStateDir mimics the real CLIs, which persist session state under HOME
+// on every turn. When the directory exists the write must succeed, so a
+// containment profile that leaves it read-only fails this double the same way
+// it would fail the real binary.
+func touchStateDir(kind string) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	dir := filepath.Join(home, "."+kind)
+	if _, err := os.Stat(dir); err != nil {
+		return
+	}
+	marker := filepath.Join(dir, "made-fakeagent-state")
+	if err := os.WriteFile(marker, []byte("ok\n"), 0o600); err != nil {
+		fmt.Fprintf(os.Stderr, "fakeagent: %s state directory is not writable: %v\n", kind, err)
+		os.Exit(4)
+	}
+	_ = os.Remove(marker)
 }
