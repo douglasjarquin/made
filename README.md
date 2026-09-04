@@ -8,6 +8,17 @@ made is an independent synthesis, not a dependency bundle or a one-to-one copy o
 
 See `plans/made-rewrite.md` for the full design and build plan.
 
+## Docs site
+
+The documentation site lives in `web/` as a static Astro app and deploys to GitHub Pages at `/made`.
+
+```
+mise run web:install
+mise run web:dev          # http://127.0.0.1:4321/made/
+mise run web:dev:local    # https://made.test
+mise run web:test
+```
+
 ## Configuration
 
 Made reads its configuration from `.made.yaml` or `.made/config.yaml`.

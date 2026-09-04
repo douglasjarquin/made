@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /made/
+
+Sitemap: https://douglasjarquin.github.io/made/sitemap.xml

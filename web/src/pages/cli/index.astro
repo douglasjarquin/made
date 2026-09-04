@@ -1,0 +1,42 @@
+---
+import DocsLayout from "../../layouts/DocsLayout.astro";
+import { sitePath } from "../../lib/site-path.mjs";
+---
+
+<DocsLayout
+  current="cli"
+  title="CLI"
+  description="Every command has a --json form with a fixed schema. Run ids are exact; nothing is fuzzy-matched."
+>
+  <h1>CLI</h1>
+  <p class="lead">Every command has a --json form with a fixed schema. Run ids are exact; nothing is fuzzy-matched.</p>
+
+  <h2>Discovery and health</h2>
+  <pre>made capabilities --json     <span class="comment"># public protocol and command schema</span>
+made doctor --json           <span class="comment"># fixed health schema</span></pre>
+
+  <h2>Configuration</h2>
+  <pre>made config path --json      <span class="comment"># which layout this repository uses</span>
+made config check --json     <span class="comment"># validate without starting a pipeline</span>
+made config move --to root|directory</pre>
+
+  <h2>Runs</h2>
+  <pre>made run submit --json --gate &lt;bare-gate-path&gt; --ref refs/heads/&lt;branch&gt; \
+                --old-sha &lt;previous-head-sha&gt; --input-sha &lt;sha&gt;
+made run status --json &lt;exact-run-id&gt;
+made run list --json --active
+made run cancel --json &lt;exact-run-id&gt;      <span class="comment"># idempotent</span></pre>
+
+  <h2>Review</h2>
+  <pre>made review decide --json --stage &lt;stage&gt; --decision &lt;approved|rejected&gt; &lt;exact-run-id&gt;</pre>
+
+  <h2>Daemonless verification</h2>
+  <pre>made verify &lt;sha&gt;               <span class="comment"># no daemon, gate, push, PR, or CI polling</span>
+made cursor init | sync | check | doctor</pre>
+  <p style="color: var(--muted)">Source: cmd/made/verify.go and cmd/made/cursor.go. This repository's Cursor Cloud machine is .cursor/environment.json.</p>
+
+  <div class="related">
+    <a class="pill" href={sitePath("pipeline")}>Pipeline and gates →</a>
+    <a class="pill" href={sitePath("config")}>Configuration →</a>
+  </div>
+</DocsLayout>

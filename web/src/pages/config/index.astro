@@ -1,0 +1,41 @@
+---
+import DocsLayout from "../../layouts/DocsLayout.astro";
+import { sitePath } from "../../lib/site-path.mjs";
+---
+
+<DocsLayout
+  current="config"
+  title="Configuration"
+  description="Two equally valid homes for one file. Pick either; never both."
+>
+  <h1>Configuration</h1>
+  <p class="lead">Two equally valid homes for one file. Pick either; never both.</p>
+
+  <h2>Location</h2>
+  <div class="kv" style="--kv-key: 190px">
+    <div class="kv__row"><span class="kv__key">.made.yaml</span><span class="kv__val">Root layout.</span></div>
+    <div class="kv__row"><span class="kv__key">.made/config.yaml</span><span class="kv__val">Directory layout.</span></div>
+    <div class="kv__row"><span class="kv__key">.made.yml</span><span class="kv__val">Legacy root name. Still works during a bounded deprecation window, but conflicts with either first-class path if both are present.</span></div>
+  </div>
+  <p>Neither first-class path is preferred, and having both present at once fails closed. <code>made config path --json</code> reports which one a repository uses; <code>made config move --to root|directory</code> migrates between them.</p>
+
+  <h2>ci</h2>
+  <pre>ci:
+  check_scope: required   <span class="comment"># required | all · default required</span>
+  rerun_budget: 2         <span class="comment"># rerun rounds, not individual checks</span></pre>
+  <p>These keys are read from the trusted config copy. made polls pending checks without spending a round, reruns each unique failed GitHub Actions workflow run only, and never reruns external checks.</p>
+
+  <h2>Environment</h2>
+  <div class="kv" style="--kv-key: 260px">
+    <div class="kv__row"><span class="kv__key">MADE_GITHUB_SMOKE_REPO</span><span class="kv__val">Disposable repository for the release smoke.</span></div>
+    <div class="kv__row"><span class="kv__key">MADE_GITHUB_SMOKE_PR_URL</span><span class="kv__val">PR the smoke exercises. <code>make release-validation</code> runs the smoke when both are set.</span></div>
+  </div>
+
+  <h2>Validate</h2>
+  <pre>made config check --json</pre>
+
+  <div class="related">
+    <a class="pill" href={sitePath("cli")}>CLI →</a>
+    <a class="pill" href={sitePath("start")}>Quick start →</a>
+  </div>
+</DocsLayout>

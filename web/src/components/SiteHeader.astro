@@ -1,0 +1,80 @@
+---
+import { PRIMARY_NAV, primaryNavKey } from "../lib/nav.mjs";
+import { REPOSITORY_URL } from "../lib/seo.mjs";
+import { sitePath } from "../lib/site-path.mjs";
+
+const { currentPath } = Astro.props;
+const activeKey = primaryNavKey(currentPath);
+---
+
+<header class="site-header">
+  <div class="site-frame site-header__inner">
+    <a class="site-brand" href={sitePath()} aria-label="made home">
+      <span class="brand-dot" aria-hidden="true"></span>made
+    </a>
+    <button
+      class="nav-toggle"
+      type="button"
+      aria-controls="primary-nav"
+      aria-expanded="false"
+      data-nav-toggle
+    >
+      Menu
+    </button>
+    <nav class="primary-nav" id="primary-nav" aria-label="Primary" data-primary-nav>
+      {
+        PRIMARY_NAV.map((item) => (
+          <a
+            aria-current={item.key === activeKey ? "page" : undefined}
+            class="primary-nav__link"
+            data-nav-link
+            href={item.href}
+          >
+            {item.label}
+          </a>
+        ))
+      }
+      <button class="theme-toggle" type="button" data-theme-toggle>Dark</button>
+      <a class="primary-nav__github" href={REPOSITORY_URL} rel="noreferrer" target="_blank">
+        GitHub <span aria-hidden="true">↗</span>
+      </a>
+    </nav>
+  </div>
+</header>
+
+<script is:inline>
+  (() => {
+    const root = document.documentElement;
+    const toggle = document.querySelector("[data-theme-toggle]");
+    const applyLabel = () => {
+      if (!(toggle instanceof HTMLButtonElement)) return;
+      toggle.textContent = root.dataset.theme === "dark" ? "Light" : "Dark";
+    };
+    applyLabel();
+    toggle?.addEventListener("click", () => {
+      const next = root.dataset.theme === "dark" ? "light" : "dark";
+      root.dataset.theme = next;
+      root.style.colorScheme = next;
+      try {
+        localStorage.setItem("made-theme", next);
+      } catch {}
+      applyLabel();
+    });
+
+    const nav = document.querySelector("[data-primary-nav]");
+    const menu = document.querySelector("[data-nav-toggle]");
+    if (!(nav instanceof HTMLElement) || !(menu instanceof HTMLButtonElement)) return;
+    const close = () => {
+      nav.classList.remove("is-open");
+      menu.setAttribute("aria-expanded", "false");
+    };
+    menu.addEventListener("click", () => {
+      const open = !nav.classList.contains("is-open");
+      nav.classList.toggle("is-open", open);
+      menu.setAttribute("aria-expanded", String(open));
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") close();
+    });
+  })();
+</script>

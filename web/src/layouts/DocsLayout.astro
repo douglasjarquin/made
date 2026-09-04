@@ -1,0 +1,37 @@
+---
+import DocsPager from "../components/DocsPager.astro";
+import DocsSidebar from "../components/DocsSidebar.astro";
+import SiteLayout from "./SiteLayout.astro";
+import { docsPage } from "../lib/nav.mjs";
+import { sitePath } from "../lib/site-path.mjs";
+
+const { current, description, noindex = false, showCrumb = true, title } = Astro.props;
+const page = docsPage(current);
+---
+
+<SiteLayout description={description} footerRuled noindex={noindex} title={title}>
+  <div class="site-frame docs-frame">
+    <aside class="docs-sidebar">
+      <DocsSidebar current={current} />
+    </aside>
+    <article class="docs-prose">
+      <details class="docs-contents">
+        <summary>Contents</summary>
+        <DocsSidebar current={current} />
+      </details>
+      {
+        showCrumb && page ? (
+          <nav class="crumb" aria-label="Breadcrumb">
+            <a href={sitePath()}>made</a>
+            <span aria-hidden="true">/</span>
+            <span>{page.section}</span>
+            <span aria-hidden="true">/</span>
+            <span aria-current="page">{page.label}</span>
+          </nav>
+        ) : null
+      }
+      <slot />
+      <DocsPager current={current} />
+    </article>
+  </div>
+</SiteLayout>

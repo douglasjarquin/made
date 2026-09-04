@@ -1,0 +1,223 @@
+---
+import DocsLayout from "../../layouts/DocsLayout.astro";
+import { CONSIGLIERE_URL } from "../../lib/seo.mjs";
+import { sitePath } from "../../lib/site-path.mjs";
+
+const light = [
+  ["--bg", "#f7f8f5"],
+  ["--surface", "#ffffff"],
+  ["--line", "#dde3dd"],
+  ["--muted", "#5f6b64"],
+  ["--fg", "#14201a"],
+  ["--accent", "#1F7A4D"],
+];
+const dark = [
+  ["dark bg", "#0e1511"],
+  ["dark surface", "#131c17"],
+  ["dark line", "#22302a"],
+  ["accent-soft", "#e3f0e8"],
+  ["code", "#0f1a14"],
+  ["dark accent", "#4fb37f"],
+];
+const glyphs = ["→ next", "← back", "↗ external", "✕ dismiss", "▾ menu", "$ shell", "# anchor", "· separator"];
+---
+
+<DocsLayout
+  current="design"
+  title="Design system"
+  description="Cleaner and greener. One serif, one mono, one green, a lot of air. Light is home; dark is a switch."
+>
+  <h1>Design system</h1>
+  <p class="lead">Cleaner and greener. One serif, one mono, one green, a lot of air. Light is home; dark is a switch.</p>
+
+  <h2>Principles</h2>
+  <div class="kv" style="--kv-key: 170px">
+    <div class="kv__row"><span class="kv__key">air first</span><span class="kv__val">Section padding 96–140. Content column 720. If a section feels empty, it is probably right.</span></div>
+    <div class="kv__row"><span class="kv__key">green means go</span><span class="kv__val">The accent is reserved for success, primary action, and the current position. Failure is never red; it is muted text and a plain word.</span></div>
+    <div class="kv__row"><span class="kv__key">round, softly</span><span class="kv__val">Pills for actions and chips (999px). Cards and code at 10–14px. Nothing sharp.</span></div>
+    <div class="kv__row"><span class="kv__key">json is the interface</span><span class="kv__val">Anything a machine returns is shown as mono in a dark block, even in light mode.</span></div>
+  </div>
+
+  <h2>Color</h2>
+  <div class="swatches">
+    {
+      light.map(([name, value]) => (
+        <div>
+          <div class="swatch__chip" style={`background: ${value}`}></div>
+          <div class="swatch__name">{name}</div>
+          <div class="swatch__value">{value}</div>
+        </div>
+      ))
+    }
+  </div>
+  <div class="swatches" style="margin-bottom: 28px">
+    {
+      dark.map(([name, value]) => (
+        <div>
+          <div class="swatch__chip swatch__chip--short" style={`background: ${value}`}></div>
+          <div class="swatch__value" style="margin-top: 8px">{name} · {value}</div>
+        </div>
+      ))
+    }
+  </div>
+
+  <h2>Type</h2>
+  <div class="kv" style="--kv-key: 200px; margin-bottom: 28px">
+    <div class="type-row"><span class="type-meta">display 76/1.05 -0.025em</span><span style="font-size: 76px; line-height: 1.05; letter-spacing: -0.025em">Green PRs.</span></div>
+    <div class="type-row"><span class="type-meta">h1 48/1.1</span><span style="font-size: 48px; line-height: 1.1; letter-spacing: -0.02em">Quick start</span></div>
+    <div class="type-row"><span class="type-meta">h2 28/1.2</span><span style="font-size: 28px; line-height: 1.2">Run states</span></div>
+    <div class="type-row"><span class="type-meta">lead 19/1.6 muted</span><span style="font-size: 19px; line-height: 1.6; color: var(--muted)">Submit a SHA. Get a decision.</span></div>
+    <div class="type-row"><span class="type-meta">body 17/1.7</span><span style="font-size: 17px; line-height: 1.7">Neither path is preferred; having both fails closed.</span></div>
+    <div class="type-row"><span class="type-meta">mono 13 · Red Hat Mono</span><code style="font-size: 13px">made run status --json</code></div>
+  </div>
+
+  <h2>Elements</h2>
+  <div style="display: flex; flex-direction: column; gap: 28px; margin: 0 0 28px">
+    <div class="specimen-row" style="align-items: center; border: 0; padding: 0">
+      <span class="type-meta">buttons</span>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center">
+        <a class="btn btn-primary" href={sitePath("design")}>Primary</a>
+        <a class="btn btn-secondary" href={sitePath("design")}>Secondary</a>
+        <button class="theme-toggle" type="button" tabindex="-1">Dark</button>
+      </div>
+    </div>
+    <div class="specimen-row" style="align-items: center; border: 0; padding: 0">
+      <span class="type-meta">state chips</span>
+      <div class="chips" style="margin: 0">
+        <span class="chip">queued</span>
+        <span class="chip">running</span>
+        <span class="chip chip--active">succeeded</span>
+        <span class="chip">failed</span>
+      </div>
+    </div>
+    <div class="specimen-row" style="align-items: center; border: 0; padding: 0">
+      <span class="type-meta">badge</span>
+      <div class="badge"><span class="status-dot" aria-hidden="true"></span>the no-mistakes button</div>
+    </div>
+    <div class="specimen-row" style="align-items: start; border: 0; padding: 0">
+      <span class="type-meta">json block</span>
+      <pre style="margin: 0">{`{ "state": `}<span class="ok">"succeeded"</span>{`, "pr": "#42" }`}</pre>
+    </div>
+    <div class="specimen-row" style="align-items: start; border: 0; padding: 0">
+      <span class="type-meta">card</span>
+      <div class="card" style="padding: 28px">
+        <div class="eyebrow" style="margin-bottom: 10px">eyebrow</div>
+        <h3>Card title</h3>
+        <p style="margin: 0; color: var(--muted); line-height: 1.6">Cards hold one idea and one optional code block.</p>
+      </div>
+    </div>
+    <div class="specimen-row" style="align-items: start; border: 0; padding: 0">
+      <span class="type-meta">note</span>
+      <div class="note" style="margin: 0">A soft green note for provenance and caveats.</div>
+    </div>
+  </div>
+
+  <h2>Tables</h2>
+  <p style="color: var(--muted)">Grid-based. Header row mono lowercase muted, first column mono accent, hairline rows, generous 16px cell padding. No fills, no stripes.</p>
+  <div class="kv" style="--kv-key: 160px; display: grid; grid-template-columns: 160px 1fr 1fr">
+    <div style="padding: 12px 0; border-bottom: 1px solid var(--line); font-family: var(--font-mono); font-size: 11.5px; color: var(--muted)">state</div>
+    <div style="padding: 12px 0; border-bottom: 1px solid var(--line); font-family: var(--font-mono); font-size: 11.5px; color: var(--muted)">meaning</div>
+    <div style="padding: 12px 0; border-bottom: 1px solid var(--line); font-family: var(--font-mono); font-size: 11.5px; color: var(--muted)">next</div>
+    <div class="kv__key" style="padding: 16px 0; border-bottom: 1px solid var(--line)">queued</div>
+    <div class="kv__val" style="padding: 16px 12px 16px 0; border-bottom: 1px solid var(--line)">in the spool</div>
+    <div class="kv__val" style="padding: 16px 0; border-bottom: 1px solid var(--line); font-family: var(--font-mono); font-size: 13px">running</div>
+    <div class="kv__key" style="padding: 16px 0; border-bottom: 1px solid var(--line)">awaiting_review</div>
+    <div class="kv__val" style="padding: 16px 12px 16px 0; border-bottom: 1px solid var(--line)">needs a decision</div>
+    <div class="kv__val" style="padding: 16px 0; border-bottom: 1px solid var(--line); font-family: var(--font-mono); font-size: 13px">awaiting_merge · failed</div>
+    <div class="kv__key" style="padding: 16px 0; border-bottom: 1px solid var(--line)">succeeded</div>
+    <div class="kv__val" style="padding: 16px 12px 16px 0; border-bottom: 1px solid var(--line)">green PR</div>
+    <div class="kv__val" style="padding: 16px 0; border-bottom: 1px solid var(--line); font-family: var(--font-mono); font-size: 13px">—</div>
+  </div>
+
+  <h2>Forms</h2>
+  <p style="color: var(--muted)">Boxed inputs with 10px radius on the surface color; accent border on focus. Labels mono above. Errors are a plain sentence in muted text; the field border does not change color.</p>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px 40px; margin: 0 0 28px">
+    <label style="display: flex; flex-direction: column; gap: 8px">
+      <span class="type-meta">gate path</span>
+      <input value=".made/gates/default" readonly style="font-family: var(--font-mono); font-size: 13.5px; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px" />
+    </label>
+    <label style="display: flex; flex-direction: column; gap: 8px">
+      <span class="type-meta">check scope</span>
+      <select style="font-family: var(--font-mono); font-size: 13.5px; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px">
+        <option>required</option>
+        <option>all</option>
+      </select>
+    </label>
+    <label style="display: flex; flex-direction: column; gap: 8px">
+      <span class="type-meta">input sha · error</span>
+      <input value="a81d0f" readonly style="font-family: var(--font-mono); font-size: 13.5px; color: var(--fg); background: var(--surface); border: 1px solid var(--accent); border-radius: 10px; padding: 12px 14px" />
+      <span style="font-size: 14px; color: var(--muted)">Not a full SHA. made needs all 40 characters.</span>
+    </label>
+    <div style="display: flex; flex-direction: column; gap: 12px; padding-top: 28px; font-size: 16px">
+      <label style="display: flex; gap: 12px; align-items: center"><span style="width: 16px; height: 16px; border-radius: 4px; background: var(--accent); display: inline-block"></span>Rerun failed Actions runs</label>
+      <label style="display: flex; gap: 12px; align-items: center"><span style="width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--muted); display: inline-block"></span>Rerun external checks <span style="color: var(--muted); font-size: 13px">(never)</span></label>
+    </div>
+  </div>
+
+  <h2>Links</h2>
+  <div class="kv" style="--kv-key: 190px">
+    <div class="kv__row" style="align-items: center"><span class="type-meta">inline</span><span style="font-size: 17px">See the <a class="inline-link" href={sitePath("pipeline")}>pipeline docs</a>. Accent, underline offset 3, line color underline.</span></div>
+    <div class="kv__row" style="align-items: center"><span class="type-meta">external</span><a href="https://github.com/douglasjarquin/made" style="font-family: var(--font-mono); font-size: 13px">GitHub ↗</a></div>
+    <div class="kv__row" style="align-items: center"><span class="type-meta">pager</span><div style="display: flex; gap: 12px"><a class="pill" href={sitePath("pipeline")}>Pipeline →</a><a class="pill" href={sitePath("start")} style="color: var(--muted)">← Quick start</a></div></div>
+    <div class="kv__row" style="align-items: center"><span class="type-meta">nav active / rest</span><div style="display: flex; gap: 24px; font-family: var(--font-mono); font-size: 13px"><span>Pipeline</span><span style="color: var(--muted)">CLI</span><span style="color: var(--muted)">Config</span></div></div>
+  </div>
+
+  <h2>Text elements</h2>
+  <div class="kv" style="--kv-key: 190px">
+    <div class="kv__row" style="align-items: center"><span class="type-meta">h3 22/1.2</span><span style="font-size: 22px">Daemonless verification</span></div>
+    <div class="kv__row" style="align-items: center"><span class="type-meta">h4 17 mono accent</span><span class="eyebrow" style="margin: 0">one run, eight states</span></div>
+    <div class="kv__row" style="align-items: center"><span class="type-meta">lists</span><ul><li>review</li><li>tests</li><li>docs</li><li>lint</li></ul></div>
+    <div class="kv__row" style="align-items: center"><span class="type-meta">kbd</span><kbd>⌘K</kbd></div>
+    <div class="kv__row" style="align-items: center"><span class="type-meta">inline code</span><span style="font-size: 17px">Run <code>made doctor --json</code> first. Mono, no background.</span></div>
+  </div>
+
+  <h2>Icons</h2>
+  <p style="color: var(--muted)">Same policy as consigliere: glyphs from the mono face, no icon set. The status dot is the one graphic element and only ever appears in the accent.</p>
+  <div class="chips">
+    {glyphs.map((glyph) => <span class="chip">{glyph}</span>)}
+    <span class="chip" style="display: inline-flex; gap: 8px; align-items: center"><span class="status-dot" aria-hidden="true"></span>status</span>
+  </div>
+
+  <h2>Layout</h2>
+  <div class="kv" style="--kv-key: 190px">
+    <div class="kv__row" style="align-items: center"><span class="type-meta">frame</span><span class="kv__val">1080 everywhere · 32px side padding · centered hero</span></div>
+    <div class="kv__row" style="align-items: center"><span class="type-meta">docs grid</span><span class="kv__val">200px sidebar · 72px gutter · prose max 720</span></div>
+    <div class="kv__row" style="align-items: center"><span class="type-meta">768–1023</span><span class="kv__val">Sidebar becomes a "Contents" disclosure. Three-up → one column. Display 56.</span></div>
+    <div class="kv__row" style="align-items: center"><span class="type-meta">&lt; 768</span><span class="kv__val">Nav into drawer. Display 40, h1 34. Side padding 20. Pills stack full-width.</span></div>
+  </div>
+
+  <h2>Motion and focus</h2>
+  <div class="kv" style="--kv-key: 190px">
+    <div class="kv__row" style="align-items: center"><span class="type-meta">enter</span><span class="kv__val">160ms ease-out, opacity + 4px rise. Slightly softer than consigliere.</span></div>
+    <div class="kv__row" style="align-items: center"><span class="type-meta">exit</span><span class="kv__val">Instant.</span></div>
+    <div class="kv__row" style="align-items: center"><span class="type-meta">hover</span><span class="kv__val">Primary pill: accent → fg. Links: fg → accent. No transition.</span></div>
+    <div class="kv__row" style="align-items: center"><span class="type-meta">focus ring</span><div style="display: flex; gap: 16px; align-items: center; font-family: var(--font-mono); font-size: 13px"><span class="pill" style="outline: 2px solid var(--accent); outline-offset: 3px">Focused</span><span class="kv__val">2px accent, 3px offset, keyboard only.</span></div></div>
+  </div>
+
+  <h2>Wordmark and social card</h2>
+  <p style="color: var(--muted)">Lowercase mono "made" with a green dot before it. The dot is the only mark. The social card is white; the green word carries it.</p>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 0 0 28px">
+    <div class="card" style="padding: 40px; display: flex; flex-direction: column; gap: 24px">
+      <span style="display: flex; align-items: center; gap: 14px; font-family: var(--font-mono); font-size: 40px; font-weight: 500; letter-spacing: -0.02em"><span class="brand-dot" style="width: 18px; height: 18px" aria-hidden="true"></span>made</span>
+      <span class="site-brand"><span class="brand-dot" aria-hidden="true"></span>made</span>
+    </div>
+    <div class="card" style="aspect-ratio: 1200 / 630; padding: 28px; display: flex; flex-direction: column; justify-content: space-between; background: #f7f8f5; color: #14201a">
+      <span style="display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 14px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #1F7A4D" aria-hidden="true"></span>made</span>
+      <div>
+        <div style="font-size: 30px; line-height: 1.05; letter-spacing: -0.025em; margin-bottom: 8px">Turn code into <span style="color: #1F7A4D">green PRs.</span></div>
+        <div style="font-family: var(--font-mono); font-size: 10px; color: #5f6b64">github.com/douglasjarquin/made</div>
+      </div>
+    </div>
+  </div>
+
+  <h2>Token notes</h2>
+  <p style="color: var(--muted)">--code and --code-fg are identical in light and dark: machine output is always shown on the dark ground. --accent-soft is the only tinted fill and exists for badges, notes, and the active chip.</p>
+
+  <h2>Relationship to consigliere</h2>
+  <p style="color: var(--muted)">Siblings, not twins. Consigliere is noir: dark, hairlines, taupe, JetBrains Mono. made is daylight: white, pills, green, Red Hat Mono. Both share the serif-plus-mono pairing and a body-level token set that flips with one attribute.</p>
+
+  <div class="related">
+    <a class="pill" href={CONSIGLIERE_URL} rel="noreferrer" target="_blank">consigliere ↗</a>
+    <a class="pill" href={sitePath()}>Home →</a>
+  </div>
+</DocsLayout>

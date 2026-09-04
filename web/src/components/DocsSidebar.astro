@@ -1,0 +1,22 @@
+---
+import { DOCS_NAV } from "../lib/nav.mjs";
+
+const { current } = Astro.props;
+---
+
+<nav class="docs-nav" aria-label="Docs">
+  {
+    DOCS_NAV.map((group) => (
+      <div>
+        <div class="docs-nav__section">{group.section}</div>
+        {
+          group.items.map((item) => (
+            <a aria-current={item.key === current ? "page" : undefined} href={item.href}>
+              {item.label}
+            </a>
+          ))
+        }
+      </div>
+    ))
+  }
+</nav>

@@ -1,0 +1,37 @@
+---
+import DocsLayout from "../../layouts/DocsLayout.astro";
+import { sitePath } from "../../lib/site-path.mjs";
+---
+
+<DocsLayout
+  current="daemon"
+  title="Daemon"
+  description="One process per machine, one Unix socket, and a write-ahead log that survives a crash."
+>
+  <h1>Daemon</h1>
+  <p class="lead">One process per machine, one Unix socket, and a write-ahead log that survives a crash.</p>
+
+  <h2>Singleton and socket</h2>
+  <p>The daemon acquires its singleton before touching the Unix socket path. It removes only stale sockets, and refuses regular files, symlinks, and directories at that path.</p>
+
+  <h2>Durability</h2>
+  <div class="kv" style="--kv-key: 120px">
+    <div class="kv__row"><span class="kv__key">WAL</span><span class="kv__val">Run state is persisted in a fsync-backed local write-ahead log. A restart resumes every run where it was.</span></div>
+    <div class="kv__row"><span class="kv__key">spool</span><span class="kv__val">Gate submissions land in an idempotent fsync-backed spool keyed by gate, ref, and input SHA. The same triple is the same run.</span></div>
+    <div class="kv__row"><span class="kv__key">supersede</span><span class="kv__val">A newer SHA on the same ref marks the earlier run <code>superseded</code>.</span></div>
+  </div>
+
+  <h2>Contract</h2>
+  <pre>made capabilities --json    <span class="comment"># public protocol and command schema</span>
+made doctor --json          <span class="comment"># fixed health schema</span></pre>
+  <p>The protocol is versioned. Clients such as consigliere check capabilities once and then rely on the fixed command schema.</p>
+
+  <h2>Health</h2>
+  <pre>{`{ "daemon": "up", "socket": "/run/made.sock", "wal": "ok", "spool": { "pending": 0 } }`}</pre>
+  <p style="color: var(--muted)">Field names above are illustrative; the real schema comes from made doctor --json.</p>
+
+  <div class="related">
+    <a class="pill" href={sitePath("evidence")}>Evidence →</a>
+    <a class="pill" href={sitePath("cli")}>CLI →</a>
+  </div>
+</DocsLayout>

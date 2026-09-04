@@ -1,0 +1,30 @@
+# made
+
+> Automated review, tests, docs, lint, push, and CI. A Go rewrite of no-mistakes' validation-gate pipeline, built to pair with consigliere and herdr.
+
+made is a Go CLI and daemon that runs a validation-gate pipeline: review, tests, docs, lint, push, and CI. It is an independent synthesis of no-mistakes, built to pair with consigliere and herdr.
+
+Live site: https://douglasjarquin.github.io/made/
+Repository: https://github.com/douglasjarquin/made
+
+Every command has a --json form with a fixed schema. Run ids are exact.
+
+```
+made capabilities --json
+made doctor --json
+made verify --json $(git rev-parse HEAD)
+```
+
+## Pages
+
+- [Home](https://douglasjarquin.github.io/made/)
+- [Quick start](https://douglasjarquin.github.io/made/start/)
+- [With consigliere](https://douglasjarquin.github.io/made/start/consigliere/)
+- [Pipeline and gates](https://douglasjarquin.github.io/made/pipeline/)
+- [Daemon](https://douglasjarquin.github.io/made/daemon/)
+- [Evidence](https://douglasjarquin.github.io/made/evidence/)
+- [Cursor Cloud](https://douglasjarquin.github.io/made/cursor/)
+- [Configuration](https://douglasjarquin.github.io/made/config/)
+- [CLI](https://douglasjarquin.github.io/made/cli/)
+- [Changelog](https://douglasjarquin.github.io/made/changelog/)
+- [Design system](https://douglasjarquin.github.io/made/design/)

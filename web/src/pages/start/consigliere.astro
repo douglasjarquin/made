@@ -1,0 +1,59 @@
+---
+import DocsLayout from "../../layouts/DocsLayout.astro";
+import { CONSIGLIERE_URL } from "../../lib/seo.mjs";
+import { sitePath } from "../../lib/site-path.mjs";
+
+const flow = [
+  "soldier commits",
+  "made run submit",
+  "gate runs",
+  "review decision",
+  "push + PR",
+  "CI green",
+  "boss lands",
+];
+---
+
+<DocsLayout
+  current="consigliere"
+  title="With consigliere"
+  description="Consigliere decides what to build and who builds it. made decides whether it is ready to become a PR. Neither does the other's job."
+>
+  <h1>With consigliere</h1>
+  <p class="lead">Consigliere decides what to build and who builds it. made decides whether it is ready to become a PR. Neither does the other's job.</p>
+
+  <h2>The handoff</h2>
+  <div class="flow" aria-label="Handoff sequence">
+    {
+      flow.flatMap((label, index) => {
+        const step = (
+          <span class:list={["flow__step", label === "made run submit" && "flow__step--active"]}>
+            <span class="status-dot" aria-hidden="true"></span>{label}
+          </span>
+        );
+        return index === 0 ? [step] : [<span class="flow__rule" aria-hidden="true"></span>, step];
+      })
+    }
+  </div>
+  <div class="kv" style="--kv-key: 120px">
+    <div class="kv__row"><span class="kv__key">1 · commit</span><span class="kv__val">A soldier working in a herdr worktree commits to its branch. Consigliere reads the SHA from herdr's status.</span></div>
+    <div class="kv__row"><span class="kv__key">2 · submit</span><span class="kv__val">Consigliere calls <code>made run submit --json</code> with the gate path, the ref, the previous head, and the input SHA. The spool makes the call idempotent.</span></div>
+    <div class="kv__row"><span class="kv__key">3 · gate</span><span class="kv__val">made runs review, tests, docs, and lint on exactly that SHA.</span></div>
+    <div class="kv__row"><span class="kv__key">4 · review</span><span class="kv__val">If a stage needs a decision, the run parks in <code>awaiting_review</code>. Consigliere answers it through <code>made review decide</code> when the project's posture allows (<code>yolo</code>), otherwise it asks the boss.</span></div>
+    <div class="kv__row"><span class="kv__key">5 · push</span><span class="kv__val">made pushes and opens the PR only after the gate passes.</span></div>
+    <div class="kv__row"><span class="kv__key">6 · CI</span><span class="kv__val">made polls checks under the check policy and reruns failed Actions runs within the budget.</span></div>
+    <div class="kv__row"><span class="kv__key">7 · land</span><span class="kv__val">The run reaches <code>succeeded</code>. Consigliere brings the green PR back for the boss's word. Landing is always the boss.</span></div>
+  </div>
+
+  <h2>Why exact ids and --json</h2>
+  <p>Consigliere is bash. It needs fixed shapes, not prose: every made command has a <code>--json</code> form, run ids are exact, and <code>made capabilities --json</code> lets consigliere check the protocol before it depends on a command.</p>
+
+  <h2>Without a daemon</h2>
+  <p>Where a daemon is not welcome (a Cursor Cloud agent, a CI job), <code>made verify</code> validates one committed SHA with no gate, push, PR, or polling.</p>
+  <div class="note">no-mistakes remains an optional dependency on the consigliere side. made is an independent synthesis of the same pipeline in Go, not a drop-in of no-mistakes.</div>
+
+  <div class="related">
+    <a class="pill" href={sitePath("pipeline")}>Pipeline and gates →</a>
+    <a class="pill" href={CONSIGLIERE_URL} rel="noreferrer" target="_blank">consigliere ↗</a>
+  </div>
+</DocsLayout>

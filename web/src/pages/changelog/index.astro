@@ -1,0 +1,70 @@
+---
+import DocsLayout from "../../layouts/DocsLayout.astro";
+import { REPOSITORY_URL } from "../../lib/seo.mjs";
+
+const entries = [
+  {
+    stamp: "latest",
+    accent: true,
+    title: "Two first-class config paths",
+    body: ".made.yaml and .made/config.yaml are equally valid; both present fails closed. made config path / check / move added. Legacy .made.yml enters a bounded deprecation window.",
+  },
+  {
+    stamp: "—",
+    title: "CI check policy",
+    body: "ci.check_scope (required | all) and ci.rerun_budget (rounds). Reruns only unique failed Actions runs; external checks named and linked, never rerun.",
+  },
+  {
+    stamp: "—",
+    title: "Daemonless verification",
+    body: "made verify validates one committed SHA with no daemon. made cursor init / sync / check / doctor project a Cursor reviewer and verify-with-made skill.",
+  },
+  {
+    stamp: "—",
+    title: "Versioned daemon contract",
+    body: "made capabilities --json; exact run ids; --json on every command; fixed doctor schema.",
+  },
+  {
+    stamp: "—",
+    title: "Durable run state",
+    body: "fsync-backed WAL and idempotent spool keyed by gate, ref, and input SHA. Singleton acquired before touching the socket path.",
+  },
+  {
+    stamp: "—",
+    title: "Release smoke",
+    body: "MADE_GITHUB_SMOKE_REPO + MADE_GITHUB_SMOKE_PR_URL opt-in; make release-validation.",
+  },
+  {
+    stamp: "—",
+    title: "Initial rewrite",
+    body: "Go rewrite of no-mistakes' validation-gate pipeline for herdr and consigliere. Design in plans/made-rewrite.md.",
+  },
+];
+---
+
+<DocsLayout
+  current="changelog"
+  title="Changelog"
+  description="Milestones the README records, from first-class config paths through the initial rewrite."
+>
+  <h1>Changelog</h1>
+  <p class="lead">Milestones the README records; wire to tags or a CHANGELOG.md when one exists.</p>
+
+  <div class="kv" style="--kv-key: 100px">
+    {
+      entries.map((entry) => (
+        <div class="kv__row" style="padding: 26px 0; gap: 28px">
+          <span class="kv__key" style={entry.accent ? undefined : "color: var(--muted)"}>{entry.stamp}</span>
+          <div>
+            <h3>{entry.title}</h3>
+            <p style="margin: 0">{entry.body}</p>
+          </div>
+        </div>
+      ))
+    }
+  </div>
+
+  <div class="related">
+    <a class="pill" href={`${REPOSITORY_URL}/commits/main/`} rel="noreferrer" target="_blank">GitHub history →</a>
+  </div>
+</DocsLayout>

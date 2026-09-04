@@ -1,0 +1,20 @@
+---
+import { CONSIGLIERE_URL, HERDR_URL, NO_MISTAKES_URL } from "../lib/seo.mjs";
+
+const { ruled = false, showHerdr = false } = Astro.props;
+---
+
+<footer class:list={["site-footer", ruled && "site-footer--ruled"]}>
+  <div class="site-frame site-footer__inner">
+    <span>made · an independent synthesis, not a dependency bundle</span>
+    <div class="site-footer__links">
+      <a href={NO_MISTAKES_URL} rel="noreferrer" target="_blank">no-mistakes <span aria-hidden="true">↗</span></a>
+      {
+        showHerdr ? (
+          <a href={HERDR_URL} rel="noreferrer" target="_blank">herdr <span aria-hidden="true">↗</span></a>
+        ) : null
+      }
+      <a href={CONSIGLIERE_URL} rel="noreferrer" target="_blank">consigliere <span aria-hidden="true">↗</span></a>
+    </div>
+  </div>
+</footer>

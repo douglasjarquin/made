@@ -1,0 +1,38 @@
+---
+import DocsLayout from "../../layouts/DocsLayout.astro";
+import { sitePath } from "../../lib/site-path.mjs";
+---
+
+<DocsLayout
+  current="evidence"
+  title="Evidence"
+  description="When a run fails, made says which check, which workflow run, how many reruns it spent, and where to look. Bounded, by design."
+>
+  <h1>Evidence</h1>
+  <p class="lead">When a run fails, made says which check, which workflow run, how many reruns it spent, and where to look. Bounded, by design.</p>
+
+  <h2>CI check policy</h2>
+  <div class="kv" style="--kv-key: 180px">
+    <div class="kv__row"><span class="kv__key">ci.check_scope</span><span class="kv__val"><code>required</code> or <code>all</code>. Default <code>required</code>.</span></div>
+    <div class="kv__row"><span class="kv__key">ci.rerun_budget</span><span class="kv__val">Counts rerun rounds, not individual checks.</span></div>
+  </div>
+  <p>made polls pending checks without spending a round, reruns each unique failed GitHub Actions workflow run only, and reports bounded evidence by failed check and run. External checks are reported by name and link and are never rerun.</p>
+
+  <h2>A failed run</h2>
+  <pre>{`{
+  "state": "failed",
+  "rounds_spent": 2,
+  "failed_checks": [
+    { "name": "lint", "run": "https://github.com/…/actions/runs/1234", "reruns": 2 },
+    { "name": "vendor-scan", "external": true, "url": "https://…" }
+  ]
+}`}</pre>
+
+  <h2>evidence/</h2>
+  <p>The repository's <code>evidence/</code> directory holds captured artifacts from release validation and smoke runs. The opt-in smoke contract is <code>MADE_GITHUB_SMOKE_REPO</code> plus <code>MADE_GITHUB_SMOKE_PR_URL</code>; <code>make release-validation</code> runs it when both are set.</p>
+
+  <div class="related">
+    <a class="pill" href={sitePath("pipeline")}>Pipeline and gates →</a>
+    <a class="pill" href={sitePath("config")}>Configuration →</a>
+  </div>
+</DocsLayout>
