@@ -642,7 +642,7 @@ Wave 4 (remaining tests not already embedded in earlier tasks + final verificati
 
   **Commit**: YES | Message: `feat(cli): made doctor reports resolved/attempted agent` | Files: `cmd/made/doctor.go`, `cmd/made/doctor_test.go`
 
-- [ ] 14. Human-readable resolution summary line (D20)
+- [x] 14. Human-readable resolution summary line (D20)
 
   **What to do**: Wherever the daemon pipeline and `made verify` already print a human-mode stage failure/summary (identify the exact existing call site(s) during implementation - likely near where `StageResult.Message`/`Error` is already rendered for a human consumer), add one line summarizing the `AgentResolution` from Task 10 - on success, e.g. "review agent: claude (resolved)"; on all-exhausted, e.g. "no review agent available: codex (missing), claude (quota-exhausted until 2026-09-10T06:00:00Z)". Reuse existing output plumbing (whatever function already writes stage summaries to stderr/stdout in human mode) rather than adding a new print path.
 
