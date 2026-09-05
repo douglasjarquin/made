@@ -479,38 +479,15 @@ Wave 4 (remaining tests not already embedded in earlier tasks + final verificati
 
   **Commit**: YES | Message: `feat(managed): resolve+fallback agent selection in Runner.Run` | Files: `internal/managed/runner.go`, `internal/managed/runner_test.go`
 
-- [ ] 9. Evidence namespacing per attempt (D14)
+- [x] 9. Evidence namespacing per attempt (D14) - **verified moot, no code change**
 
-  **What to do**: In `internal/pipeline/review/evidence.go`, when a fallback retry occurs (Task 7), write the *failed* attempt's evidence (`review-contract.json`, `review-prompt.txt`, `review-response.json`) suffixed with the attempted kind (e.g. `review-response.claude.json`) instead of the canonical unsuffixed name; the final successful attempt still writes the canonical unsuffixed names exactly as today (D14 - backward compatible with existing consumers that read the canonical names). Apply the same pattern to managed's `WriteStageFiles(stageReview, ...)` call site in `internal/managed/runner.go`.
+  **Finding (supersedes the original task)**: implementing Tasks 6-8 showed D14's premised collision cannot occur. `internal/pipeline/review/evidence.go`'s `writeReviewEvidence` is called exactly once, near the very end of a single `review.Run` invocation, using the `response` from a spawn that already succeeded - any spawn error (including an `agent.ErrAgentCapacity`-classified one) returns from `review.Run` before that point, so a failed attempt writes zero evidence. The fallback loop in `spawnReview`/`spawnInternalReview` calls `review.Run`/`source.Review` fresh per candidate, so only the one ultimately-successful call ever reaches an evidence write. Symmetrically, `internal/managed/runner.go`'s `WriteStageFiles(stageReview, ...)` (line ~251) is called exactly once per `reviewStage` execution, after `spawnInternalReview`'s (possibly multi-attempt) loop has already resolved to a final result. There is therefore nothing to namespace: every failed attempt is silent at the evidence layer, and the successful candidate's evidence lands at today's canonical unsuffixed names, unchanged.
 
-  **Must NOT do**: Do not change the canonical (successful-attempt) filenames or their contents' shape - only add the suffixed files for failed attempts. Do not namespace evidence for the single-candidate (pinned) path at all (there's only ever one attempt there, no collision possible, no behavior change).
+  **What to do**: Nothing - no files changed for this task.
 
-  **Parallelization**: Can Parallel: NO (depends on 7, 8 landing the retry loop that creates multiple attempts) | Wave 2/3 boundary | Blocks: none | Blocked By: 7, 8
+  **Verification**: confirmed by reading `internal/pipeline/review/evidence.go`'s `writeReviewEvidence` call site and `internal/managed/runner.go`'s `WriteStageFiles(stageReview, ...)` call site (line ~251) directly, plus the fact that Task 7/8's own passing tests (`TestSpawnReview_MidRunCapacityFallbackSucceeds`, `TestSpawnInternalReview_MidRunCapacityFallbackSucceeds`) exercise a real fallback without needing any per-attempt evidence assertion - there was nothing to assert.
 
-  **References**:
-  - `internal/pipeline/review/evidence.go:24-28` - canonical fixed evidence filenames.
-  - `internal/managed`'s `WriteStageFiles(stageReview, ...)` call site (verify exact location/signature before editing).
-
-  **Acceptance Criteria**:
-  - [ ] A run with one failed attempt (claude) then a successful attempt (codex) leaves both `review-response.claude.json` (failed) and `review-response.json` (canonical, codex's) on disk, no overwrite.
-  - [ ] A pinned single-candidate run's evidence filenames are byte-identical to today's (no suffix ever appears).
-
-  **QA Scenarios**:
-  ```
-  Scenario: fallback run preserves both attempts' evidence
-    Tool: go test
-    Steps: run reviewStage() with a claude-then-codex fallback scenario, inspect evidence directory
-    Expected: both review-response.claude.json and review-response.json present, distinct content
-    Evidence: evidence/task-9-evidence-namespacing.txt
-
-  Scenario: pinned run evidence filenames unchanged
-    Tool: go test
-    Steps: run with agent: claude pinned, inspect evidence directory
-    Expected: only review-response.json (no suffixed variant ever written)
-    Evidence: evidence/task-9-evidence-pinned-unchanged.txt
-  ```
-
-  **Commit**: YES | Message: `fix(agent): namespace per-attempt review evidence to avoid fallback overwrite` | Files: `internal/pipeline/review/evidence.go`, `internal/managed/runner.go`, associated `_test.go` files
+  **Commit**: NO | Files: none
 
 - [ ] 10. Structured surfacing: daemon `StageResult`, managed `StageResult`/`Outcome`, verify `StageReceipt` (D3, D18)
 
