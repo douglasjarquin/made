@@ -398,7 +398,7 @@ Wave 4 (remaining tests not already embedded in earlier tasks + final verificati
 
   **Commit**: YES | Message: `feat(agent): add Resolve() ordered-candidate probing (presence/auth/quota)` | Files: `internal/agent/resolve.go`, `internal/agent/resolve_test.go`
 
-- [ ] 7. Wire resolver + mid-run fallback into `workfunc.go:272` (D7, D11, D12)
+- [x] 7. Wire resolver + mid-run fallback into `workfunc.go:272` (D7, D11, D12)
 
   **What to do**: In `internal/orchestrator/workfunc.go`'s `reviewStage()`, replace the bare `c.rc.Config.AgentKind()` call: if `c.rc.Config.AgentIsPinned()`, call `AgentKind()` exactly as today (fast path, zero probing, zero behavior change - existing tests for this path must stay green unmodified). Otherwise, call `agent.Resolve(ctx, c.rc.Config.AgentCandidates(), opts)` (Task 6); if `AllExhausted()`, return a hard failure carrying the `AgentResolution` (consumed by Task 10, do not invent your own shape here). Otherwise, attempt `review.Run` with the selected kind; if it returns an error where `errors.Is(err, agent.ErrAgentCapacity)` (Task 4), and per D7 this is the *primary spawn* of that attempt (i.e. no partial fix-commit has landed for this specific candidate attempt - if `review.Run` doesn't already expose this distinction, scope the retry to only re-attempt when the error surfaces before any commit side effect is observable, and add a code comment stating this is D7's scope boundary), retry with the next candidate in the resolved list (re-running `Resolve`'s remaining candidates, not the full list again). Exhausting the retry loop -> same all-exhausted structured failure as above, now also carrying which candidates were tried live (not just pre-probed).
 
