@@ -344,7 +344,7 @@ Wave 4 (remaining tests not already embedded in earlier tasks + final verificati
 
   **Commit**: YES | Message: `feat(agent): add shared AgentResolution/CandidateAttempt types` | Files: `internal/agent/resolution.go`, `internal/agent/resolution_test.go`
 
-- [ ] 6. `internal/agent/resolve.go`: per-candidate resolver (D2, D8, D10, D11, D12)
+- [x] 6. `internal/agent/resolve.go`: per-candidate resolver (D2, D8, D10, D11, D12)
 
   **What to do**: `func Resolve(ctx context.Context, candidates []Kind, opts ResolveOptions) AgentResolution` where `ResolveOptions` carries whatever's needed to route probes through the fleet harness in tests (e.g. an optional `PATH` override, matching how `BinaryPath`/`ExtraEnv` already work per D12 - **this function is only ever called on the non-pinned path**; the pinned fast path (D11/D12) never calls it). For each candidate in order:
   1. Presence: `exec.LookPath` (respecting `ResolveOptions`' PATH override if set) - miss -> `CandidateAttempt{Kind, Reason: ReasonMissing}`, continue.
