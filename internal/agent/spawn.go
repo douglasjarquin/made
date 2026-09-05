@@ -49,7 +49,7 @@ func SpawnWithEvidence(ctx context.Context, kind Kind, params SpawnParams) (Spaw
 	}
 	binary := params.BinaryPath
 	if binary == "" {
-		binary = kind.binaryName()
+		binary = kind.BinaryName()
 	}
 
 	reviewPath, protectedPaths, maskPaths, cleanupReview, err := prepareReviewWorktree(ctx, params.WorktreePath, params.TrustedBaseSHA)

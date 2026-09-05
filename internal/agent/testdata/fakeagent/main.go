@@ -17,6 +17,11 @@ import (
 )
 
 func main() {
+	if fleetPath := os.Getenv("FAKE_AGENT_FLEET_CONFIG"); fleetPath != "" {
+		runFleetMode(fleetPath)
+		return
+	}
+
 	kind := os.Getenv("FAKE_AGENT_KIND")
 	if kind == "" {
 		kind = agentKindCodex
@@ -245,6 +250,73 @@ func logInvocation(logPath string) {
 	fmt.Fprintf(f, "invoked: args=%v cwd=%s\n", os.Args, cwd)
 	task, _ := io.ReadAll(io.LimitReader(os.Stdin, 1<<20))
 	fmt.Fprintf(f, "task=%s\n", task)
+}
+
+// fleetEntry is one binary's scripted behavior in a multi-binary fleet
+// (internal/agent/agenttest.BuildFleet), keyed by that binary's invoked name
+// so several differently-named fake CLIs sharing one process env can each
+// behave independently - a single FAKE_AGENT_* env var, being process-wide,
+// cannot express "codex missing, claude present-but-unauthed" in one test.
+type fleetEntry struct {
+	Kind         string `json:"kind"`
+	AuthExitCode int    `json:"auth_exit_code"`
+	ExitCode     int    `json:"exit_code"`
+	Stderr       string `json:"stderr"`
+	ScenarioFile string `json:"scenario_file"`
+}
+
+func runFleetMode(fleetPath string) {
+	data, err := os.ReadFile(fleetPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fakeagent: read fleet config %s: %v\n", fleetPath, err)
+		os.Exit(1)
+	}
+	var fleet map[string]fleetEntry
+	if err := json.Unmarshal(data, &fleet); err != nil {
+		fmt.Fprintf(os.Stderr, "fakeagent: parse fleet config %s: %v\n", fleetPath, err)
+		os.Exit(1)
+	}
+	name := filepath.Base(os.Args[0])
+	entry, ok := fleet[name]
+	if !ok {
+		fmt.Fprintf(os.Stderr, "fakeagent: no fleet entry for binary %q\n", name)
+		os.Exit(127)
+	}
+	args := os.Args[1:]
+	if isAuthStatusProbe(entry.Kind, args) {
+		os.Exit(entry.AuthExitCode)
+	}
+	if err := validateInvocation(entry.Kind, args); err != nil {
+		fmt.Fprintf(os.Stderr, "fakeagent: invalid invocation: %v\n", err)
+		os.Exit(2)
+	}
+	if entry.ExitCode != 0 {
+		fmt.Fprint(os.Stderr, entry.Stderr)
+		os.Exit(entry.ExitCode)
+	}
+	findings, err := os.ReadFile(entry.ScenarioFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fakeagent: read scenario %s: %v\n", entry.ScenarioFile, err)
+		os.Exit(1)
+	}
+	if _, err := os.Stdout.Write(envelope(entry.Kind, findings)); err != nil {
+		fmt.Fprintf(os.Stderr, "fakeagent: write structured output: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// isAuthStatusProbe matches the two real, verified auth-status invocations
+// (codex login status / claude auth status) resolve.go shells out to.
+// cursor/grok have no confirmed equivalent, so they never match here.
+func isAuthStatusProbe(kind string, args []string) bool {
+	switch kind {
+	case agentKindCodex:
+		return len(args) == 2 && args[0] == "login" && args[1] == "status"
+	case agentKindClaude:
+		return len(args) == 2 && args[0] == "auth" && args[1] == "status"
+	default:
+		return false
+	}
 }
 
 // touchStateDir mimics the real CLIs, which persist session state under HOME

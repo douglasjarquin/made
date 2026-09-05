@@ -186,7 +186,7 @@ Wave 4 (remaining tests not already embedded in earlier tasks + final verificati
 
   **Commit**: YES | Message: `feat(config): add agent:auto sentinel and real agents: candidate list` | Files: `internal/config/config.go`, `internal/config/config_test.go`
 
-- [ ] 2. New multi-binary fake-CLI test harness (D13)
+- [x] 2. New multi-binary fake-CLI test harness (D13)
 
   **What to do**: Extend `internal/agent/agenttest` (new file, e.g. `agenttest/multiharness.go`) to build a *set* of differently-named fake binaries (`codex`, `claude`, `cursor-agent`, `grok` - match each `Kind`'s real binary name from `internal/agent/agent.go`) into a temp directory added to `PATH` for a test. Each binary must, based on `argv[0]` (or a baked-in build tag/const per binary, whichever is simpler to implement with `go build -o <dir>/<name>` from one shared `main.go` source parameterized by an env var set differently per test, or by building N copies with different `-ldflags -X` values), support:
   - No args / review-invocation args: reuse existing `fakeagent` envelope/scenario logic (delegate to the existing `main.go` machinery, do not duplicate it).
