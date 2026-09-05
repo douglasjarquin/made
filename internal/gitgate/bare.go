@@ -26,5 +26,20 @@ func InitBare(path string) error {
 	if err != nil {
 		return fmt.Errorf("gitgate: git init --bare %s: %w: %s", path, err, strings.TrimSpace(string(out)))
 	}
+	return EnableAdvertisePushOptions(path)
+}
+
+// EnableAdvertisePushOptions sets receive.advertisePushOptions on an
+// existing bare gate repo, idempotently. InitBare always calls this on a
+// fresh gate; it is also exported so a gate initialized before agent
+// auto-resolve existed can self-heal on next use (project: agent
+// auto-resolve, decision D5) - without it, `git push -o agent=<kind>`
+// against an older gate hard-fails with "the receiving end does not
+// support push options" rather than being silently ignored.
+func EnableAdvertisePushOptions(path string) error {
+	cmd := exec.Command("git", "-C", path, "config", "receive.advertisePushOptions", "true")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("gitgate: enable advertisePushOptions on %s: %w: %s", path, err, strings.TrimSpace(string(out)))
+	}
 	return nil
 }

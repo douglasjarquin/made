@@ -530,7 +530,7 @@ Wave 4 (remaining tests not already embedded in earlier tasks + final verificati
 
   **Commit**: YES | Message: `feat(managed,daemon,verify): surface structured AgentResolution in stage results` | Files: `internal/daemon/runstate.go`, `internal/managed/contract.go`, `internal/managed/reviewsource.go`, `internal/verify/receipt.go`, associated `_test.go` files
 
-- [ ] 11. Push-option layer, part 1: gate-side plumbing (D5)
+- [x] 11. Push-option layer, part 1: gate-side plumbing (D5)
 
   **What to do**: In `internal/gitgate/bare.go`'s `InitBare`, add `git config receive.advertisePushOptions true` (idempotent - safe to set on every init). Per D5, also add this same idempotent `git config` call at whatever point the daemon opens/uses an *existing* gate repo for a push (identify the exact call site during implementation - likely near where `notify-push`/gate-admit already touches the bare repo - so pre-existing gates self-heal with no manual migration). In `internal/gitgate/hook.go`'s generated `postReceiveScript`, add shell logic to read `GIT_PUSH_OPTION_COUNT` and each `GIT_PUSH_OPTION_<n>` (git sets these when push options were negotiated), find one of the form `agent=<value>` (first match wins if duplicated - document this), and forward it as a new `--agent-preference <value>` argument to `made gate notify-push` only when found (omit the flag entirely otherwise, for backward compatibility with the RPC's optional field).
 
@@ -567,7 +567,7 @@ Wave 4 (remaining tests not already embedded in earlier tasks + final verificati
 
   **Commit**: YES | Message: `feat(gitgate): advertise and forward git push -o agent=<kind> preference` | Files: `internal/gitgate/bare.go`, `internal/gitgate/hook.go`, `cmd/made/gate.go`, associated `_test.go` files
 
-- [ ] 12. Push-option layer, part 2: RPC/orchestrator plumbing + trust-boundary gating (D4, D6)
+- [x] 12. Push-option layer, part 2: RPC/orchestrator plumbing + trust-boundary gating (D4, D6)
 
   **What to do**: Add `AgentPreference string \`json:"agent_preference,omitempty"\`` to `gateNotifyPushParams` (daemon.go:372-381) and to `daemon.RunSubmission` (built at daemon.go ~494-497, alongside the existing `CandidateOutputSHA` pattern - **not** to `daemon.GateSubmission`/the spool struct, per D6, since that's identity/dedup only). Add the same field to `internal/orchestrator.Options` (workfunc.go:47-50), following the `CandidateOutputSHA` precedent exactly (its doc comment already anticipates this). In `reviewStage()` (Task 7's call site), before consulting config resolution at all: if `Options.AgentPreference != ""` **and** `c.rc.Config.AllowRepoCommands` is true (D4 - reuse the exact existing pushed-config trust gate), treat it as a single-kind pin (identical fast path to an explicit `agent:` pin, D11/D12 semantics, no probing) - the preference wins over config entirely. If `AllowRepoCommands` is false, ignore the preference (do not error - just fall through to normal config-based resolution) and record in the `AgentResolution`/evidence that a preference was present but not honored (for auditability, per Metis). Explicitly test D6: an offline-queued submission (which travels through `daemon.GateSubmission`, no `AgentPreference` field) replays with the preference silently absent, falling back to config resolution - assert this exact behavior, not just document it.
 

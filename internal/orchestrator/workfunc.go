@@ -49,6 +49,12 @@ const (
 type Options struct {
 	ReviewOptions      review.Options
 	CandidateOutputSHA string
+	// AgentPreference is the optional git push -o agent=<kind> value
+	// (project: agent auto-resolve). reviewStage only honors it when the
+	// trusted config's AllowRepoCommands is true (decision D4, the same
+	// trust gate pushed config values already use) - otherwise it is
+	// ignored and normal config-based resolution runs instead.
+	AgentPreference string
 }
 
 // NewWorkFunc builds the real 9-stage chain (Intent -> Rebase -> Review ->
@@ -337,16 +343,29 @@ func (c *chain) reviewStage() error {
 var reviewRun = review.Run
 
 // spawnReview resolves which agent kind to review with and runs
-// review.Run. An explicit non-auto Agent (AgentIsPinned) always skips
-// probing entirely and behaves exactly as before agent auto-resolve;
-// otherwise it probes the candidate list (agent.Resolve) and, on a
-// classified capacity failure, retries with the remaining candidates
-// after the one that just failed - any other error is a hard failure,
-// exactly as today. c.reviewAgentResolution always records the outcome
-// (nil only on the pinned path). A (nil, nil) return means every
-// candidate was exhausted; c.reviewAgentResolution carries the full
-// structured reason for the caller to surface.
+// review.Run. A trust-gated push-option preference (decision D4) wins over
+// config entirely when present; otherwise an explicit non-auto Agent
+// (AgentIsPinned) always skips probing entirely and behaves exactly as
+// before agent auto-resolve; otherwise it probes the candidate list
+// (agent.Resolve) and, on a classified capacity failure, retries with the
+// remaining candidates after the one that just failed - any other error is
+// a hard failure, exactly as today. c.reviewAgentResolution always records
+// the outcome (nil only on the pinned/preference fast paths). A (nil, nil)
+// return means every candidate was exhausted; c.reviewAgentResolution
+// carries the full structured reason for the caller to surface.
 func (c *chain) spawnReview(opts review.Options) (*review.Result, error) {
+	if c.opts.AgentPreference != "" && c.rc.Config.AllowRepoCommands {
+		kind, err := agent.ParseKind(c.opts.AgentPreference)
+		if err != nil {
+			return nil, fmt.Errorf("orchestrator: resolve agent preference: %w", err)
+		}
+		result, err := reviewRun(c.ctx, c.rc.Worktree.Path, kind, opts)
+		if err != nil {
+			return nil, err
+		}
+		return &result, nil
+	}
+
 	if c.rc.Config.AgentIsPinned() {
 		kind, err := c.rc.Config.AgentKind()
 		if err != nil {

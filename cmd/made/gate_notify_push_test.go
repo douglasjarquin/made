@@ -404,6 +404,46 @@ func TestGateNotifyPushCLI_DurablyQueuesWhenDaemonUnreachable(t *testing.T) {
 	}
 }
 
+// TestGateNotifyPushCLI_OfflineQueueDropsAgentPreference asserts decision D6
+// (project: agent auto-resolve): a --agent-preference given at push time is
+// never carried into daemon.GateSubmission/the offline spool - that record
+// is push-identity/dedup only - so a later replay silently falls back to
+// trusted config resolution instead of resurrecting the original
+// preference.
+func TestGateNotifyPushCLI_OfflineQueueDropsAgentPreference(t *testing.T) {
+	home := shortTempDir(t)
+	t.Setenv("MADE_HOME", home)
+	gatePath := filepath.Join(home, "gates", "repo", "gate.git")
+	args := []string{
+		"gate", "notify-push",
+		"--gate", gatePath,
+		"--old", gitZeroSHA,
+		"--new", strings.Repeat("d", 40),
+		"--ref", "refs/heads/feature-x",
+		"--agent-preference", "claude",
+	}
+	if _, _, code := runCapture(t, args); code != 0 {
+		t.Fatalf("offline gate notify-push exit code = %d, want 0", code)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(home, "gate.spool"))
+	if err != nil {
+		t.Fatalf("read gate spool: %v", err)
+	}
+	if strings.Contains(string(raw), "claude") || strings.Contains(string(raw), "agent") {
+		t.Fatalf("spool file contains a trace of the agent preference, want it dropped entirely: %s", raw)
+	}
+
+	spool, err := daemon.OpenGateSpool(filepath.Join(home, "gate.spool"))
+	if err != nil {
+		t.Fatalf("OpenGateSpool: %v", err)
+	}
+	pending := spool.Pending()
+	if len(pending) != 1 {
+		t.Fatalf("pending = %+v, want exactly one durable submission", pending)
+	}
+}
+
 func TestGateNotifyPushCLI_NormalPushExitsZero(t *testing.T) {
 	home := shortTempDir(t)
 	t.Setenv("MADE_HOME", home)

@@ -236,3 +236,47 @@ func TestFinish_NonReviewStageNeverCarriesAgentResolution(t *testing.T) {
 		}
 	}
 }
+
+func TestSpawnReview_PushOptionPreferenceHonoredWhenRepoCommandsAllowed(t *testing.T) {
+	stubReviewRun(t, func(kind agent.Kind) (review.Result, error) {
+		if kind != agent.KindClaude {
+			t.Errorf("reviewRun kind = %v, want claude (from the push-option preference)", kind)
+		}
+		return review.Result{OK: true, Message: "ok"}, nil
+	})
+
+	c := testChain(config.Config{Agent: "auto", Agents: []string{"codex"}, AllowRepoCommands: true})
+	c.opts.AgentPreference = "claude"
+	result, err := c.spawnReview(review.Options{})
+
+	if err != nil {
+		t.Fatalf("spawnReview() error = %v", err)
+	}
+	if result == nil || !result.OK {
+		t.Fatalf("spawnReview() result = %+v, want OK using the preference, not config's codex", result)
+	}
+	if c.reviewAgentResolution != nil {
+		t.Errorf("reviewAgentResolution = %+v, want nil (preference fast path never probes)", c.reviewAgentResolution)
+	}
+}
+
+func TestSpawnReview_PushOptionPreferenceIgnoredWhenRepoCommandsDisallowed(t *testing.T) {
+	stubResolveProbes(t, agent.KindCodex)
+	stubReviewRun(t, func(kind agent.Kind) (review.Result, error) {
+		if kind != agent.KindCodex {
+			t.Errorf("reviewRun kind = %v, want codex (config's own resolution, preference must be ignored)", kind)
+		}
+		return review.Result{OK: true, Message: "ok"}, nil
+	})
+
+	c := testChain(config.Config{Agent: "auto", Agents: []string{"codex"}, AllowRepoCommands: false})
+	c.opts.AgentPreference = "claude"
+	result, err := c.spawnReview(review.Options{})
+
+	if err != nil {
+		t.Fatalf("spawnReview() error = %v", err)
+	}
+	if result == nil || !result.OK {
+		t.Fatalf("spawnReview() result = %+v, want OK using codex (config), ignoring the preference", result)
+	}
+}
