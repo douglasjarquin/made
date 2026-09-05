@@ -156,7 +156,11 @@ func (r *Runner) runStage(ctx context.Context, entry StagePlanEntry, index int) 
 	}
 
 	r.allFindings = append(r.allFindings, findings...)
-	r.stageResults[index] = StageResult{Stage: stage, Outcome: outcome, Message: msg, Findings: findings, ReusedCommands: entry.TestReused}
+	stageResult := StageResult{Stage: stage, Outcome: outcome, Message: msg, Findings: findings, ReusedCommands: entry.TestReused}
+	if stage == stageReview {
+		stageResult.AgentResolution = r.reviewAgentResolution
+	}
+	r.stageResults[index] = stageResult
 
 	for _, ref := range refs {
 		r.evidenceRefs = append(r.evidenceRefs, ref)

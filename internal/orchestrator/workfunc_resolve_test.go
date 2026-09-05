@@ -11,6 +11,7 @@ import (
 
 	"github.com/douglasjarquin/made/internal/agent"
 	"github.com/douglasjarquin/made/internal/config"
+	"github.com/douglasjarquin/made/internal/daemon"
 	"github.com/douglasjarquin/made/internal/gitgate"
 	"github.com/douglasjarquin/made/internal/pipeline/review"
 )
@@ -175,5 +176,63 @@ func TestFormatAgentResolutionFailure_NamesEveryAttemptAndReason(t *testing.T) {
 	msg := formatAgentResolutionFailure(res)
 	if !strings.Contains(msg, "codex") || !strings.Contains(msg, "missing") || !strings.Contains(msg, "claude") || !strings.Contains(msg, "unauthenticated") {
 		t.Errorf("formatAgentResolutionFailure() = %q, want it to name every candidate and reason", msg)
+	}
+}
+
+func TestFinish_ReviewStageSurfacesAgentResolutionOnStageResult(t *testing.T) {
+	rm := daemon.NewRunManager()
+	runID := rm.NewRunID()
+	if _, err := rm.Submit(runID, "repo", "branch", func(context.Context, func(daemon.Event)) error { return nil }); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	claude := agent.KindClaude
+	c := &chain{rm: rm, runID: runID, reviewAgentResolution: &agent.AgentResolution{
+		Selected: &claude,
+		Attempts: []agent.CandidateAttempt{{Kind: agent.KindCodex, Reason: agent.ReasonMissing}},
+	}}
+
+	if err := c.finish(stageNameReview, stageResultPass, "ok"); err != nil {
+		t.Fatalf("finish() error = %v", err)
+	}
+
+	snap, ok := rm.Snapshot(runID)
+	if !ok {
+		t.Fatalf("Snapshot(%q) not found", runID)
+	}
+	var reviewResult *daemon.StageResult
+	for i := range snap.Stages {
+		if snap.Stages[i].Name == stageNameReview {
+			reviewResult = &snap.Stages[i]
+		}
+	}
+	if reviewResult == nil {
+		t.Fatalf("no review StageResult found in %+v", snap.Stages)
+	}
+	if reviewResult.AgentResolution == nil || reviewResult.AgentResolution.Selected == nil || *reviewResult.AgentResolution.Selected != agent.KindClaude {
+		t.Errorf("review StageResult.AgentResolution = %+v, want Selected=claude", reviewResult.AgentResolution)
+	}
+}
+
+func TestFinish_NonReviewStageNeverCarriesAgentResolution(t *testing.T) {
+	rm := daemon.NewRunManager()
+	runID := rm.NewRunID()
+	if _, err := rm.Submit(runID, "repo", "branch", func(context.Context, func(daemon.Event)) error { return nil }); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	claude := agent.KindClaude
+	c := &chain{rm: rm, runID: runID, reviewAgentResolution: &agent.AgentResolution{Selected: &claude}}
+
+	if err := c.finish(stageNameTest, stageResultPass, "ok"); err != nil {
+		t.Fatalf("finish() error = %v", err)
+	}
+
+	snap, ok := rm.Snapshot(runID)
+	if !ok {
+		t.Fatalf("Snapshot(%q) not found", runID)
+	}
+	for _, s := range snap.Stages {
+		if s.Name == stageNameTest && s.AgentResolution != nil {
+			t.Errorf("test StageResult.AgentResolution = %+v, want nil (only the review stage carries this)", s.AgentResolution)
+		}
 	}
 }

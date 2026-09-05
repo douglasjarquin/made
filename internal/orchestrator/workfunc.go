@@ -215,7 +215,11 @@ func (c *chain) start(stage string) {
 }
 
 func (c *chain) finish(stage, result, message string) error {
-	c.stages = append(c.stages, daemon.StageResult{Name: stage, Result: result})
+	stageResult := daemon.StageResult{Name: stage, Result: result}
+	if stage == stageNameReview {
+		stageResult.AgentResolution = c.reviewAgentResolution
+	}
+	c.stages = append(c.stages, stageResult)
 	if c.stageMessages == nil {
 		c.stageMessages = map[string]string{}
 	}

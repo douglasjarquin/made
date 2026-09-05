@@ -489,7 +489,7 @@ Wave 4 (remaining tests not already embedded in earlier tasks + final verificati
 
   **Commit**: NO | Files: none
 
-- [ ] 10. Structured surfacing: daemon `StageResult`, managed `StageResult`/`Outcome`, verify `StageReceipt` (D3, D18)
+- [x] 10. Structured surfacing: daemon `StageResult`, managed `StageResult`/`Outcome`, verify `StageReceipt` (D3, D18)
 
   **What to do**: Add `AgentResolution *agent.AgentResolution \`json:"agent_resolution,omitempty"\`` to:
   - `internal/daemon/runstate.go`'s `StageResult` struct, populated by Task 7's `reviewStage()` on both success (D18 - selected kind recorded) and all-exhausted failure.
