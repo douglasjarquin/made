@@ -255,6 +255,54 @@ func TestRunManager_CancelUnknownRunErrors(t *testing.T) {
 	}
 }
 
+func TestRunManager_SupersedeQueuedSetsSupersededBy(t *testing.T) {
+	rm := NewRunManager()
+	const repo = "gate-repo-supersede-by"
+
+	blockStarted := make(chan struct{})
+	blockRelease := make(chan struct{})
+	blockID := rm.NewRunID()
+	if _, err := rm.Submit(blockID, repo, "blocker-branch", func(ctx context.Context, emit func(Event)) error {
+		close(blockStarted)
+		<-blockRelease
+		return nil
+	}); err != nil {
+		t.Fatalf("submit blocker: %v", err)
+	}
+	<-blockStarted
+
+	id1 := rm.NewRunID()
+	if _, err := rm.Submit(id1, repo, "feature-x", func(ctx context.Context, emit func(Event)) error { return nil }); err != nil {
+		t.Fatalf("submit first: %v", err)
+	}
+
+	// The superseding run's id is known (generated at submission time) before
+	// its own Submit call, matching cmd/made/daemon.go's gate.notifyPush,
+	// which calls SupersedeQueued with the newly generated runID before that
+	// run is itself submitted.
+	id2 := rm.NewRunID()
+	if err := rm.SupersedeQueued(repo, "feature-x", id2); err != nil {
+		t.Fatalf("SupersedeQueued: %v", err)
+	}
+	if _, err := rm.Submit(id2, repo, "feature-x", func(ctx context.Context, emit func(Event)) error { return nil }); err != nil {
+		t.Fatalf("submit second: %v", err)
+	}
+	close(blockRelease)
+
+	waitForStatus(t, rm, id2, RunSucceeded, 2*time.Second)
+
+	final1, ok := rm.Snapshot(id1)
+	if !ok {
+		t.Fatal("expected superseded run to remain tracked, not deleted")
+	}
+	if final1.Status != RunSuperseded {
+		t.Fatalf("expected superseded run status RunSuperseded, got %v", final1.Status)
+	}
+	if final1.SupersededBy != id2 {
+		t.Fatalf("expected superseded run's SupersededBy to report the superseding run id %q, got %q", id2, final1.SupersededBy)
+	}
+}
+
 func TestRunManager_SupersedeQueuedDropsOnlyStillQueuedJobForBranch(t *testing.T) {
 	rm := NewRunManager()
 	const repo = "gate-repo-supersede"
@@ -291,11 +339,11 @@ func TestRunManager_SupersedeQueuedDropsOnlyStillQueuedJobForBranch(t *testing.T
 		t.Fatalf("expected first run still queued behind the blocker before supersession, got %+v (ok=%v)", snap, ok)
 	}
 
-	if err := rm.SupersedeQueued(repo, "feature-x"); err != nil {
+	id2 := rm.NewRunID()
+	if err := rm.SupersedeQueued(repo, "feature-x", id2); err != nil {
 		t.Fatalf("SupersedeQueued: %v", err)
 	}
 
-	id2 := rm.NewRunID()
 	if _, err := rm.Submit(id2, repo, "feature-x", recordWork("second")); err != nil {
 		t.Fatalf("submit second: %v", err)
 	}
@@ -343,7 +391,7 @@ func TestRunManager_SupersedeQueuedLeavesAlreadyStartedRunAlone(t *testing.T) {
 	<-started
 	waitForStatus(t, rm, id, RunRunning, time.Second)
 
-	if err := rm.SupersedeQueued(repo, "feature-x"); err != nil {
+	if err := rm.SupersedeQueued(repo, "feature-x", rm.NewRunID()); err != nil {
 		t.Fatalf("SupersedeQueued: %v", err)
 	}
 

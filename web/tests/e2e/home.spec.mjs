@@ -8,7 +8,7 @@ test("the home hero names the product and the two primary actions", async ({ pag
     "href",
     "/made/pipeline/",
   );
-  await expect(page.locator(".chip--active")).toHaveText("succeeded");
+  await expect(page.locator(".chip--active")).toHaveText("awaiting_merge");
 });
 
 test("the home remains useful without client JavaScript", async ({ browser }) => {

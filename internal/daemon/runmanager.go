@@ -495,7 +495,9 @@ var ErrRunSuperseded = errors.New("daemon: run superseded by a newer push to the
 // inspected, so a job already popped off the queue - running or terminal -
 // is left completely alone, matching a fresh push's right to replace a
 // stale intent that hasn't started yet, but never a run already underway.
-func (rm *RunManager) SupersedeQueued(repo, branch string) error {
+// supersedingRunID is recorded on each dropped run's SupersededBy field so a
+// caller reading a superseded run's status can find the run that replaced it.
+func (rm *RunManager) SupersedeQueued(repo, branch, supersedingRunID string) error {
 	rm.mu.Lock()
 	rq, ok := rm.repos[repo]
 	rm.mu.Unlock()
@@ -522,6 +524,7 @@ func (rm *RunManager) SupersedeQueued(repo, branch string) error {
 		j.run.persistMu.Lock()
 		candidate := j.run.snapshot()
 		candidate.Status = RunSuperseded
+		candidate.SupersededBy = supersedingRunID
 		candidate.Err = ErrRunSuperseded
 		candidate.Error = ErrRunSuperseded.Error()
 		candidate.ExecutionFinished = true

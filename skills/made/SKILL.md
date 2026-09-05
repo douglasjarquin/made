@@ -35,7 +35,9 @@ along with the command:
   bare gate repo and a `made` git remote pointing at it, once per repo.
 - The work you want validated must be **committed**; the gate validates
   pushed history, not your uncommitted working tree.
-- The daemon starts on demand, but `made doctor` is the fastest way to
+- The daemon does **not** start on demand: run `made daemon start` explicitly
+  before pushing to the gate, or the pre-receive hook fails the push outright
+  when the socket is unreachable. `made doctor` is the fastest way to
   confirm the daemon, `gh` authentication, and (optionally) a running herdr
   server are all reachable before you push.
   Use `made doctor --json` for the versioned health response.

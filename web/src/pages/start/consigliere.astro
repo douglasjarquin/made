@@ -42,7 +42,7 @@ const flow = [
     <div class="kv__row"><span class="kv__key">4 · review</span><span class="kv__val">If a stage needs a decision, the run parks in <code>awaiting_review</code>. Consigliere answers it through <code>made review decide</code> when the project's posture allows (<code>yolo</code>), otherwise it asks the boss.</span></div>
     <div class="kv__row"><span class="kv__key">5 · push</span><span class="kv__val">made pushes and opens the PR only after the gate passes.</span></div>
     <div class="kv__row"><span class="kv__key">6 · CI</span><span class="kv__val">made polls checks under the check policy and reruns failed Actions runs within the budget.</span></div>
-    <div class="kv__row"><span class="kv__key">7 · land</span><span class="kv__val">The run reaches <code>succeeded</code>. Consigliere brings the green PR back for the boss's word. Landing is always the boss.</span></div>
+    <div class="kv__row"><span class="kv__key">7 · land</span><span class="kv__val">The run reaches <code>awaiting_merge</code> with <code>pr_url</code> set — made opens the PR but never merges it. Consigliere brings the green PR back for the boss's word. Landing is always the boss.</span></div>
   </div>
 
   <h2>Why exact ids and --json</h2>

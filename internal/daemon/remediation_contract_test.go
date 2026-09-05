@@ -129,7 +129,8 @@ func TestRunManager_SupersedeUsesSupersededLifecycle(t *testing.T) {
 	if _, err := rm.Submit(first, repo, "feature", func(context.Context, func(Event)) error { return nil }); err != nil {
 		t.Fatalf("Submit first: %v", err)
 	}
-	if err := rm.SupersedeQueued(repo, "feature"); err != nil {
+	second := rm.NewRunID()
+	if err := rm.SupersedeQueued(repo, "feature", second); err != nil {
 		t.Fatalf("SupersedeQueued: %v", err)
 	}
 	close(release)

@@ -27,7 +27,7 @@ const states = [
   <div class="chips">
     {
       states.map((state) => (
-        <span class:list={["chip", state === "succeeded" && "chip--active"]}>{state}</span>
+        <span class:list={["chip", state === "awaiting_merge" && "chip--active"]}>{state}</span>
       ))
     }
   </div>
@@ -35,8 +35,8 @@ const states = [
     <div class="kv__row"><span class="kv__key">queued</span><span class="kv__val">Accepted into the spool. Idempotent on gate, ref, and input SHA: resubmitting the same triple returns the same run.</span></div>
     <div class="kv__row"><span class="kv__key">running</span><span class="kv__val">Gate stages executing: review, tests, docs, lint, push.</span></div>
     <div class="kv__row"><span class="kv__key">awaiting_review</span><span class="kv__val">A stage needs an explicit decision. Resolve with <code>made review decide</code> using the exact run id.</span></div>
-    <div class="kv__row"><span class="kv__key">awaiting_merge</span><span class="kv__val">Pushed, PR open, CI being polled under the check policy.</span></div>
-    <div class="kv__row"><span class="kv__key">succeeded</span><span class="kv__val">Green. The PR is ready for a human to land.</span></div>
+    <div class="kv__row"><span class="kv__key">awaiting_merge</span><span class="kv__val">Terminal for a passing run. PR open, CI green, <code>pr_url</code> set. made opened the PR and watched checks pass but never merges it - that decision is the human's.</span></div>
+    <div class="kv__row"><span class="kv__key">succeeded</span><span class="kv__val">Reserved in the state machine but never reached by the real gate pipeline, which always finishes an all-green run at <code>awaiting_merge</code> instead.</span></div>
     <div class="kv__row"><span class="kv__key">failed</span><span class="kv__val">A stage failed or the rerun budget ran out. Evidence is reported by failed check and run.</span></div>
     <div class="kv__row"><span class="kv__key">canceled</span><span class="kv__val">Idempotent; cancelling twice is fine.</span></div>
     <div class="kv__row"><span class="kv__key">superseded</span><span class="kv__val">A newer SHA on the same ref replaced this run.</span></div>
