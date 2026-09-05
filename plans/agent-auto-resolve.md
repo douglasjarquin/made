@@ -675,7 +675,7 @@ Wave 4 (remaining tests not already embedded in earlier tasks + final verificati
 
   **Commit**: YES | Message: `feat(cli): human-readable agent-resolution summary line` | Files: identified call site(s) + `_test.go`
 
-- [ ] 15. `AGENTS.md` documentation update (D21)
+- [x] 15. `AGENTS.md` documentation update (D21)
 
   **What to do**: Add one concise entry to this repo's `AGENTS.md` (matching its existing dense, pointer-heavy style - see the file's own "Maintaining this file" section) describing: `agent: auto`/empty + `agents: [...]` semantics and precedence (D11), that an explicit non-`auto` `agent:` still means "only this one, no fallback," the `git push -o agent=<kind>` preference and its `AllowRepoCommands` trust gating (D4), and a pointer to `internal/agent/resolve.go` as the authoritative source rather than restating its logic. Keep it to the same density/length as this file's existing entries - one paragraph, pointer-first.
 
