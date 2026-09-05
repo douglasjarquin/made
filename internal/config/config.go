@@ -199,31 +199,52 @@ func (c Config) AgentKind() (agent.Kind, error) {
 	return kind, nil
 }
 
-func (c Config) Validate() error {
-	if err := c.validateReviewRequiresAgent(); err != nil {
-		return err
+// AgentIsPinned reports whether Agent names one specific kind (today's
+// original behavior: no fallback, no probing). "" and the "auto" sentinel
+// both mean autodetect and are not pinned.
+func (c Config) AgentIsPinned() bool {
+	return c.Agent != "" && c.Agent != "auto"
+}
+
+// AgentCandidates returns the ordered autodetect candidate list. It is only
+// meaningful when AgentIsPinned() is false; callers must check that first
+// and use AgentKind() directly on the pinned path (project issue: agent
+// auto-resolve). Precedence: Agents in the configured order when non-empty,
+// else agent.SupportedKinds()'s fixed default order - Agents is otherwise a
+// parsed-but-unconsumed field (validated per-entry in validateCommon).
+func (c Config) AgentCandidates() []agent.Kind {
+	if len(c.Agents) == 0 {
+		return agent.SupportedKinds()
 	}
+	kinds := make([]agent.Kind, 0, len(c.Agents))
+	for _, configured := range c.Agents {
+		// Already validated by validateCommon; ParseKind cannot fail here for
+		// a config that passed Validate()/ValidateWithoutReviewAgentRequirement.
+		if kind, err := agent.ParseKind(configured); err == nil {
+			kinds = append(kinds, kind)
+		}
+	}
+	return kinds
+}
+
+func (c Config) Validate() error {
 	return c.validateCommon()
 }
 
-// ValidateWithoutReviewAgentRequirement runs every check Validate does
-// except that required Review implies a configured internal agent. Made's
-// managed-validation mode can satisfy required Review with a caller-supplied
-// external result instead of an agent, so it enforces that invariant itself,
-// once it knows which Review source a run will actually use.
+// ValidateWithoutReviewAgentRequirement is kept as a distinct entry point for
+// callers (e.g. internal/cursor/doctor.go) that historically needed to
+// validate a config satisfiable by an external review result with no
+// internal agent at all. Since agent auto-resolve (project: agent
+// auto-resolve) made auto/empty Agent always a valid selection mechanism,
+// Validate() itself no longer has a stricter agent requirement to relax, so
+// both methods currently do the same thing; kept separate so a future
+// Validate()-only check doesn't silently start applying to this caller.
 func (c Config) ValidateWithoutReviewAgentRequirement() error {
 	return c.validateCommon()
 }
 
-func (c Config) validateReviewRequiresAgent() error {
-	if c.Review.Required && c.Agent == "" {
-		return fmt.Errorf("config: review requires agent (one of %s)", agent.SupportedKindNames())
-	}
-	return nil
-}
-
 func (c Config) validateCommon() error {
-	if c.Agent != "" {
+	if c.AgentIsPinned() {
 		if _, err := c.AgentKind(); err != nil {
 			return err
 		}
