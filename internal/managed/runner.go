@@ -3,7 +3,10 @@ package managed
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/douglasjarquin/made/internal/agent"
 	"github.com/douglasjarquin/made/internal/config"
@@ -34,6 +37,12 @@ type Runner struct {
 	stageResults  []StageResult
 	evidenceRefs  []string
 	decisionsUsed map[string]struct{}
+
+	// reviewAgentResolution records which agent candidate reviewStage used
+	// (or, on exhaustion, every candidate it tried and why) whenever
+	// Config.Agent is auto/empty; nil when Agent is pinned or the review
+	// source is external, since neither path ever probes.
+	reviewAgentResolution *agent.AgentResolution
 }
 
 // NewRunner constructs a Runner from validated options, parsed config, loaded
@@ -204,19 +213,24 @@ func (r *Runner) reviewStage(ctx context.Context, entry StagePlanEntry) (Outcome
 		ResultPath:   r.opts.ReviewResult,
 		Guides:       r.guides,
 	}
+	var result ReviewResult
 	if entry.ReviewSource == ReviewSourceInternal {
-		agentKind, agentErr := r.cfg.AgentKind()
-		if agentErr != nil {
-			return OutcomeInfrastructureError, fmt.Sprintf("resolve agent kind: %s", agentErr), nil, nil
-		}
-		req.AgentKind = agentKind
 		req.AgentBinaryPath = r.opts.ReviewAgentBinaryPath
 		req.AgentExtraEnv = r.opts.ReviewAgentExtraEnv
-	}
-
-	result, err := source.Review(stageCtx, req)
-	if err != nil {
-		return OutcomeInfrastructureError, fmt.Sprintf("review: %s", err), nil, nil
+		spawned, agentErr := r.spawnInternalReview(stageCtx, source, req)
+		if agentErr != nil {
+			return OutcomeInfrastructureError, fmt.Sprintf("review: %s", agentErr), nil, nil
+		}
+		if spawned == nil {
+			return OutcomeInfrastructureError, formatAgentResolutionFailure(*r.reviewAgentResolution), nil, nil
+		}
+		result = *spawned
+	} else {
+		var err error
+		result, err = source.Review(stageCtx, req)
+		if err != nil {
+			return OutcomeInfrastructureError, fmt.Sprintf("review: %s", err), nil, nil
+		}
 	}
 
 	evidenceData, marshalErr := json.Marshal(result.Findings)
@@ -328,6 +342,81 @@ func (r *Runner) reviewStage(ctx context.Context, entry StagePlanEntry) (Outcome
 	}
 
 	return outcome, msg, findings, refs
+}
+
+// spawnInternalReview resolves which agent kind to review with and calls
+// source.Review. An explicit non-auto Agent (AgentIsPinned) always skips
+// probing entirely and behaves exactly as before agent auto-resolve;
+// otherwise it probes the candidate list (agent.Resolve) and, on a
+// classified capacity failure, retries with the remaining candidates
+// after the one that just failed - any other error is a hard failure,
+// exactly as today. r.reviewAgentResolution always records the outcome
+// (nil only on the pinned path). A (nil, nil) return means every
+// candidate was exhausted; r.reviewAgentResolution carries the full
+// structured reason for the caller to surface.
+func (r *Runner) spawnInternalReview(ctx context.Context, source ReviewSource, req ReviewRequest) (*ReviewResult, error) {
+	if r.cfg.AgentIsPinned() {
+		kind, err := r.cfg.AgentKind()
+		if err != nil {
+			return nil, fmt.Errorf("resolve agent kind: %w", err)
+		}
+		req.AgentKind = kind
+		result, err := source.Review(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		return &result, nil
+	}
+
+	remaining := r.cfg.AgentCandidates()
+	var attempts []agent.CandidateAttempt
+	for {
+		res := agent.Resolve(ctx, remaining)
+		attempts = append(attempts, res.Attempts...)
+		if res.AllExhausted() {
+			r.reviewAgentResolution = &agent.AgentResolution{Attempts: attempts}
+			return nil, nil
+		}
+		req.AgentKind = *res.Selected
+		result, err := source.Review(ctx, req)
+		if err == nil {
+			r.reviewAgentResolution = &agent.AgentResolution{Selected: res.Selected, Attempts: attempts}
+			return &result, nil
+		}
+		if !errors.Is(err, agent.ErrAgentCapacity) {
+			return nil, err
+		}
+		attempts = append(attempts, agent.CandidateAttempt{Kind: *res.Selected, Reason: agent.ReasonQuotaExhausted})
+		remaining = remainingAfterKind(remaining, *res.Selected)
+	}
+}
+
+// remainingAfterKind returns the candidates after the given kind's position
+// in the list, so a capacity retry only ever moves forward through the
+// resolved order and never revisits an already-failed candidate.
+func remainingAfterKind(candidates []agent.Kind, after agent.Kind) []agent.Kind {
+	for i, kind := range candidates {
+		if kind == after {
+			return candidates[i+1:]
+		}
+	}
+	return nil
+}
+
+// formatAgentResolutionFailure renders the brief's required escalation
+// shape ("missing/unauthenticated/quota-exhausted-until-<resetsAt>") as the
+// stage-failure message; structured JSON surfacing lives on
+// r.reviewAgentResolution for a later stage-result field to expose.
+func formatAgentResolutionFailure(res agent.AgentResolution) string {
+	parts := make([]string, 0, len(res.Attempts))
+	for _, a := range res.Attempts {
+		reason := string(a.Reason)
+		if a.Reason == agent.ReasonQuotaExhausted && a.QuotaResetsAt != nil {
+			reason = fmt.Sprintf("quota-exhausted-until-%s", a.QuotaResetsAt.Format(time.RFC3339))
+		}
+		parts = append(parts, fmt.Sprintf("%s (%s)", a.Kind, reason))
+	}
+	return "no review agent available: " + strings.Join(parts, ", ")
 }
 
 func (r *Runner) testStage(ctx context.Context, entry StagePlanEntry) (Outcome, string, []FindingReportedPayload, []string) {

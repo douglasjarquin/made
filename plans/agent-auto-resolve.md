@@ -439,7 +439,7 @@ Wave 4 (remaining tests not already embedded in earlier tasks + final verificati
 
   **Commit**: YES | Message: `feat(orchestrator): resolve+fallback agent selection in reviewStage` | Files: `internal/orchestrator/workfunc.go`, `internal/orchestrator/workfunc_test.go`
 
-- [ ] 8. Wire resolver + mid-run fallback into `managed/runner.go:208` (D7, D11, D12)
+- [x] 8. Wire resolver + mid-run fallback into `managed/runner.go:208` (D7, D11, D12)
 
   **What to do**: Mirror Task 7's exact logic in `internal/managed/runner.go`'s `Runner.Run`, at the `ReviewSourceInternal` branch (~line 208) - same pin-fast-path/resolve/fallback structure, same `AgentResolution` type, same `ErrAgentCapacity` retry scoping (D7). This is deliberately the same code shape as Task 7 (consider extracting a small shared helper in `internal/agent` if the two call sites turn out identical enough - do not force a shared helper if `internal/orchestrator` and `internal/managed`'s surrounding control flow differ enough to make it awkward; a little duplication between two call sites is acceptable per this repo's own stated preference for simplicity over premature abstraction).
 
