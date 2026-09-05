@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/douglasjarquin/made/internal/agent"
 	"github.com/douglasjarquin/made/internal/managed"
 )
 
@@ -20,6 +21,9 @@ type StageReceipt struct {
 	// satisfied instead of actually running (project issue #61); nil for
 	// every other stage and for a Test stage with nothing reused.
 	Reused []managed.ReusedLaneCommand `json:"reused,omitempty"`
+	// AgentResolution mirrors managed.StageResult.AgentResolution (Review
+	// stage only, auto/empty Agent only; project: agent auto-resolve).
+	AgentResolution *agent.AgentResolution `json:"agent_resolution,omitempty"`
 }
 
 type ReviewReceipt struct {
@@ -53,7 +57,7 @@ type Receipt struct {
 func BuildReceipt(repository, baseSHA, inputSHA string, cfg ConfigIdentity, review *ReviewReceipt, res EngineResult) Receipt {
 	stages := make([]StageReceipt, 0, len(res.StageResults))
 	for _, s := range res.StageResults {
-		stages = append(stages, StageReceipt{Name: s.Stage, Status: string(s.Outcome), Message: s.Message, Reused: s.ReusedCommands})
+		stages = append(stages, StageReceipt{Name: s.Stage, Status: string(s.Outcome), Message: s.Message, Reused: s.ReusedCommands, AgentResolution: s.AgentResolution})
 	}
 	return Receipt{
 		SchemaVersion:   ReceiptSchemaVersion,

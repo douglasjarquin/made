@@ -2,7 +2,9 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/douglasjarquin/made/internal/agent"
@@ -47,6 +49,12 @@ const (
 type Options struct {
 	ReviewOptions      review.Options
 	CandidateOutputSHA string
+	// AgentPreference is the optional git push -o agent=<kind> value
+	// (project: agent auto-resolve). reviewStage only honors it when the
+	// trusted config's AllowRepoCommands is true (decision D4, the same
+	// trust gate pushed config values already use) - otherwise it is
+	// ignored and normal config-based resolution runs instead.
+	AgentPreference string
 }
 
 // NewWorkFunc builds the real 9-stage chain (Intent -> Rebase -> Review ->
@@ -111,6 +119,11 @@ type chain struct {
 	// satisfied from an existing receipt instead of running, for prStage's
 	// pipeline summary.
 	reusedLaneCommands []reusedLaneCommand
+	// reviewAgentResolution records which agent candidate reviewStage used
+	// (or, on exhaustion, every candidate it tried and why) whenever
+	// Config.Agent is auto/empty; nil when Agent is pinned, since the
+	// pinned fast path never probes at all.
+	reviewAgentResolution *agent.AgentResolution
 }
 
 func (c *chain) run() error {
@@ -208,7 +221,11 @@ func (c *chain) start(stage string) {
 }
 
 func (c *chain) finish(stage, result, message string) error {
-	c.stages = append(c.stages, daemon.StageResult{Name: stage, Result: result})
+	stageResult := daemon.StageResult{Name: stage, Result: result}
+	if stage == stageNameReview {
+		stageResult.AgentResolution = c.reviewAgentResolution
+	}
+	c.stages = append(c.stages, stageResult)
 	if c.stageMessages == nil {
 		c.stageMessages = map[string]string{}
 	}
@@ -269,20 +286,25 @@ func (c *chain) rebaseStage() error {
 func (c *chain) reviewStage() error {
 	c.start(stageNameReview)
 
-	agentKind, err := c.rc.Config.AgentKind()
-	if err != nil {
-		return fmt.Errorf("orchestrator: resolve agent kind: %w", err)
-	}
-
 	reviewOptions := c.opts.ReviewOptions
 	reviewOptions.BaseBranch = c.defaultBranch
 	reviewOptions.CandidateOutputSHA = c.opts.CandidateOutputSHA
 	reviewOptions.Evidence = c.rc.Evidence
 	reviewOptions.EvidenceRunID = c.runID
-	result, err := review.Run(c.ctx, c.rc.Worktree.Path, agentKind, reviewOptions)
+
+	spawned, err := c.spawnReview(reviewOptions)
 	if err != nil {
 		return err
 	}
+	if spawned == nil {
+		message := formatAgentResolutionFailure(*c.reviewAgentResolution)
+		if err := c.finish(stageNameReview, stageResultFail, message); err != nil {
+			return err
+		}
+		return c.stageFailure(stageNameReview, message)
+	}
+	result := *spawned
+
 	durableFindings := make([]daemon.RunFinding, 0, len(result.Findings))
 	autoFixIndex := 0
 	for _, finding := range result.Findings {
@@ -312,6 +334,98 @@ func (c *chain) reviewStage() error {
 	}
 
 	return c.finish(stageNameReview, stageResultPass, result.Message)
+}
+
+// reviewRun is a seam over review.Run: workfunc_resolve_test.go reassigns it
+// to exercise spawnReview's resolve/retry loop against canned (Result,
+// error) pairs, since a real review.Run spawn always goes through
+// bubblewrap containment.
+var reviewRun = review.Run
+
+// spawnReview resolves which agent kind to review with and runs
+// review.Run. A trust-gated push-option preference (decision D4) wins over
+// config entirely when present; otherwise an explicit non-auto Agent
+// (AgentIsPinned) always skips probing entirely and behaves exactly as
+// before agent auto-resolve; otherwise it probes the candidate list
+// (agent.Resolve) and, on a classified capacity failure, retries with the
+// remaining candidates after the one that just failed - any other error is
+// a hard failure, exactly as today. c.reviewAgentResolution always records
+// the outcome (nil only on the pinned/preference fast paths). A (nil, nil)
+// return means every candidate was exhausted; c.reviewAgentResolution
+// carries the full structured reason for the caller to surface.
+func (c *chain) spawnReview(opts review.Options) (*review.Result, error) {
+	if c.opts.AgentPreference != "" && c.rc.Config.AllowRepoCommands {
+		kind, err := agent.ParseKind(c.opts.AgentPreference)
+		if err != nil {
+			return nil, fmt.Errorf("orchestrator: resolve agent preference: %w", err)
+		}
+		result, err := reviewRun(c.ctx, c.rc.Worktree.Path, kind, opts)
+		if err != nil {
+			return nil, err
+		}
+		return &result, nil
+	}
+
+	if c.rc.Config.AgentIsPinned() {
+		kind, err := c.rc.Config.AgentKind()
+		if err != nil {
+			return nil, fmt.Errorf("orchestrator: resolve agent kind: %w", err)
+		}
+		result, err := reviewRun(c.ctx, c.rc.Worktree.Path, kind, opts)
+		if err != nil {
+			return nil, err
+		}
+		return &result, nil
+	}
+
+	remaining := c.rc.Config.AgentCandidates()
+	var attempts []agent.CandidateAttempt
+	for {
+		res := agent.Resolve(c.ctx, remaining)
+		attempts = append(attempts, res.Attempts...)
+		if res.AllExhausted() {
+			c.reviewAgentResolution = &agent.AgentResolution{Attempts: attempts}
+			return nil, nil
+		}
+		result, err := reviewRun(c.ctx, c.rc.Worktree.Path, *res.Selected, opts)
+		if err == nil {
+			c.reviewAgentResolution = &agent.AgentResolution{Selected: res.Selected, Attempts: attempts}
+			return &result, nil
+		}
+		if !errors.Is(err, agent.ErrAgentCapacity) {
+			return nil, err
+		}
+		attempts = append(attempts, agent.CandidateAttempt{Kind: *res.Selected, Reason: agent.ReasonQuotaExhausted})
+		remaining = remainingAfterKind(remaining, *res.Selected)
+	}
+}
+
+// remainingAfterKind returns the candidates after the given kind's position
+// in the list, so a capacity retry only ever moves forward through the
+// resolved order and never revisits an already-failed candidate.
+func remainingAfterKind(candidates []agent.Kind, after agent.Kind) []agent.Kind {
+	for i, kind := range candidates {
+		if kind == after {
+			return candidates[i+1:]
+		}
+	}
+	return nil
+}
+
+// formatAgentResolutionFailure renders the brief's required escalation
+// shape ("missing/unauthenticated/quota-exhausted-until-<resetsAt>") as a
+// human-readable stage-failure message; structured JSON surfacing lives on
+// c.reviewAgentResolution for a later stage-result field to expose.
+func formatAgentResolutionFailure(res agent.AgentResolution) string {
+	parts := make([]string, 0, len(res.Attempts))
+	for _, a := range res.Attempts {
+		reason := string(a.Reason)
+		if a.Reason == agent.ReasonQuotaExhausted && a.QuotaResetsAt != nil {
+			reason = fmt.Sprintf("quota-exhausted-until-%s", a.QuotaResetsAt.Format(time.RFC3339))
+		}
+		parts = append(parts, fmt.Sprintf("%s (%s)", a.Kind, reason))
+	}
+	return "no review agent available: " + strings.Join(parts, ", ")
 }
 
 func (c *chain) testStage() error {

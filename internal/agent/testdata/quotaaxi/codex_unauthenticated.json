@@ -1,0 +1,27 @@
+{
+  "generatedAt": "2026-09-05T05:24:30.874Z",
+  "schemaVersion": 5,
+  "providers": [
+    {
+      "provider": "codex",
+      "label": "Codex",
+      "source": "unavailable",
+      "windows": [],
+      "state": {
+        "status": "auth_required",
+        "stale": false,
+        "error": "Codex sign-in required",
+        "sourcesTried": ["oauth", "cli-rpc"]
+      },
+      "attempts": [
+        {"source": "oauth", "status": "skipped", "error": "credentials_expired"},
+        {"source": "cli-rpc", "status": "failed", "error": "Codex quota unavailable"}
+      ],
+      "quotaSemantics": {
+        "status": "unknown",
+        "description": "No quota windows are available, so no effective remaining percentage can be computed.",
+        "effectiveAvailability": []
+      }
+    }
+  ]
+}

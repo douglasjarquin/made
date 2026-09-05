@@ -329,6 +329,13 @@ func printHumanReceipt(stdout *os.File, r verify.Receipt, evidenceDir string) {
 	_, _ = fmt.Fprintln(stdout, "Stages:")
 	for _, s := range r.Stages {
 		_, _ = fmt.Fprintf(stdout, "  %-10s %s\n", s.Name, s.Status)
+		if s.AgentResolution != nil {
+			if s.AgentResolution.Selected != nil {
+				_, _ = fmt.Fprintf(stdout, "             agent: %s (resolved)\n", *s.AgentResolution.Selected)
+			} else {
+				_, _ = fmt.Fprintf(stdout, "             agent: %s\n", formatDoctorAgentResolutionFailure(*s.AgentResolution))
+			}
+		}
 	}
 	if evidenceDir != "" {
 		_, _ = fmt.Fprintf(stdout, "Evidence:  %s\n", evidenceDir)

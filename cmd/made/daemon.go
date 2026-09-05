@@ -378,6 +378,16 @@ type gateNotifyPushParams struct {
 	OutputSHA    string `json:"output_sha,omitempty"`
 	SubmissionID string `json:"submission_id,omitempty"`
 	Replay       bool   `json:"replay,omitempty"`
+	// AgentPreference is the optional git push -o agent=<kind> value the
+	// post-receive hook forwarded (project: agent auto-resolve). It rides
+	// straight through to orchestrator.Options, never into
+	// daemon.GateSubmission/the offline spool - that record is
+	// push-identity/dedup only, so a replayed offline submission silently
+	// falls back to trusted config resolution instead (decision D6).
+	// Trust-boundary gating (only honored when the trusted config's
+	// AllowRepoCommands is true) happens downstream in reviewStage, once a
+	// resolved Config is available - decision D4.
+	AgentPreference string `json:"agent_preference,omitempty"`
 }
 
 type gateNotifyPushResult struct {
@@ -484,7 +494,7 @@ func gateNotifyPushHandler(rm *daemon.RunManager, reviewDecisions *daemon.Review
 
 		work := func(workCtx context.Context, emit func(daemon.Event)) error {
 			return orchestrator.Run(workCtx, gatePath, defaultBranch, worktreesDir, runID, newSHA,
-				orchestrator.NewWorkFunc(rm, reviewDecisions, emit, runID, defaultBranch, branch, orchestrator.Options{CandidateOutputSHA: p.OutputSHA}))
+				orchestrator.NewWorkFunc(rm, reviewDecisions, emit, runID, defaultBranch, branch, orchestrator.Options{CandidateOutputSHA: p.OutputSHA, AgentPreference: p.AgentPreference}))
 		}
 
 		submissionID := p.SubmissionID

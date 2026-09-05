@@ -3,6 +3,8 @@ package daemon
 import (
 	"fmt"
 	"slices"
+
+	"github.com/douglasjarquin/made/internal/agent"
 )
 
 type StageResult struct {
@@ -11,6 +13,11 @@ type StageResult struct {
 	Message      string   `json:"message,omitempty"`
 	Error        string   `json:"error,omitempty"`
 	EvidenceRefs []string `json:"evidence_refs,omitempty"`
+	// AgentResolution records the review stage's agent-resolution outcome
+	// (which candidate was used, or every candidate tried and why on
+	// exhaustion) whenever Config.Agent is auto/empty; nil for a pinned
+	// Agent or any other stage.
+	AgentResolution *agent.AgentResolution `json:"agent_resolution,omitempty"`
 }
 
 type AskUserFinding struct {

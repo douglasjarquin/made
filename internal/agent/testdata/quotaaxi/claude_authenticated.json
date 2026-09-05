@@ -1,0 +1,156 @@
+{
+  "generatedAt": "2026-09-05T05:24:18.251Z",
+  "schemaVersion": 5,
+  "providers": [
+    {
+      "provider": "claude",
+      "label": "Claude",
+      "source": "oauth",
+      "plan": "team",
+      "account": {
+        "accountId": "6685c360-5803-40fa-9c1f-e09a5f3b04e1",
+        "email": "douglas.jarquin@zumba.com",
+        "organization": "Team Zumba",
+        "identityStatus": "verified"
+      },
+      "windows": [
+        {
+          "id": "five_hour",
+          "label": "session",
+          "kind": "session",
+          "percentUsed": 72,
+          "resetsAt": "2026-09-05T07:09:59.399091+00:00",
+          "windowSeconds": 18000,
+          "percentRemaining": 28,
+          "pace": {
+            "status": "ahead",
+            "timeRemainingPercent": 35.2286,
+            "elapsedPercent": 64.7714,
+            "reservePercentPoints": -7.2286,
+            "cycleBasis": "window_seconds",
+            "cycleSeconds": 18000,
+            "burnMultiple": 1.1116,
+            "projectedExhaustedAt": "2026-09-05T06:39:52.249Z",
+            "projectionConfidence": "established"
+          }
+        },
+        {
+          "id": "seven_day",
+          "label": "week",
+          "kind": "weekly",
+          "percentUsed": 12,
+          "resetsAt": "2026-09-10T06:00:00.399111+00:00",
+          "windowSeconds": 604800,
+          "percentRemaining": 88,
+          "pace": {
+            "status": "behind",
+            "timeRemainingPercent": 71.7828,
+            "elapsedPercent": 28.2172,
+            "reservePercentPoints": 16.2172,
+            "cycleBasis": "window_seconds",
+            "cycleSeconds": 604800,
+            "burnMultiple": 0.4253,
+            "projectedExhaustedAt": "2026-09-19T17:02:29.165Z",
+            "projectionConfidence": "established"
+          }
+        },
+        {
+          "id": "model:fable",
+          "label": "Fable week",
+          "kind": "model",
+          "percentUsed": 13,
+          "resetsAt": "2026-09-10T06:00:00.399318+00:00",
+          "windowSeconds": 604800,
+          "percentRemaining": 87,
+          "pace": {
+            "status": "behind",
+            "timeRemainingPercent": 71.7828,
+            "elapsedPercent": 28.2172,
+            "reservePercentPoints": 15.2172,
+            "cycleBasis": "window_seconds",
+            "cycleSeconds": 604800,
+            "burnMultiple": 0.4607,
+            "projectedExhaustedAt": "2026-09-18T10:39:13.106Z",
+            "projectionConfidence": "established"
+          }
+        },
+        {
+          "id": "extra_usage",
+          "label": "extra usage",
+          "kind": "credits",
+          "spentUsd": 0,
+          "pace": {
+            "status": "unknown",
+            "reason": "missing_usage"
+          }
+        }
+      ],
+      "attempts": [
+        {"source": "oauth-file", "status": "success"},
+        {"source": "oauth-profile", "status": "success"}
+      ],
+      "state": {
+        "status": "fresh",
+        "stale": false,
+        "refreshedAt": "2026-09-05T05:24:18.527Z",
+        "sourcesTried": ["oauth-file", "oauth-profile"]
+      },
+      "quotaSemantics": {
+        "status": "known",
+        "description": "Claude account windows bound every model. A model-specific window is an additional bound, so that model's effective remaining percentage is the minimum across the named windows.",
+        "effectiveAvailability": [
+          {
+            "scope": "all_models",
+            "status": "known",
+            "effectivePercentRemaining": 28,
+            "boundedBy": ["five_hour", "seven_day"],
+            "limitingWindowIds": ["five_hour"],
+            "pace": {
+              "status": "mixed",
+              "aheadWindowIds": ["five_hour"],
+              "behindWindowIds": ["seven_day"],
+              "worstReservePercentPoints": -7.2286,
+              "worstReserveWindowId": "five_hour"
+            },
+            "runway": {
+              "status": "projected_exhaustion",
+              "usableRunwaySeconds": 4534,
+              "projectedExhaustedAt": "2026-09-05T06:39:52.249Z",
+              "limitingWindowId": "five_hour",
+              "projectionConfidence": "established"
+            },
+            "selection": {
+              "status": "known",
+              "spendPriority": 0.7683
+            }
+          },
+          {
+            "scope": "model:fable",
+            "status": "known",
+            "effectivePercentRemaining": 28,
+            "boundedBy": ["five_hour", "seven_day", "model:fable"],
+            "limitingWindowIds": ["five_hour"],
+            "pace": {
+              "status": "mixed",
+              "aheadWindowIds": ["five_hour"],
+              "behindWindowIds": ["seven_day", "model:fable"],
+              "worstReservePercentPoints": -7.2286,
+              "worstReserveWindowId": "five_hour"
+            },
+            "runway": {
+              "status": "projected_exhaustion",
+              "usableRunwaySeconds": 4534,
+              "projectedExhaustedAt": "2026-09-05T06:39:52.249Z",
+              "limitingWindowId": "five_hour",
+              "projectionConfidence": "established"
+            },
+            "selection": {
+              "status": "known",
+              "spendPriority": 0.7599
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -71,9 +71,19 @@ func runGateNotifyPushCommand(args []string, stdout, stderr *os.File) int {
 	oldSHA := fs.String("old", "", "old SHA from the ref update")
 	newSHA := fs.String("new", "", "new SHA from the ref update")
 	ref := fs.String("ref", "", "the ref that was updated")
+	agentPreference := fs.String("agent-preference", "", "optional git push -o agent=<kind> preference forwarded by the post-receive hook")
 	if err := fs.Parse(args); err != nil {
 		_, _ = fmt.Fprintln(stderr, "gate notify-push: parse args:", err)
 		return 0
+	}
+
+	// Best-effort self-heal (decision D5): a gate initialized before agent
+	// auto-resolve existed never set receive.advertisePushOptions, so a
+	// pusher's -o agent=<kind> would hard-fail against it; this call is
+	// idempotent and never fails the push it is reacting to, matching this
+	// function's own documented contract.
+	if *gatePath != "" {
+		_ = gitgate.EnableAdvertisePushOptions(*gatePath)
 	}
 
 	home, err := madeHome()
@@ -98,10 +108,11 @@ func runGateNotifyPushCommand(args []string, stdout, stderr *os.File) int {
 
 	var result gateNotifyPushResult
 	if err := client.CallInto("gate.notifyPush", gateNotifyPushParams{
-		GatePath: *gatePath,
-		OldSHA:   *oldSHA,
-		NewSHA:   *newSHA,
-		Ref:      *ref,
+		GatePath:        *gatePath,
+		OldSHA:          *oldSHA,
+		NewSHA:          *newSHA,
+		Ref:             *ref,
+		AgentPreference: *agentPreference,
 	}, &result); err != nil {
 		if *newSHA == gitZeroSHAValue {
 			_, _ = fmt.Fprintln(stderr, "gate notify-push:", err, "; ref deletion does not require a run")

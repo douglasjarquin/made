@@ -2,6 +2,8 @@ package managed
 
 import (
 	"time"
+
+	"github.com/douglasjarquin/made/internal/agent"
 )
 
 // SchemaVersion is the event envelope schema version.
@@ -153,4 +155,10 @@ type StageResult struct {
 	// commands is still "passed", exactly like the daemon-backed pipeline's
 	// own PR summary treats reuse as informational, not a distinct status.
 	ReusedCommands []ReusedLaneCommand `json:"reused_commands,omitempty"`
+	// AgentResolution is populated on the Review stage only, whenever
+	// Config.Agent is auto/empty: which candidate was used, or every
+	// candidate tried and why on exhaustion (project: agent auto-resolve).
+	// Exhaustion maps Outcome to OutcomeInfrastructureError, not a new
+	// Outcome value - see this field for the structured reason.
+	AgentResolution *agent.AgentResolution `json:"agent_resolution,omitempty"`
 }

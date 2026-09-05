@@ -43,7 +43,8 @@ func ParseKind(name string) (Kind, error) {
 	return "", fmt.Errorf("unsupported agent %q; supported agents: %s", name, SupportedKindNames())
 }
 
-func (k Kind) binaryName() string {
+// BinaryName is the executable name Made looks up on PATH for this kind.
+func (k Kind) BinaryName() string {
 	switch k {
 	case KindCursor:
 		return "cursor-agent"
