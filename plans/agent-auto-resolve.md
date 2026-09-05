@@ -260,7 +260,7 @@ Wave 4 (remaining tests not already embedded in earlier tasks + final verificati
 
   **Commit**: YES | Message: `feat(agent): add optional quota-axi probe with golden-fixture parser` | Files: `internal/agent/quotaaxi.go`, `internal/agent/quotaaxi_test.go`, `internal/agent/testdata/quotaaxi/claude_authenticated.json`, `internal/agent/testdata/quotaaxi/codex_unauthenticated.json`
 
-- [ ] 4. `ErrAgentCapacity` classification in `spawn.go` (D2)
+- [x] 4. `ErrAgentCapacity` classification in `spawn.go` (D2)
 
   **What to do**: In `internal/agent/spawn.go`, define `var ErrAgentCapacity = errors.New("agent: capacity exhausted")` (or a small typed error wrapping it, e.g. `type CapacityError struct { Kind Kind; Detail string }` implementing `Unwrap() error { return ErrAgentCapacity }` so `errors.Is(err, ErrAgentCapacity)` works). At the existing non-zero-exit failure site (~line 92-93), after building today's generic wrapped error, additionally check the captured stderr against a small **per-kind, verified-only** pattern table restricted to `codex` and `claude` (D2) - e.g. case-insensitive substring match for language like "usage limit", "rate limit", "quota" for claude; "usage limit reached", "rate limit" for codex (record in a code comment that these are best-effort patterns based on the brief's own examples, not independently verified against a real exhaustion event, and that `cursor`/`grok` are deliberately excluded from this classification, D2). When matched, wrap the returned error so `errors.Is(returnedErr, ErrAgentCapacity)` is true, while preserving the existing generic error message/formatting for anything that doesn't match (no change to any other failure's shape or text).
 

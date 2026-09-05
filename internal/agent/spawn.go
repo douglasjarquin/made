@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,6 +15,39 @@ import (
 	"github.com/douglasjarquin/made/internal/evidence"
 	"github.com/douglasjarquin/made/internal/exec"
 )
+
+// ErrAgentCapacity marks a review-invocation failure as quota/rate-limit
+// exhaustion rather than a real review failure, letting a caller retry the
+// next candidate in a resolved list (project: agent auto-resolve) instead
+// of treating this attempt as a hard failure. Classification is restricted
+// to codex and claude (see capacityStderrPatterns) since those are the only
+// two kinds with any verified exhaustion-language example to match against;
+// cursor/grok failures are never classified as capacity, by design - a
+// pattern invented without a real observed example would risk masking a
+// genuine review failure as a false "just try the next agent."
+var ErrAgentCapacity = errors.New("agent: capacity exhausted")
+
+// capacityStderrPatterns are best-effort, case-insensitive substrings drawn
+// from the brief's own examples of quota/rate-limit language, not
+// independently verified against a real exhaustion event from either CLI.
+var capacityStderrPatterns = map[Kind][]string{
+	KindClaude: {"usage limit", "rate limit", "quota"},
+	KindCodex:  {"usage limit reached", "rate limit"},
+}
+
+func isCapacityStderr(kind Kind, stderr string) bool {
+	patterns, ok := capacityStderrPatterns[kind]
+	if !ok {
+		return false
+	}
+	lower := strings.ToLower(stderr)
+	for _, pattern := range patterns {
+		if strings.Contains(lower, pattern) {
+			return true
+		}
+	}
+	return false
+}
 
 type SpawnParams struct {
 	WorktreePath   string
@@ -91,7 +125,11 @@ func SpawnWithEvidence(ctx context.Context, kind Kind, params SpawnParams) (Spaw
 		return SpawnResult{}, fmt.Errorf("agent: spawn %s (%s): %w", kind, binary, err)
 	}
 	if result.ExitCode != 0 {
-		return SpawnResult{}, fmt.Errorf("agent: %s (%s) exited %d: stdout=%s stderr=%s", kind, binary, result.ExitCode, evidence.RedactString(string(result.Stdout)), evidence.RedactString(string(result.Stderr)))
+		exitErr := fmt.Errorf("agent: %s (%s) exited %d: stdout=%s stderr=%s", kind, binary, result.ExitCode, evidence.RedactString(string(result.Stdout)), evidence.RedactString(string(result.Stderr)))
+		if isCapacityStderr(kind, string(result.Stderr)) {
+			exitErr = fmt.Errorf("%w: %w", ErrAgentCapacity, exitErr)
+		}
+		return SpawnResult{}, exitErr
 	}
 
 	response, err := extractStructuredResponse(kind, result.Stdout)
