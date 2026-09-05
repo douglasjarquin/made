@@ -86,7 +86,7 @@ const glyphs = ["→ next", "← back", "↗ external", "✕ dismiss", "▾ menu
       <div class="chips" style="margin: 0">
         <span class="chip">queued</span>
         <span class="chip">running</span>
-        <span class="chip chip--active">succeeded</span>
+        <span class="chip chip--active">awaiting_merge</span>
         <span class="chip">failed</span>
       </div>
     </div>
@@ -96,7 +96,7 @@ const glyphs = ["→ next", "← back", "↗ external", "✕ dismiss", "▾ menu
     </div>
     <div class="specimen-row" style="align-items: start; border: 0; padding: 0">
       <span class="type-meta">json block</span>
-      <pre style="margin: 0">{`{ "state": `}<span class="ok">"succeeded"</span>{`, "pr": "#42" }`}</pre>
+      <pre style="margin: 0">{`{ "state": `}<span class="ok">"awaiting_merge"</span>{`, "pr": "#42" }`}</pre>
     </div>
     <div class="specimen-row" style="align-items: start; border: 0; padding: 0">
       <span class="type-meta">card</span>
@@ -124,8 +124,8 @@ const glyphs = ["→ next", "← back", "↗ external", "✕ dismiss", "▾ menu
     <div class="kv__key" style="padding: 16px 0; border-bottom: 1px solid var(--line)">awaiting_review</div>
     <div class="kv__val" style="padding: 16px 12px 16px 0; border-bottom: 1px solid var(--line)">needs a decision</div>
     <div class="kv__val" style="padding: 16px 0; border-bottom: 1px solid var(--line); font-family: var(--font-mono); font-size: 13px">awaiting_merge · failed</div>
-    <div class="kv__key" style="padding: 16px 0; border-bottom: 1px solid var(--line)">succeeded</div>
-    <div class="kv__val" style="padding: 16px 12px 16px 0; border-bottom: 1px solid var(--line)">green PR</div>
+    <div class="kv__key" style="padding: 16px 0; border-bottom: 1px solid var(--line)">awaiting_merge</div>
+    <div class="kv__val" style="padding: 16px 12px 16px 0; border-bottom: 1px solid var(--line)">green PR, awaiting human merge</div>
     <div class="kv__val" style="padding: 16px 0; border-bottom: 1px solid var(--line); font-family: var(--font-mono); font-size: 13px">—</div>
   </div>
 

@@ -28,7 +28,7 @@ const handoff = `<span class="comment">$</span> made run submit --json \\
 { "state": "awaiting_merge" }
 
 <span class="comment">$</span> made run status --json run_01J9…
-{ "state": <span class="ok">"succeeded"</span>, "pr": "#42", "ci": "green" }`;
+{ "state": <span class="ok">"awaiting_merge"</span>, "pr": "#42", "ci": "green" }`;
 ---
 
 <SiteLayout showHerdr title="Turn code into green PRs" description={PRODUCT_DESCRIPTION}>
@@ -59,7 +59,7 @@ const handoff = `<span class="comment">$</span> made run submit --json \\
       <div class="chips">
         {
           states.map((state) => (
-            <span class:list={["chip", state === "succeeded" && "chip--active"]}>{state}</span>
+            <span class:list={["chip", state === "awaiting_merge" && "chip--active"]}>{state}</span>
           ))
         }
       </div>
