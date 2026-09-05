@@ -609,7 +609,7 @@ Wave 4 (remaining tests not already embedded in earlier tasks + final verificati
 
   **Commit**: YES | Message: `feat(daemon,orchestrator): thread push-option agent preference through trust-gated resolution` | Files: `internal/daemon/daemon.go`, `internal/orchestrator/workfunc.go`, associated `_test.go` files
 
-- [ ] 13. `made doctor` reports resolved/attempted agent (brief item 5)
+- [x] 13. `made doctor` reports resolved/attempted agent (brief item 5)
 
   **What to do**: In `cmd/made/doctor.go`, add one check to **both** `runDoctorCommand` (human text) and `runDoctorJSON` (JSON, populating `checks[...]`) - they're separately implemented, per verified research, so both need the edit. The check: locate config via existing `config.Locate`/`LoadEffectiveConfig` machinery already used elsewhere in doctor, call `Config.AgentIsPinned()`/`AgentCandidates()` + `agent.Resolve` (Task 6) read-only (no actual review run), and report either "resolved agent: `<kind>`" or, on all-exhausted, the full structured attempts list (human: one line per candidate; JSON: the `AgentResolution` struct verbatim under a new `checks["agent_resolution"]`-equivalent key, matching whatever shape doctor's JSON already uses for multi-value checks - inspect existing checks for a precedent, e.g. how `ghClient.AuthStatus` is reported, before choosing the exact key/value shape).
 

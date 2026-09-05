@@ -7,9 +7,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/douglasjarquin/made/internal/agent"
 	"github.com/douglasjarquin/made/internal/api"
+	"github.com/douglasjarquin/made/internal/config"
 	"github.com/douglasjarquin/made/internal/gitgate"
 	"github.com/douglasjarquin/made/internal/github"
 	"github.com/douglasjarquin/made/internal/herdrclient"
@@ -71,10 +74,57 @@ func runDoctorCommand(args []string, stdout, stderr *os.File) int {
 		_, _ = fmt.Fprintln(stdout, "gate: not initialized (run made gate init)")
 	}
 
+	_, _ = fmt.Fprintln(stdout, "agent:", doctorAgentResolutionSummary(ctx, targetPath))
+
 	if !healthy {
 		return 1
 	}
 	return 0
+}
+
+// doctorAgentResolutionSummary reports the effective resolved agent (or,
+// on exhaustion, every candidate tried and why) without spawning any real
+// review invocation - only the same read-only presence/auth/quota probing
+// agent.Resolve already does (project: agent auto-resolve, brief item 5).
+// Informational only: an unresolvable agent never flips doctor's overall
+// Healthy status, since this is inspectability, not a health gate.
+func doctorAgentResolutionSummary(ctx context.Context, targetPath string) string {
+	loc, err := config.Locate(targetPath)
+	if err != nil || loc.Layout == config.LayoutAbsent {
+		return "not_configured (no .made.yaml or .made/config.yaml found)"
+	}
+	data, err := os.ReadFile(loc.Path)
+	if err != nil {
+		return fmt.Sprintf("unknown (%v)", err)
+	}
+	cfg, err := config.ParseBytes(data)
+	if err != nil {
+		return fmt.Sprintf("unknown (%v)", err)
+	}
+	if cfg.AgentIsPinned() {
+		kind, err := cfg.AgentKind()
+		if err != nil {
+			return fmt.Sprintf("unknown (%v)", err)
+		}
+		return fmt.Sprintf("%s (pinned)", kind)
+	}
+	res := agent.Resolve(ctx, cfg.AgentCandidates())
+	if res.Selected != nil {
+		return fmt.Sprintf("%s (resolved)", *res.Selected)
+	}
+	return formatDoctorAgentResolutionFailure(res)
+}
+
+func formatDoctorAgentResolutionFailure(res agent.AgentResolution) string {
+	parts := make([]string, 0, len(res.Attempts))
+	for _, a := range res.Attempts {
+		reason := string(a.Reason)
+		if a.Reason == agent.ReasonQuotaExhausted && a.QuotaResetsAt != nil {
+			reason = fmt.Sprintf("quota-exhausted-until-%s", a.QuotaResetsAt.Format(time.RFC3339))
+		}
+		parts = append(parts, fmt.Sprintf("%s (%s)", a.Kind, reason))
+	}
+	return "none available: " + strings.Join(parts, ", ")
 }
 
 type doctorReport struct {
@@ -113,6 +163,7 @@ func runDoctorJSON(targetPath string, stdout, stderr *os.File) int {
 	} else {
 		checks["gate"] = "not_initialized"
 	}
+	checks["agent_resolution"] = doctorAgentResolutionSummary(ctx, targetPath)
 	encoder := json.NewEncoder(stdout)
 	if err := encoder.Encode(doctorReport{SchemaVersion: 1, ProtocolVersion: api.Version, Healthy: healthy, Checks: checks}); err != nil {
 		_, _ = fmt.Fprintln(stderr, "made doctor:", err)
