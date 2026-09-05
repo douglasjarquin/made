@@ -225,7 +225,7 @@ Wave 4 (remaining tests not already embedded in earlier tasks + final verificati
 
   **Commit**: YES | Message: `test(agent): add multi-binary fake-CLI fleet harness for resolver tests` | Files: `internal/agent/agenttest/multiharness.go`, `internal/agent/agenttest/multiharness_test.go`, `internal/agent/testdata/fakeagent/main.go` (if shared logic needs minor extraction)
 
-- [ ] 3. `quota-axi` optional probe + parser + golden fixtures (D9, D10)
+- [x] 3. `quota-axi` optional probe + parser + golden fixtures (D9, D10)
 
   **What to do**: New `internal/agent/quotaaxi.go`. `func probeQuota(ctx context.Context, kind Kind) (*QuotaSignal, error)`: `exec.LookPath("quota-axi")` first - if absent, return `(nil, nil)` (no signal, never an error). If present, run `quota-axi --provider <kind-string> --json --full --no-credential-refresh` with a 5s timeout (D8), parse JSON into a minimal struct covering only the fields needed: `providers[].quotaSemantics.{status, effectiveAvailability[].{scope, status, effectivePercentRemaining}}` and `providers[].windows[].percentRemaining` (fallback path). Implement exactly per D9/D10: prefer `effectiveAvailability` entry with `scope == "all_models"` when its `status == "known"`; else fall back to scanning raw `windows[]` for any `percentRemaining < 1`; else (nothing usable) return `(nil, nil)` - no signal, never blocks a candidate. Add a code comment recording the D9/D10 reasoning (why `all_models` + why this fallback order) since this is the documented judgment call the brief calls out.
 

@@ -1,0 +1,27 @@
+{
+  "generatedAt": "2026-09-05T05:24:18.251Z",
+  "schemaVersion": 2,
+  "providers": [
+    {
+      "provider": "claude",
+      "label": "Claude",
+      "source": "oauth",
+      "windows": [
+        {
+          "id": "five_hour",
+          "label": "session",
+          "kind": "session",
+          "percentUsed": 100,
+          "percentRemaining": 0
+        },
+        {
+          "id": "seven_day",
+          "label": "week",
+          "kind": "weekly",
+          "percentUsed": 20,
+          "percentRemaining": 80
+        }
+      ]
+    }
+  ]
+}

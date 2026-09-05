@@ -1,0 +1,50 @@
+{
+  "generatedAt": "2026-09-05T05:24:18.251Z",
+  "schemaVersion": 5,
+  "providers": [
+    {
+      "provider": "claude",
+      "label": "Claude",
+      "source": "oauth",
+      "plan": "team",
+      "windows": [
+        {
+          "id": "five_hour",
+          "label": "session",
+          "kind": "session",
+          "percentUsed": 99.5,
+          "resetsAt": "2026-09-05T07:09:59.399091+00:00",
+          "windowSeconds": 18000,
+          "percentRemaining": 0.5
+        },
+        {
+          "id": "seven_day",
+          "label": "week",
+          "kind": "weekly",
+          "percentUsed": 40,
+          "resetsAt": "2026-09-10T06:00:00.399111+00:00",
+          "windowSeconds": 604800,
+          "percentRemaining": 60
+        }
+      ],
+      "state": {
+        "status": "fresh",
+        "stale": false,
+        "refreshedAt": "2026-09-05T05:24:18.527Z"
+      },
+      "quotaSemantics": {
+        "status": "known",
+        "description": "Claude account windows bound every model.",
+        "effectiveAvailability": [
+          {
+            "scope": "all_models",
+            "status": "known",
+            "effectivePercentRemaining": 0.5,
+            "boundedBy": ["five_hour", "seven_day"],
+            "limitingWindowIds": ["five_hour"]
+          }
+        ]
+      }
+    }
+  ]
+}
