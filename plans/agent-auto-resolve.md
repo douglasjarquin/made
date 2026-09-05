@@ -294,7 +294,7 @@ Wave 4 (remaining tests not already embedded in earlier tasks + final verificati
 
   **Commit**: YES | Message: `feat(agent): classify quota/rate-limit stderr as ErrAgentCapacity for codex+claude` | Files: `internal/agent/spawn.go`, `internal/agent/spawn_test.go`
 
-- [ ] 5. Shared `AgentResolution`/`CandidateAttempt` types (D18)
+- [x] 5. Shared `AgentResolution`/`CandidateAttempt` types (D18)
 
   **What to do**: New `internal/agent/resolution.go` defining the one shared shape used for both success and failure surfacing (D18):
   ```go
