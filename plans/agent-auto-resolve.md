@@ -751,32 +751,15 @@ Wave 4 (remaining tests not already embedded in earlier tasks + final verificati
 
   **Commit**: YES | Message: `test(agent): cover mid-run fallback and all-candidates-exhausted scenarios` | Files: `internal/orchestrator/workfunc_resolve_test.go`, `internal/managed/runner_resolve_test.go`
 
-- [ ] 18. Push-option + offline-queue tests (companion to Tasks 11, 12)
+- [x] 18. Push-option + offline-queue tests (companion to Tasks 11, 12) - **folded into Tasks 11+12's own commit**
 
-  **What to do**: Cover, at the `internal/gitgate` + `internal/daemon` level (matching `hook_test.go`'s existing pattern): push-option round-trip end-to-end through a real bare gate + real `post-receive` execution (not just unit-level flag parsing), trust-boundary gating (D4, both `AllowRepoCommands` true and false), and the offline-queue drop (D6) as an explicit assertion.
+  **Finding**: every acceptance criterion below was already written and verified while implementing Tasks 11+12 (the tests and the plumbing they verify are too tightly coupled to sequence separately - see that commit's message). No additional code needed here.
+  - Push-option round-trip: `internal/gitgate/hook_pushoption_test.go`'s `TestPushOption_RoundTripsThroughHookToNotifyPush` (real bare gate, real `post-receive` execution, not just flag parsing).
+  - Self-heal against a simulated pre-change gate: `TestPushOption_SelfHealsAnOldGateMissingAdvertisePushOptions` (built the real compiled `made` binary specifically so the actual self-heal code path runs, per the Must NOT skip this note).
+  - Trust-boundary gating both directions: `internal/orchestrator/workfunc_resolve_test.go`'s `TestSpawnReview_PushOptionPreferenceHonoredWhenRepoCommandsAllowed` / `...IgnoredWhenRepoCommandsDisallowed`.
+  - Offline-queue-drop: `cmd/made/gate_notify_push_test.go`'s `TestGateNotifyPushCLI_OfflineQueueDropsAgentPreference`.
 
-  **Must NOT do**: Do not skip the "against an old (pre-change) gate, `-o` behavior" scenario if it's feasible to construct in a test (init a bare repo the old way, i.e. without the new `advertisePushOptions` config, then apply only the D5 self-heal path and confirm it recovers) - this is the scenario Metis specifically flagged as a rollout hazard.
-
-  **Parallelization**: Can Parallel: NO (depends on 11, 12) | Wave 4 | Blocks: F1-F4 | Blocked By: 11, 12
-
-  **References**: `internal/gitgate/hook_test.go` existing pattern.
-
-  **Acceptance Criteria**:
-  - [ ] Push-option round-trip test passes against a freshly-init'd gate.
-  - [ ] Self-heal test passes against a simulated pre-change (no `advertisePushOptions`) gate.
-  - [ ] Trust-boundary gating test passes both directions (D4).
-  - [ ] Offline-queue-drop test passes (D6).
-
-  **QA Scenarios**:
-  ```
-  Scenario: self-heal recovers an old gate
-    Tool: bash + git
-    Steps: create a bare gate without receive.advertisePushOptions set (simulating pre-change init), trigger whatever D5 self-heal call site was chosen in Task 11, then push -o agent=claude
-    Expected: push succeeds (no "receiving end does not support push options" error)
-    Evidence: evidence/task-18-selfheal.txt
-  ```
-
-  **Commit**: YES | Message: `test(gitgate,daemon): cover push-option trust gating, self-heal, offline-queue drop` | Files: `internal/gitgate/hook_test.go`, `internal/daemon/daemon_test.go`
+  **Commit**: NO (already committed with Tasks 11+12) | Files: none new
 
 - [ ] 19. Doctor + evidence-namespacing tests (companion to Tasks 9, 13)
 
