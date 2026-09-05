@@ -725,7 +725,7 @@ Wave 4 (remaining tests not already embedded in earlier tasks + final verificati
 
   **Commit**: YES | Message: `test(config): cover agent:auto/agents: precedence matrix` | Files: `internal/config/config_agent_resolve_test.go`
 
-- [ ] 17. Mid-run fallback + all-candidates-exhausted integration tests (companion to Tasks 6, 7, 8)
+- [x] 17. Mid-run fallback + all-candidates-exhausted integration tests (companion to Tasks 6, 7, 8)
 
   **What to do**: End-to-end tests (using Task 2's fleet harness) at the `reviewStage()` and `Runner.Run` levels proving the full RED-then-GREEN arc for each of the 3 independent failure reasons plus their combinations: (a) missing-only skip, (b) unauthenticated-only skip, (c) quota-exhausted-only skip, (d) mixed reasons across a 3+ candidate list, (e) mid-run `ErrAgentCapacity` fallback to next candidate succeeding, (f) all candidates exhausted producing the structured failure (not a generic error) with every reason correctly attributed. Write each as a failing test first (RED) against pre-Task-6/7/8 code conceptually, then confirm GREEN once those tasks land - if those tasks are already merged by the time this task starts, still write the test to fail against a deliberately-reverted/stubbed resolver first to prove the test isn't vacuously passing, per this task's own RED/GREEN requirement.
 
